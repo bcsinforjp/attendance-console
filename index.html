@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Operations Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #eef3f5;
+            --ink: #132026;
+            --muted: #5a6b73;
+            --surface: #ffffff;
+            --surface-soft: #f7fbfc;
+            --brand: #0d8f71;
+            --brand-strong: #0b6f58;
+            --accent: #125e91;
+            --warn: #9b640f;
+            --danger: #b42318;
+            --line: #d4e2e8;
+            --shadow: 0 10px 32px rgba(11, 35, 46, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: "Space Grotesk", "Segoe UI", sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at 10% 15%, rgba(18, 94, 145, 0.09), transparent 35%),
+                radial-gradient(circle at 90% 20%, rgba(13, 143, 113, 0.11), transparent 40%),
+                var(--bg);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.9rem 1rem;
+            border-bottom: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(8px);
+        }
+
+        .brand {
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            color: var(--brand-strong);
+        }
+
+        .topnav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+        }
+
+        .topnav a {
+            text-decoration: none;
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 500;
+            border: 1px solid transparent;
+            padding: 0.35rem 0.55rem;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .topnav a:hover {
+            color: var(--brand-strong);
+            border-color: var(--line);
+            background: var(--surface-soft);
+        }
+
+        .page {
+            width: min(1200px, 100%);
+            margin: 1.2rem auto 2.5rem;
+            padding: 0 0.9rem;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+        }
+
+        .hero {
+            padding: 1.4rem;
+            margin-bottom: 1rem;
+            display: grid;
+            grid-template-columns: 1.25fr 0.75fr;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 999px;
+            background: #ebf7f3;
+            color: var(--brand-strong);
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 0.76rem;
+            padding: 0.35rem 0.75rem;
+            margin-bottom: 0.6rem;
+        }
+
+        .hero h1 {
+            font-size: clamp(1.4rem, 2.8vw, 2.15rem);
+            line-height: 1.2;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+        }
+
+        .hero p {
+            color: var(--muted);
+            max-width: 65ch;
+        }
+
+        .status-pills {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .pill {
+            border-radius: 999px;
+            padding: 0.45rem 0.8rem;
+            font-size: 0.78rem;
+            border: 1px solid var(--line);
+            background: var(--surface-soft);
+            color: var(--muted);
+            font-family: "IBM Plex Mono", monospace;
+            white-space: nowrap;
+        }
+
+        .pill.ok {
+            color: var(--brand-strong);
+            border-color: #b8e4d8;
+            background: #ecfaf4;
+        }
+
+        .pill.warn {
+            color: var(--warn);
+            border-color: #f0dbb8;
+            background: #fff8ea;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 1.05fr 0.95fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .panel {
+            padding: 1rem;
+        }
+
+        .panel h2 {
+            font-size: 1.08rem;
+            margin-bottom: 0.65rem;
+        }
+
+        .panel p {
+            font-size: 0.92rem;
+            color: var(--muted);
+        }
+
+        .dropzone {
+            margin-top: 0.85rem;
+            border: 2px dashed #8cb8ca;
+            background: linear-gradient(160deg, #f5fbff 0%, #eef7fb 100%);
+            border-radius: 14px;
+            padding: 1.15rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .dropzone:hover {
+            border-color: var(--accent);
+            transform: translateY(-1px);
+        }
+
+        .dropzone.dragover {
+            border-color: var(--brand);
+            background: linear-gradient(160deg, #edf9f5 0%, #eaf5f8 100%);
+        }
+
+        .dropzone strong {
+            display: block;
+            font-size: 1.02rem;
+            color: var(--ink);
+            margin-bottom: 0.2rem;
+        }
+
+        .dropzone small {
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .file-list {
+            list-style: none;
+            margin-top: 0.8rem;
+            max-height: 170px;
+            overflow: auto;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: var(--surface-soft);
+        }
+
+        .file-item {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 0.6rem;
+            align-items: center;
+            padding: 0.55rem 0.65rem;
+            border-bottom: 1px solid var(--line);
+            font-size: 0.84rem;
+        }
+
+        .file-item:last-child {
+            border-bottom: 0;
+        }
+
+        .file-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-size {
+            color: var(--muted);
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 0.78rem;
+        }
+
+        .remove-file {
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--muted);
+            border-radius: 8px;
+            font-size: 0.72rem;
+            padding: 0.2rem 0.42rem;
+            cursor: pointer;
+        }
+
+        .remove-file:hover {
+            color: var(--danger);
+            border-color: #f2c5c0;
+            background: #fff5f4;
+        }
+
+        .action-row {
+            margin-top: 0.9rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.55rem;
+        }
+
+        .button {
+            border: 1px solid transparent;
+            border-radius: 10px;
+            padding: 0.58rem 0.95rem;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.2s ease;
+        }
+
+        .button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .button-primary {
+            background: var(--brand);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(13, 143, 113, 0.28);
+        }
+
+        .button-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+        }
+
+        .button-accent {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(18, 94, 145, 0.25);
+        }
+
+        .button-muted {
+            background: #f2f6f8;
+            border-color: var(--line);
+            color: var(--muted);
+        }
+
+        .guide-list {
+            margin-top: 0.9rem;
+            display: grid;
+            gap: 0.55rem;
+        }
+
+        .guide-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.55rem;
+            font-size: 0.87rem;
+            color: var(--muted);
+            background: var(--surface-soft);
+            border: 1px solid var(--line);
+            border-radius: 11px;
+            padding: 0.58rem 0.68rem;
+        }
+
+        .guide-item strong {
+            color: var(--ink);
+        }
+
+        .message {
+            margin-top: 0.8rem;
+            border-radius: 10px;
+            padding: 0.65rem 0.75rem;
+            font-size: 0.88rem;
+            border: 1px solid var(--line);
+            display: none;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.info {
+            color: var(--accent);
+            background: #ecf5fb;
+            border-color: #c6e1f4;
+        }
+
+        .message.success {
+            color: var(--brand-strong);
+            background: #eaf9f3;
+            border-color: #b8e4d8;
+        }
+
+        .message.error {
+            color: var(--danger);
+            background: #fff2f1;
+            border-color: #f0c8c4;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.7rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 0.8rem;
+            box-shadow: var(--shadow);
+        }
+
+        .stat .label {
+            color: var(--muted);
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat .value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .table-panel {
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.65rem;
+        }
+
+        .table-header h2 {
+            font-size: 1.06rem;
+        }
+
+        .table-toolbar {
+            display: grid;
+            grid-template-columns: 1fr auto auto auto;
+            gap: 0.5rem;
+            margin-bottom: 0.6rem;
+        }
+
+        .search,
+        .select,
+        .toggle {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--ink);
+            font-family: inherit;
+            font-size: 0.87rem;
+        }
+
+        .search,
+        .select {
+            min-height: 38px;
+            padding: 0 0.75rem;
+        }
+
+        .toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0 0.72rem;
+            min-height: 38px;
+            cursor: pointer;
+        }
+
+        .table-wrap {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            overflow: auto;
+            max-height: 460px;
+            background: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 780px;
+        }
+
+        th,
+        td {
+            padding: 0.62rem 0.7rem;
+            border-bottom: 1px solid var(--line);
+            text-align: left;
+            font-size: 0.84rem;
+            white-space: nowrap;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #f3f8fb;
+            color: #24323a;
+            font-weight: 700;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        tr:nth-child(even) td {
+            background: #fcfeff;
+        }
+
+        tr.issue td {
+            background: #fff7ea;
+        }
+
+        .no-data {
+            padding: 1.1rem;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .mono {
+            font-family: "IBM Plex Mono", monospace;
+        }
+
+        .table-footer {
+            margin-top: 0.58rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.55rem;
+            flex-wrap: wrap;
+        }
+
+        .pager {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .pager button {
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--ink);
+            border-radius: 8px;
+            min-width: 34px;
+            min-height: 32px;
+            cursor: pointer;
+        }
+
+        .pager button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.7rem;
+            margin-bottom: 1rem;
+            padding: 0.95rem;
+        }
+
+        .quick-links a {
+            text-decoration: none;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--surface-soft);
+            color: var(--ink);
+            padding: 0.75rem;
+            transition: border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .quick-links a:hover {
+            border-color: #9dc8d7;
+            transform: translateY(-1px);
+        }
+
+        .quick-links a strong {
+            display: block;
+            font-size: 0.92rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .quick-links a span {
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+
+        .toast {
+            position: fixed;
+            right: 0.85rem;
+            bottom: 0.85rem;
+            background: #16242c;
+            color: #fff;
+            border-radius: 10px;
+            padding: 0.62rem 0.78rem;
+            font-size: 0.84rem;
+            opacity: 0;
+            transform: translateY(8px);
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 40;
+            max-width: min(92vw, 420px);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.success {
+            background: #0f6d57;
+        }
+
+        .toast.error {
+            background: #9f2e27;
+        }
+
+        footer {
+            width: min(1200px, 100%);
+            margin: 0 auto 2rem;
+            padding: 0 0.9rem;
+            color: var(--muted);
+            font-size: 0.84rem;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+            vertical-align: -2px;
+            margin-right: 0.32rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .low-power * {
+            animation: none !important;
+            transition: none !important;
+        }
+
+        @media (max-width: 1080px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
+
+            .status-pills {
+                justify-content: flex-start;
+            }
+
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .table-toolbar {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .quick-links {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .topbar {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 0.65rem;
+            }
+
+            .table-toolbar {
+                grid-template-columns: 1fr;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html {
+                scroll-behavior: auto;
+            }
+
+            * {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">Attendance Operations Console</div>
+        <nav class="topnav" aria-label="Quick navigation">
+            <a href="/">Home</a>
+            <a href="/attendance/">Attendance</a>
+            <a href="/dashboard/">System Dashboard</a>
+            <a href="/pdf/">PDF Tools</a>
+            <a href="/grafana/" target="_blank" rel="noopener">Grafana</a>
+        </nav>
+    </header>
+
+    <main class="page">
+        <section class="hero card">
+            <div>
+                <span class="eyebrow">stable pipeline for roster-based exports</span>
+                <h1>Convert Japanese attendance PDFs into clean, reviewable HR output.</h1>
+                <p>
+                    This console is tuned for Raspberry Pi hosting: low client overhead, guarded uploads, and a
+                    practical data worktable for quick checks before Excel export.
+                </p>
+            </div>
+            <div class="status-pills">
+                <span id="apiHealth" class="pill">API: checking</span>
+                <span class="pill">Single and multi-file conversion</span>
+                <span class="pill">Roster alignment and overnight handling</span>
+            </div>
+        </section>
+
+        <section class="workspace">
+            <article class="panel card">
+                <h2>Upload and conversion</h2>
+                <p>Drop one or more PDF files. We verify signatures client-side before sending to the backend.</p>
+
+                <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Upload PDF files">
+                    <strong>Drop attendance PDF files here</strong>
+                    <div>or click to browse</div>
+                    <small>Limits: 50MB per file, 200MB per batch, PDF extension and header required</small>
+                </div>
+                <input id="fileInput" class="hidden" type="file" accept=".pdf,application/pdf" multiple>
+
+                <ul id="fileList" class="file-list hidden" aria-live="polite"></ul>
+                <div id="message" class="message" role="status"></div>
+
+                <div class="action-row">
+                    <button id="previewBtn" class="button button-primary hidden">Preview Data</button>
+                    <button id="convertBtn" class="button button-accent hidden">Convert and Download</button>
+                    <button id="cancelBtn" class="button button-muted hidden">Cancel Request</button>
+                    <button id="resetBtn" class="button button-muted hidden">Reset</button>
+                </div>
+            </article>
+
+            <article class="panel card">
+                <h2>Processing protection and optimization</h2>
+                <p>These controls reduce bad uploads and keep the interface responsive on low-power hardware.</p>
+                <div class="guide-list">
+                    <div class="guide-item"><strong>Validation:</strong> extension, size, duplicate name detection, and PDF signature checks before upload.</div>
+                    <div class="guide-item"><strong>Resilience:</strong> in-flight request cancellation, timeout guard, and clear API error details.</div>
+                    <div class="guide-item"><strong>Worktable:</strong> search, sort, missing-leave and overnight filters, and pagination.</div>
+                    <div class="guide-item"><strong>Pi mode:</strong> reduced-motion and low-overhead rendering behavior for stable browser performance.</div>
+                </div>
+            </article>
+        </section>
+
+        <section id="statsPanel" class="stats hidden" aria-label="Preview statistics">
+            <div class="stat">
+                <div class="label">Rows in output</div>
+                <div id="statRows" class="value">0</div>
+            </div>
+            <div class="stat">
+                <div class="label">Rows with data</div>
+                <div id="statRowsWithData" class="value">0</div>
+            </div>
+            <div class="stat">
+                <div class="label">File count</div>
+                <div id="statFileCount" class="value">0</div>
+            </div>
+            <div class="stat">
+                <div class="label">Selected size</div>
+                <div id="statTotalSize" class="value mono">0 MB</div>
+            </div>
+        </section>
+
+        <section id="tablePanel" class="table-panel card hidden">
+            <div class="table-header">
+                <h2>Attendance worktable</h2>
+                <div id="tableCount" class="mono" style="color: var(--muted); font-size: 0.82rem;">0 rows</div>
+            </div>
+
+            <div class="table-toolbar">
+                <input id="searchInput" class="search" type="search" placeholder="Search by ID, name, or time">
+                <select id="pageSize" class="select" aria-label="Rows per page">
+                    <option value="10">10 rows</option>
+                    <option value="25" selected>25 rows</option>
+                    <option value="50">50 rows</option>
+                    <option value="100">100 rows</option>
+                </select>
+                <label class="toggle"><input id="missingFilter" type="checkbox">Missing leave only</label>
+                <label class="toggle"><input id="overnightFilter" type="checkbox">Overnight only</label>
+            </div>
+
+            <div class="table-wrap">
+                <table aria-label="Preview attendance table">
+                    <thead>
+                        <tr>
+                            <th data-sort-key="employee_code">ID Number</th>
+                            <th data-sort-key="name">Name</th>
+                            <th data-sort-key="commute_time">Start</th>
+                            <th data-sort-key="leave_time">Leave</th>
+                            <th data-sort-key="working_hours">Working Hours</th>
+                        </tr>
+                    </thead>
+                    <tbody id="previewBody"></tbody>
+                </table>
+            </div>
+
+            <div class="table-footer">
+                <div id="pageInfo" class="mono" style="color: var(--muted); font-size: 0.82rem;">Page 1</div>
+                <div class="pager">
+                    <button id="prevPage" type="button" aria-label="Previous page">Prev</button>
+                    <button id="nextPage" type="button" aria-label="Next page">Next</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="quick-links card">
+            <a href="/grafana/" target="_blank" rel="noopener">
+                <strong>Attendance Grafana</strong>
+                <span>Executive analytics and KPI dashboard</span>
+            </a>
+            <a href="/dashboard/">
+                <strong>System Dashboard</strong>
+                <span>CPU, memory, disk, service health</span>
+            </a>
+            <a href="/pdf/">
+                <strong>PDF Utility Suite</strong>
+                <span>Text, image, merge, extract tools</span>
+            </a>
+        </section>
+    </main>
+
+    <footer>
+        <p>Attendance Operations Console | FastAPI, PostgreSQL, Grafana | Optimized for Raspberry Pi</p>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        const state = {
+            files: [],
+            previewData: null,
+            records: [],
+            filteredRecords: [],
+            page: 1,
+            pageSize: 25,
+            sortKey: "employee_code",
+            sortDir: "asc",
+            query: "",
+            onlyMissingLeave: false,
+            onlyOvernight: false,
+            activeController: null,
+            busy: false
+        };
+
+        const els = {
+            apiHealth: document.getElementById("apiHealth"),
+            dropzone: document.getElementById("dropzone"),
+            fileInput: document.getElementById("fileInput"),
+            fileList: document.getElementById("fileList"),
+            previewBtn: document.getElementById("previewBtn"),
+            convertBtn: document.getElementById("convertBtn"),
+            cancelBtn: document.getElementById("cancelBtn"),
+            resetBtn: document.getElementById("resetBtn"),
+            message: document.getElementById("message"),
+            statsPanel: document.getElementById("statsPanel"),
+            statRows: document.getElementById("statRows"),
+            statRowsWithData: document.getElementById("statRowsWithData"),
+            statFileCount: document.getElementById("statFileCount"),
+            statTotalSize: document.getElementById("statTotalSize"),
+            tablePanel: document.getElementById("tablePanel"),
+            tableCount: document.getElementById("tableCount"),
+            searchInput: document.getElementById("searchInput"),
+            pageSize: document.getElementById("pageSize"),
+            missingFilter: document.getElementById("missingFilter"),
+            overnightFilter: document.getElementById("overnightFilter"),
+            previewBody: document.getElementById("previewBody"),
+            pageInfo: document.getElementById("pageInfo"),
+            prevPage: document.getElementById("prevPage"),
+            nextPage: document.getElementById("nextPage"),
+            toast: document.getElementById("toast")
+        };
+
+        function getAppBasePath() {
+            return window.location.pathname.startsWith("/attendance") ? "/attendance" : "";
+        }
+
+        function getApiUrl(path) {
+            const base = getAppBasePath();
+            if (!path) return base;
+            if (path.startsWith("http://") || path.startsWith("https://")) return path;
+            if (path.startsWith("/attendance/")) return path;
+            if (path.startsWith("/")) return `${base}${path}`;
+            return `${base}/${path}`;
+        }
+
+        function getDownloadUrl(path) {
+            if (!path) return "";
+            if (path.startsWith("http://") || path.startsWith("https://")) return path;
+            if (path.startsWith("/attendance/")) return path;
+            return getApiUrl(path);
+        }
+
+        function showToast(text, type = "") {
+            els.toast.textContent = text;
+            els.toast.className = `toast show ${type}`;
+            window.setTimeout(() => {
+                els.toast.className = "toast";
+            }, 2800);
+        }
+
+        function showMessage(text, type = "info") {
+            els.message.textContent = text;
+            els.message.className = `message ${type} show`;
+        }
+
+        function clearMessage() {
+            els.message.className = "message";
+            els.message.textContent = "";
+        }
+
+        function formatBytes(bytes) {
+            if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB";
+            return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+        }
+
+        function parseTimeToMinutes(value) {
+            const cleaned = String(value || "").replace(/\s*hr$/i, "").trim();
+            const match = cleaned.match(/^(\d+):(\d{2})$/);
+            if (!match) return Number.NaN;
+            return Number(match[1]) * 60 + Number(match[2]);
+        }
+
+        function normalizeRecord(record) {
+            return {
+                employee_code: String(record.employee_code || "").trim(),
+                name: String(record.name || "").trim(),
+                commute_time: String(record.commute_time || "").trim(),
+                leave_time: String(record.leave_time || "").trim(),
+                working_hours: String(record.working_hours || "").trim()
+            };
+        }
+
+        function isMissingLeave(record) {
+            return record.commute_time !== "" && record.leave_time === "";
+        }
+
+        function isOvernight(record) {
+            const leaveMinutes = parseTimeToMinutes(record.leave_time);
+            return Number.isFinite(leaveMinutes) && leaveMinutes >= 24 * 60;
+        }
+
+        function getTotalSelectedBytes() {
+            return state.files.reduce((sum, file) => sum + file.size, 0);
+        }
+
+        function setBusy(isBusy, busyText = "") {
+            state.busy = isBusy;
+            els.previewBtn.disabled = isBusy;
+            els.convertBtn.disabled = isBusy;
+
+            if (isBusy) {
+                els.cancelBtn.classList.remove("hidden");
+            } else {
+                els.cancelBtn.classList.add("hidden");
+            }
+
+            if (isBusy && busyText) {
+                if (busyText === "preview") {
+                    els.previewBtn.innerHTML = '<span class="spinner"></span>Previewing';
+                }
+                if (busyText === "convert") {
+                    els.convertBtn.innerHTML = '<span class="spinner"></span>Converting';
+                }
+            } else {
+                els.previewBtn.textContent = "Preview Data";
+                els.convertBtn.textContent = "Convert and Download";
+            }
+        }
+
+        function resetButtonsVisibility() {
+            const hasFiles = state.files.length > 0;
+            if (hasFiles) {
+                els.previewBtn.classList.remove("hidden");
+                els.resetBtn.classList.remove("hidden");
+            } else {
+                els.previewBtn.classList.add("hidden");
+                els.convertBtn.classList.add("hidden");
+                els.resetBtn.classList.add("hidden");
+            }
+        }
+
+        function abortActiveRequest() {
+            if (state.activeController) {
+                state.activeController.abort();
+                state.activeController = null;
+            }
+        }
+
+        async function hasPdfSignature(file) {
+            const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+            return head.length === 4 && head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
+        }
+
+        async function validateIncomingFiles(files) {
+            const bySignature = [];
+            for (const file of files) {
+                const fileName = file.name.toLowerCase();
+                const isPdfType = !file.type || file.type.includes("pdf");
+                if (!isPdfType || !fileName.endsWith(".pdf")) {
+                    return `Only PDF files are allowed: ${file.name}`;
+                }
+                if (file.size > 50 * 1024 * 1024) {
+                    return `File exceeds 50MB limit: ${file.name}`;
+                }
+                bySignature.push(file);
+            }
+
+            const totalBytes = bySignature.reduce((sum, file) => sum + file.size, 0);
+            if (totalBytes > 200 * 1024 * 1024) {
+                return "Total batch size is above 200MB limit.";
+            }
+
+            for (const file of bySignature) {
+                const validSignature = await hasPdfSignature(file);
+                if (!validSignature) {
+                    return `Invalid PDF signature detected: ${file.name}`;
+                }
+            }
+            return "";
+        }
+
+        function dedupeFiles(files) {
+            const seen = new Set();
+            const result = [];
+            for (const file of files) {
+                const key = `${file.name}::${file.size}::${file.lastModified}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    result.push(file);
+                }
+            }
+            return result;
+        }
+
+        function renderFileList() {
+            if (!state.files.length) {
+                els.fileList.classList.add("hidden");
+                els.fileList.innerHTML = "";
+                return;
+            }
+
+            const fragment = document.createDocumentFragment();
+            state.files.forEach((file, index) => {
+                const item = document.createElement("li");
+                item.className = "file-item";
+
+                const name = document.createElement("span");
+                name.className = "file-name";
+                name.textContent = file.name;
+
+                const size = document.createElement("span");
+                size.className = "file-size";
+                size.textContent = formatBytes(file.size);
+
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "remove-file";
+                remove.textContent = "Remove";
+                remove.dataset.index = String(index);
+
+                item.appendChild(name);
+                item.appendChild(size);
+                item.appendChild(remove);
+                fragment.appendChild(item);
+            });
+
+            els.fileList.innerHTML = "";
+            els.fileList.appendChild(fragment);
+            els.fileList.classList.remove("hidden");
+        }
+
+        async function handleIncomingFiles(fileList) {
+            const files = dedupeFiles(Array.from(fileList || []));
+            if (!files.length) return;
+
+            showMessage("Validating files before upload...", "info");
+            const validationError = await validateIncomingFiles(files);
+            if (validationError) {
+                showMessage(validationError, "error");
+                return;
+            }
+
+            state.files = files;
+            clearPreview();
+            renderFileList();
+            resetButtonsVisibility();
+            showMessage(`Ready: ${state.files.length} PDF file(s) selected.`, "success");
+        }
+
+        function clearPreview() {
+            state.previewData = null;
+            state.records = [];
+            state.filteredRecords = [];
+            state.page = 1;
+            state.query = "";
+            state.onlyMissingLeave = false;
+            state.onlyOvernight = false;
+
+            els.searchInput.value = "";
+            els.missingFilter.checked = false;
+            els.overnightFilter.checked = false;
+            els.pageSize.value = String(state.pageSize);
+
+            els.statsPanel.classList.add("hidden");
+            els.tablePanel.classList.add("hidden");
+            els.previewBody.innerHTML = "";
+            els.convertBtn.classList.add("hidden");
+        }
+
+        function buildFormData() {
+            const formData = new FormData();
+            const multiple = state.files.length > 1;
+            for (const file of state.files) {
+                formData.append(multiple ? "files" : "file", file);
+            }
+            return { formData, multiple };
+        }
+
+        function getComparableValue(record, key) {
+            if (key === "employee_code") return Number(record.employee_code) || 0;
+            if (key === "commute_time" || key === "leave_time" || key === "working_hours") {
+                const mins = parseTimeToMinutes(record[key]);
+                return Number.isFinite(mins) ? mins : Number.NEGATIVE_INFINITY;
+            }
+            return String(record[key] || "").toLowerCase();
+        }
+
+        function applyTableTransforms() {
+            const query = state.query.trim().toLowerCase();
+            let rows = state.records.slice();
+
+            if (query) {
+                rows = rows.filter((row) => {
+                    const hay = `${row.employee_code} ${row.name} ${row.commute_time} ${row.leave_time} ${row.working_hours}`.toLowerCase();
+                    return hay.includes(query);
+                });
+            }
+
+            if (state.onlyMissingLeave) {
+                rows = rows.filter(isMissingLeave);
+            }
+
+            if (state.onlyOvernight) {
+                rows = rows.filter(isOvernight);
+            }
+
+            rows.sort((a, b) => {
+                const left = getComparableValue(a, state.sortKey);
+                const right = getComparableValue(b, state.sortKey);
+                if (left < right) return state.sortDir === "asc" ? -1 : 1;
+                if (left > right) return state.sortDir === "asc" ? 1 : -1;
+                return 0;
+            });
+
+            state.filteredRecords = rows;
+        }
+
+        function updateSortHeaders() {
+            const headers = document.querySelectorAll("th[data-sort-key]");
+            headers.forEach((header) => {
+                const key = header.dataset.sortKey;
+                const label = header.textContent.replace(/[\u2191\u2193]\s*$/, "").trim();
+                if (key === state.sortKey) {
+                    header.textContent = `${label} ${state.sortDir === "asc" ? "\u2191" : "\u2193"}`;
+                } else {
+                    header.textContent = label;
+                }
+            });
+        }
+
+        function renderTable() {
+            applyTableTransforms();
+
+            const total = state.filteredRecords.length;
+            const pageSize = state.pageSize;
+            const totalPages = Math.max(1, Math.ceil(total / pageSize));
+            if (state.page > totalPages) state.page = totalPages;
+
+            const start = (state.page - 1) * pageSize;
+            const end = Math.min(start + pageSize, total);
+            const visibleRows = state.filteredRecords.slice(start, end);
+
+            els.previewBody.innerHTML = "";
+            if (!visibleRows.length) {
+                const empty = document.createElement("tr");
+                const td = document.createElement("td");
+                td.colSpan = 5;
+                td.className = "no-data";
+                td.textContent = "No rows match the current filters.";
+                empty.appendChild(td);
+                els.previewBody.appendChild(empty);
+            } else {
+                const fragment = document.createDocumentFragment();
+                for (const row of visibleRows) {
+                    const tr = document.createElement("tr");
+                    if (isMissingLeave(row) || isOvernight(row)) {
+                        tr.classList.add("issue");
+                    }
+
+                    const code = document.createElement("td");
+                    code.className = "mono";
+                    code.textContent = row.employee_code;
+
+                    const name = document.createElement("td");
+                    name.textContent = row.name;
+
+                    const startCell = document.createElement("td");
+                    startCell.className = "mono";
+                    startCell.textContent = row.commute_time || "-";
+
+                    const leave = document.createElement("td");
+                    leave.className = "mono";
+                    leave.textContent = row.leave_time || "-";
+
+                    const hours = document.createElement("td");
+                    hours.className = "mono";
+                    hours.textContent = row.working_hours || "-";
+
+                    tr.appendChild(code);
+                    tr.appendChild(name);
+                    tr.appendChild(startCell);
+                    tr.appendChild(leave);
+                    tr.appendChild(hours);
+                    fragment.appendChild(tr);
+                }
+                els.previewBody.appendChild(fragment);
+            }
+
+            els.tableCount.textContent = `${total} rows after filters`;
+            els.pageInfo.textContent = `Page ${state.page} / ${totalPages} | Showing ${total ? start + 1 : 0}-${end}`;
+            els.prevPage.disabled = state.page <= 1;
+            els.nextPage.disabled = state.page >= totalPages;
+            updateSortHeaders();
+        }
+
+        function updateStats() {
+            els.statRows.textContent = String(state.previewData?.total_records ?? 0);
+            els.statRowsWithData.textContent = String(state.previewData?.records_with_data ?? 0);
+            els.statFileCount.textContent = String(state.previewData?.file_count ?? state.files.length);
+            els.statTotalSize.textContent = formatBytes(getTotalSelectedBytes());
+            els.statsPanel.classList.remove("hidden");
+        }
+
+        async function getErrorMessage(response, fallback) {
+            try {
+                const payload = await response.json();
+                return payload.detail || payload.message || fallback;
+            } catch (_err) {
+                return fallback;
+            }
+        }
+
+        async function requestJson(url, options = {}, timeoutMs = 90000) {
+            const controller = new AbortController();
+            const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+            state.activeController = controller;
+
+            try {
+                return await fetch(url, { ...options, signal: controller.signal });
+            } finally {
+                window.clearTimeout(timer);
+                state.activeController = null;
+            }
+        }
+
+        async function runPreview() {
+            if (!state.files.length || state.busy) return;
+
+            const { formData, multiple } = buildFormData();
+            const endpoint = multiple ? "/api/preview-multiple" : "/api/preview";
+            setBusy(true, "preview");
+            showMessage("Processing preview request...", "info");
+
+            try {
+                const response = await requestJson(getApiUrl(endpoint), {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(await getErrorMessage(response, "Preview request failed."));
+                }
+
+                const data = await response.json();
+                state.previewData = data;
+                state.records = Array.isArray(data.records) ? data.records.map(normalizeRecord) : [];
+                state.page = 1;
+
+                updateStats();
+                renderTable();
+
+                els.tablePanel.classList.remove("hidden");
+                els.convertBtn.classList.remove("hidden");
+
+                if (multiple) {
+                    showMessage(`Preview ready. ${data.file_count || state.files.length} files parsed.`, "success");
+                } else {
+                    showMessage(`Preview ready. ${data.total_records || 0} rows prepared.`, "success");
+                }
+            } catch (error) {
+                const isAbort = String(error.message || "").toLowerCase().includes("aborted");
+                showMessage(isAbort ? "Request cancelled." : `Preview failed: ${error.message}`, "error");
+            } finally {
+                setBusy(false);
+            }
+        }
+
+        async function runConvert() {
+            if (!state.files.length || state.busy) return;
+
+            const { formData, multiple } = buildFormData();
+            const endpoint = multiple ? "/api/convert-multiple" : "/api/convert";
+            setBusy(true, "convert");
+            showMessage("Converting files, please wait...", "info");
+
+            try {
+                const response = await requestJson(getApiUrl(endpoint), {
+                    method: "POST",
+                    body: formData
+                }, 140000);
+
+                if (!response.ok) {
+                    throw new Error(await getErrorMessage(response, "Conversion failed."));
+                }
+
+                const result = await response.json();
+                const downloadUrl = getDownloadUrl(result.download_url);
+                if (!downloadUrl) {
+                    throw new Error("Download URL was not provided by the API.");
+                }
+
+                const link = document.createElement("a");
+                link.href = downloadUrl;
+                link.download = result.filename || "attendance_export.xlsx";
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+
+                showMessage(result.message || "Conversion completed.", "success");
+                showToast("Download started.", "success");
+                els.resetBtn.classList.remove("hidden");
+            } catch (error) {
+                const isAbort = String(error.message || "").toLowerCase().includes("aborted");
+                showMessage(isAbort ? "Request cancelled." : `Conversion failed: ${error.message}`, "error");
+                showToast("Conversion failed.", "error");
+            } finally {
+                setBusy(false);
+            }
+        }
+
+        function resetAll() {
+            abortActiveRequest();
+            state.files = [];
+            state.page = 1;
+            state.pageSize = 25;
+            state.sortKey = "employee_code";
+            state.sortDir = "asc";
+            els.fileInput.value = "";
+            clearMessage();
+            clearPreview();
+            renderFileList();
+            resetButtonsVisibility();
+            showMessage("Ready for the next upload batch.", "info");
+        }
+
+        function attachEventHandlers() {
+            els.dropzone.addEventListener("click", () => els.fileInput.click());
+            els.dropzone.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    els.fileInput.click();
+                }
+            });
+
+            els.dropzone.addEventListener("dragover", (event) => {
+                event.preventDefault();
+                els.dropzone.classList.add("dragover");
+            });
+
+            els.dropzone.addEventListener("dragleave", () => {
+                els.dropzone.classList.remove("dragover");
+            });
+
+            els.dropzone.addEventListener("drop", async (event) => {
+                event.preventDefault();
+                els.dropzone.classList.remove("dragover");
+                await handleIncomingFiles(event.dataTransfer.files);
+            });
+
+            els.fileInput.addEventListener("change", async (event) => {
+                await handleIncomingFiles(event.target.files);
+            });
+
+            els.fileList.addEventListener("click", (event) => {
+                const button = event.target.closest("button.remove-file");
+                if (!button) return;
+                const index = Number(button.dataset.index);
+                if (!Number.isFinite(index)) return;
+                state.files.splice(index, 1);
+                renderFileList();
+                clearPreview();
+                resetButtonsVisibility();
+                if (state.files.length) {
+                    showMessage(`${state.files.length} file(s) still selected.`, "info");
+                } else {
+                    clearMessage();
+                }
+            });
+
+            els.previewBtn.addEventListener("click", runPreview);
+            els.convertBtn.addEventListener("click", runConvert);
+            els.resetBtn.addEventListener("click", resetAll);
+            els.cancelBtn.addEventListener("click", () => {
+                abortActiveRequest();
+                setBusy(false);
+                showMessage("Current request cancelled by user.", "info");
+            });
+
+            els.searchInput.addEventListener("input", (event) => {
+                state.query = event.target.value;
+                state.page = 1;
+                renderTable();
+            });
+
+            els.pageSize.addEventListener("change", (event) => {
+                state.pageSize = Number(event.target.value) || 25;
+                state.page = 1;
+                renderTable();
+            });
+
+            els.missingFilter.addEventListener("change", (event) => {
+                state.onlyMissingLeave = event.target.checked;
+                state.page = 1;
+                renderTable();
+            });
+
+            els.overnightFilter.addEventListener("change", (event) => {
+                state.onlyOvernight = event.target.checked;
+                state.page = 1;
+                renderTable();
+            });
+
+            document.querySelectorAll("th[data-sort-key]").forEach((header) => {
+                header.addEventListener("click", () => {
+                    const key = header.dataset.sortKey;
+                    if (state.sortKey === key) {
+                        state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+                    } else {
+                        state.sortKey = key;
+                        state.sortDir = "asc";
+                    }
+                    renderTable();
+                });
+            });
+
+            els.prevPage.addEventListener("click", () => {
+                if (state.page > 1) {
+                    state.page -= 1;
+                    renderTable();
+                }
+            });
+
+            els.nextPage.addEventListener("click", () => {
+                const totalPages = Math.max(1, Math.ceil(state.filteredRecords.length / state.pageSize));
+                if (state.page < totalPages) {
+                    state.page += 1;
+                    renderTable();
+                }
+            });
+        }
+
+        function applyLowPowerModeIfNeeded() {
+            const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            const lowCpu = typeof navigator.hardwareConcurrency === "number" && navigator.hardwareConcurrency <= 4;
+            if (reduceMotion || lowCpu) {
+                document.body.classList.add("low-power");
+            }
+        }
+
+        async function checkHealth() {
+            try {
+                const response = await fetch(getApiUrl("/api/health"));
+                if (!response.ok) throw new Error("Health endpoint not ready.");
+                const data = await response.json();
+                const dbLabel = data?.database || "unknown";
+                els.apiHealth.textContent = `API: ready (${dbLabel})`;
+                els.apiHealth.classList.add("ok");
+            } catch (_error) {
+                els.apiHealth.textContent = "API: unreachable";
+                els.apiHealth.classList.remove("ok");
+                els.apiHealth.classList.add("warn");
+            }
+        }
+
+        applyLowPowerModeIfNeeded();
+        attachEventHandlers();
+        checkHealth();
+        resetButtonsVisibility();
+    </script>
+</body>
+</html>
