@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+attendance.sqlite3
+attendance.sqlite3-shm
+attendance.sqlite3-wal
+attendance.sqlite3-journal
+venv/
+*.log
