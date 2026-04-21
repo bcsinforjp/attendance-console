@@ -110,6 +110,12 @@
   }
   .button:hover { border-color: #b8d2dc; background: var(--surface-soft); }
   .button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .button.action { color: var(--brand-strong); background: #ecfaf4; border-color: #b8e4d8; }
+  .button.action:hover { background: #dff6ee; border-color: #97d8c4; }
+  .button.secondary { color: var(--accent); background: #eef6fb; border-color: #bfd9ea; }
+  .button.secondary:hover { background: #e1f0f9; border-color: #a9cce2; }
+  .button.soft-danger { color: var(--danger); background: #fff2f1; border-color: #f0c8c4; }
+  .button.soft-danger:hover { background: #ffe5e2; border-color: #e7a7a0; }
   .button.warn { background: #fff8ea; border-color: #f0dbb8; color: var(--warn); }
   .button.danger { background: #fff2f1; border-color: #f0c8c4; color: var(--danger); }
   .button:disabled { opacity: 0.55; cursor: not-allowed; }
@@ -129,6 +135,7 @@
   .pill.warn { color: var(--warn); background: #fff8ea; border-color: #f0dbb8; }
   .pill.ok { color: var(--brand-strong); background: #ecfaf4; border-color: #b8e4d8; }
   .pill.danger { color: #fff; background: var(--danger); border-color: var(--danger); }
+  .pill.saved { color: var(--brand-strong); background: #ecfaf4; border-color: #b8e4d8; }
 
   .lock-screen {
     padding: 1.2rem;
@@ -389,6 +396,10 @@
     border-radius: 999px;
     padding: 0.15rem 0.45rem;
   }
+  .saved-pill.saved {
+    border-color: var(--brand);
+    background: var(--brand);
+  }
   .no-data {
     grid-column: 1 / -1;
     min-height: 88px;
@@ -552,7 +563,7 @@
     <a href="https://rnd.asiakawaii.com/attendance/console" target="_blank" rel="noopener">Console ↗</a>
   </nav>
   <div class="toolbar">
-    <span id="dirtyPill" class="pill danger" hidden>Unsaved changes</span>
+    <span id="dirtyPill" class="pill saved">Saved</span>
     <button id="saveBtn" class="button primary" type="button" disabled>Save</button>
     <button id="resetBtn" class="button" type="button" disabled>Reset</button>
     <button id="lockBtn" class="button warn" type="button" hidden>Lock</button>
@@ -612,10 +623,10 @@
         <h3>Import from attendance PDF</h3>
         <p>Upload an attendance PDF to pull names and employee codes, hide already-managed people, and stage selected rows for the chosen department.</p>
         <div class="import-actions">
-          <label class="button" for="importInput">Choose PDF</label>
+          <label class="button action" for="importInput">Choose PDF</label>
           <input id="importInput" type="file" accept="application/pdf,.pdf" hidden />
-          <button id="importSelectAll" class="button" type="button" disabled>Select all</button>
-          <button id="importClear" class="button" type="button" disabled>Clear</button>
+          <button id="importSelectAll" class="button secondary" type="button" disabled>Select all</button>
+          <button id="importClear" class="button soft-danger" type="button" disabled>Clear</button>
           <button id="importAdd" class="button primary" type="button" disabled>Add selected</button>
           <span id="importSummary" class="pill">No PDF loaded</span>
         </div>
@@ -746,8 +757,9 @@
 
   function updateState() {
     const dirty = isDirty();
-    dirtyPill.hidden = !dirty;
-    dirtyPill.className = "pill danger";
+    dirtyPill.hidden = false;
+    dirtyPill.textContent = dirty ? "Unsaved changes" : "Saved";
+    dirtyPill.className = dirty ? "pill danger" : "pill saved";
     saveBtn.disabled = !unlocked || !dirty;
     resetBtn.disabled = !unlocked || !dirty;
     lockBtn.hidden = !unlocked;
@@ -880,7 +892,7 @@
           <div class="emp-code">${emp.code}</div>
           <div class="emp-name">${emp.name}</div>
           <div class="emp-dept">${sectionLabel(emp.section_id)}</div>
-          ${emp.pending ? '<div class="saved-pill">not saved</div>' : ""}
+          <div class="saved-pill ${emp.pending ? "pending" : "saved"}">${emp.pending ? "not saved" : "saved"}</div>
         </div>
         <button class="remove" type="button" data-code="${emp.code}" aria-label="Remove ${emp.name}">×</button>
       </article>
@@ -1090,7 +1102,7 @@
     renderImportList();
   });
 
-    importAdd.addEventListener("click", () => {
+  importAdd.addEventListener("click", () => {
     const known = existingCodes();
     const toAdd = importRows.filter((row) => importSelected.has(row.code) && !known.has(row.code));
     if (toAdd.length === 0) {
