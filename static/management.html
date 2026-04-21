@@ -479,6 +479,7 @@
   }
   .import-column[data-section="1"] .import-column-number { background: #0d8f71; }
   .import-column[data-section="2"] .import-column-number { background: #125e91; }
+  .import-column[data-section="unassigned"] .import-column-number,
   .import-column[data-section="manual"] .import-column-number { background: var(--warn); }
   .import-column-count {
     font-family: "IBM Plex Mono", monospace;
@@ -684,12 +685,28 @@
   }
 
   function normalizeImportRecord(record) {
+    const sectionId = Number(record.section_id);
+    const sectionLabelValue = record.section_label || "未配属";
     return {
       code: (record.employee_code || record.code || "").trim(),
       name: (record.name || "").trim(),
-      section_id: Number(record.section_id) || null,
-      section_label: record.section_label || "未配属",
+      section_id: Number.isFinite(sectionId) && sectionId > 0 ? sectionId : null,
+      section_label: sectionLabelValue,
     };
+  }
+
+  function sectionIdFromLabel(label) {
+    const normalized = String(label || "").replace(/\s+/g, "");
+    const matched = sections.find((section) => String(section.label || "").replace(/\s+/g, "") === normalized);
+    return matched ? Number(matched.id) : null;
+  }
+
+  function resolveImportSection(row) {
+    const numericSection = Number(row.section_id);
+    if (Number.isFinite(numericSection) && numericSection > 0) {
+      return numericSection;
+    }
+    return sectionIdFromLabel(row.section_label);
   }
 
   function existingCodes() {
@@ -881,27 +898,28 @@
     importClear.disabled = importRows.length === 0;
     importAdd.disabled = importSelected.size === 0;
 
-    const grouped = new Map([
-      [1, []],
-      [2, []],
-      ["manual", []],
-    ]);
+    const grouped = new Map();
+    sections.forEach((section) => grouped.set(String(section.id), []));
+    grouped.set("unassigned", []);
     for (const row of visibleRows) {
-      const sectionKey = row.section_id === 1 || row.section_id === 2 ? row.section_id : "manual";
-      grouped.get(sectionKey).push(row);
+      const sectionKey = resolveImportSection(row);
+      const bucketKey = sectionKey ? String(sectionKey) : "unassigned";
+      if (!grouped.has(bucketKey)) grouped.set(bucketKey, []);
+      grouped.get(bucketKey).push(row);
     }
 
-    importList.innerHTML = [
-      [1, sectionLabel(1)],
-      [2, sectionLabel(2)],
-      ["manual", "Manual / Unassigned"],
-    ].map(([sectionId, label]) => {
-      const rows = grouped.get(sectionId) || [];
+    const orderedBuckets = [
+      ...sections.map((section) => ({ key: String(section.id), label: section.label })),
+      ...(grouped.get("unassigned")?.length ? [{ key: "unassigned", label: "Unassigned" }] : []),
+    ];
+
+    importList.innerHTML = orderedBuckets.map(({ key, label }) => {
+      const rows = grouped.get(key) || [];
       return `
-        <section class="import-column" data-section="${sectionId}">
+        <section class="import-column" data-section="${key}">
           <div class="import-column-head">
             <strong>
-              <span class="import-column-number">${sectionId === "manual" ? "?" : sectionId}</span>
+              <span class="import-column-number">${key === "unassigned" ? "?" : key}</span>
               <span>${label}</span>
             </strong>
             <span class="import-column-count">${rows.length}</span>
@@ -910,7 +928,8 @@
             ${rows.map((row) => {
               const isExisting = known.has(row.code);
               const checked = importSelected.has(row.code);
-              const badge = row.section_id ? `${row.section_id} · ${row.section_label}` : "manual";
+              const sectionId = resolveImportSection(row);
+              const badge = sectionId ? `${sectionId} · ${sectionLabel(sectionId)}` : row.section_label || "unassigned";
               return `
                 <label class="import-item${isExisting ? " existing" : ""}">
                   <input type="checkbox" data-code="${row.code}" ${checked ? "checked" : ""} ${isExisting ? "disabled" : ""} />
@@ -937,7 +956,7 @@
     });
 
     importHint.textContent = importRows.length
-      ? "Rows already in the board stay hidden unless you show them again. Section number comes from the roster mapping."
+      ? "Rows already in the board stay hidden unless you show them again. Department comes from the PDF when it can be detected."
       : "Upload a PDF to load import candidates.";
   }
 
@@ -1071,7 +1090,7 @@
     renderImportList();
   });
 
-  importAdd.addEventListener("click", () => {
+    importAdd.addEventListener("click", () => {
     const known = existingCodes();
     const toAdd = importRows.filter((row) => importSelected.has(row.code) && !known.has(row.code));
     if (toAdd.length === 0) {
@@ -1079,7 +1098,7 @@
       return;
     }
     toAdd.forEach((row) => {
-      const targetSectionId = row.section_id || selectedSectionId;
+      const targetSectionId = resolveImportSection(row) || selectedSectionId;
       employees.push({
         code: row.code,
         name: row.name,
@@ -1089,7 +1108,7 @@
       });
     });
     importSelected = new Set();
-    setMessage(`${toAdd.length} employee${toAdd.length === 1 ? "" : "s"} added to ${sectionLabel(selectedSectionId)}.`, "ok");
+    setMessage(`${toAdd.length} employee${toAdd.length === 1 ? "" : "s"} added from PDF.`, "ok");
     renderBoard();
     renderImportList();
   });

@@ -51,6 +51,17 @@ EXCEL_SECTION_LABEL = "Section Two 2 Depanment"
 SECTIONS_PATH = BASE_DIR / "sections.json"
 SECTIONS = json.loads(SECTIONS_PATH.read_text(encoding="utf-8"))["sections"]
 SECTION_OF_CODE = {c: s["id"] for s in SECTIONS for c in s["codes"]}
+SECTION_LABEL_BY_ID = {section["id"]: section["label"] for section in SECTIONS}
+SECTION_TEXT_PATTERNS = {
+    1: [
+        re.compile(r"製造\s*[1１一]\s*課"),
+        re.compile(r"製造\s*1\s*課"),
+    ],
+    2: [
+        re.compile(r"製造\s*[2２二]\s*課"),
+        re.compile(r"製造\s*2\s*課"),
+    ],
+}
 STATIC_DIR = BASE_DIR / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 DATABASE_HOST = os.getenv("ATTENDANCE_DB_HOST", "127.0.0.1")
@@ -274,6 +285,17 @@ def get_row_value(row: list[str], index: int | None) -> str:
 def normalize_blank_value(value: str) -> str:
     """Convert placeholder markers to blank strings."""
     return "" if value in EMPTY_MARKERS else value
+
+def detect_section_from_text(text: str | None) -> int | None:
+    """Infer a department from PDF text when the file prints the section label."""
+    if not text:
+        return None
+    normalized = text.replace(" ", "")
+    for section_id, patterns in SECTION_TEXT_PATTERNS.items():
+        for pattern in patterns:
+            if pattern.search(normalized) or pattern.search(text):
+                return section_id
+    return None
 
 def normalize_time_value(value: str, *, is_leave: bool = False) -> str:
     """
@@ -725,7 +747,12 @@ def apply_employee_roster(records: list[dict[str, str]]) -> list[dict[str, str]]
 
     return rostered_records
 
-def build_record_from_row(row: list[str], columns: dict[str, int | None]) -> dict[str, str] | None:
+def build_record_from_row(
+    row: list[str],
+    columns: dict[str, int | None],
+    *,
+    section_id: int | None = None,
+) -> dict[str, str] | None:
     """Convert one extracted PDF row into the API's record shape."""
     code = get_row_value(row, columns["employee_code"])
     if not is_employee_code(code):
@@ -740,6 +767,8 @@ def build_record_from_row(row: list[str], columns: dict[str, int | None]) -> dic
         "commute_time": commute_time,
         "leave_time": leave_time,
         "working_hours": calculate_working_hours(commute_time, leave_time),
+        "section_id": section_id,
+        "section_label": SECTION_LABEL_BY_ID.get(section_id, "未配属"),
     }
 
 def parse_pdf_data(file_path: Path) -> list[dict[str, str]]:
@@ -748,6 +777,8 @@ def parse_pdf_data(file_path: Path) -> list[dict[str, str]]:
         records = []
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
+                page_text = page.extract_text() or ""
+                page_section_id = detect_section_from_text(page_text)
                 tables = page.extract_tables()
                 if tables:
                     for table in tables:
@@ -764,7 +795,7 @@ def parse_pdf_data(file_path: Path) -> list[dict[str, str]]:
                         }
 
                         for row in normalized_rows:
-                            record = build_record_from_row(row, columns)
+                            record = build_record_from_row(row, columns, section_id=page_section_id)
                             if record:
                                 records.append(record)
 
@@ -1003,12 +1034,16 @@ async def management_import_pdf(file: UploadFile = File(...)):
         if not is_employee_code(code) or not name or code in seen_codes:
             continue
         seen_codes.add(code)
-        section_id = SECTION_OF_CODE.get(code)
+        section_id = record.get("section_id") or SECTION_OF_CODE.get(code)
+        try:
+            section_id = int(section_id) if section_id is not None else None
+        except (TypeError, ValueError):
+            section_id = None
         rows.append({
             "employee_code": code,
             "name": name,
             "section_id": section_id,
-            "section_label": section_lookup.get(section_id, "未配属"),
+            "section_label": record.get("section_label") or section_lookup.get(section_id, "未配属"),
         })
 
     return {
