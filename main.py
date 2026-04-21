@@ -989,12 +989,13 @@ async def management_import_pdf(file: UploadFile = File(...)):
     except ValueError as exc:
         return {
             "filename": original_name,
-          "record_count": 0,
-          "rows": [],
-          "message": str(exc),
-      }
+            "record_count": 0,
+            "rows": [],
+            "message": str(exc),
+        }
     seen_codes: set[str] = set()
     rows: list[dict[str, str]] = []
+    section_lookup = {section["id"]: section["label"] for section in SECTIONS}
 
     for record in raw_records:
         code = (record.get("employee_code") or "").strip()
@@ -1002,9 +1003,12 @@ async def management_import_pdf(file: UploadFile = File(...)):
         if not is_employee_code(code) or not name or code in seen_codes:
             continue
         seen_codes.add(code)
+        section_id = SECTION_OF_CODE.get(code)
         rows.append({
             "employee_code": code,
             "name": name,
+            "section_id": section_id,
+            "section_label": section_lookup.get(section_id, "未配属"),
         })
 
     return {
