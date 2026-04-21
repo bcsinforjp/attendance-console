@@ -954,6 +954,32 @@ async def management_page():
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
+@app.get("/api/management/bootstrap")
+async def management_bootstrap():
+    """Return roster and section metadata for the management mockup UI."""
+    section_lookup = {section["id"]: section["label"] for section in SECTIONS}
+    employees = [
+        {
+            "code": employee["employee_code"],
+            "name": employee["name"],
+            "section_id": SECTION_OF_CODE.get(employee["employee_code"]),
+            "section_label": section_lookup.get(SECTION_OF_CODE.get(employee["employee_code"])),
+        }
+        for employee in EMPLOYEE_ROSTER
+    ]
+    sections = [
+        {
+            "id": section["id"],
+            "label": section["label"],
+            "codes": list(section["codes"]),
+        }
+        for section in SECTIONS
+    ]
+    return {
+        "sections": sections,
+        "employees": employees,
+    }
+
 @app.get("/summary")
 async def summary_page():
     """Attendance Summary dashboard — productivity KPIs with target lines,

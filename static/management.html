@@ -129,22 +129,6 @@
   .pill.warn { color: var(--warn); background: #fff8ea; border-color: #f0dbb8; }
   .pill.ok { color: var(--brand-strong); background: #ecfaf4; border-color: #b8e4d8; }
 
-  .intro {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem 1.1rem;
-    margin-bottom: 0.9rem;
-  }
-  .intro h1 { font-size: clamp(1.25rem, 2.4vw, 1.9rem); line-height: 1.2; }
-  .intro p { color: var(--muted); font-size: 0.9rem; margin-top: 0.25rem; max-width: 72ch; }
-  .intro-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
-  @media (max-width: 760px) {
-    .intro { align-items: flex-start; flex-direction: column; }
-    .intro-actions { justify-content: flex-start; }
-  }
-
   .lock-screen {
     padding: 1.2rem;
     display: grid;
@@ -198,14 +182,16 @@
   @media (max-width: 860px) { .lock-screen { grid-template-columns: 1fr; } }
 
   .management { display: none; }
-  .management.unlocked { display: block; }
+  .management.unlocked {
+    display: grid;
+    gap: 0.9rem;
+  }
   .board {
     display: grid;
-    grid-template-columns: repeat(5, minmax(210px, 1fr));
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
     gap: 0.75rem;
     align-items: start;
   }
-  @media (max-width: 1200px) { .board { grid-template-columns: repeat(3, minmax(220px, 1fr)); } }
   @media (max-width: 760px) { .board { grid-template-columns: 1fr; } }
   .dept {
     min-height: 340px;
@@ -282,10 +268,7 @@
   }
   .remove:hover { color: var(--danger); border-color: #f0c8c4; background: #fff2f1; }
 
-  .add-panel {
-    margin-top: 0.9rem;
-    padding: 0.9rem;
-  }
+  .add-panel { padding: 0.9rem; }
   .add-panel h2 { font-size: 1.02rem; margin-bottom: 0.7rem; }
   .add-grid {
     display: grid;
@@ -322,17 +305,6 @@
 </header>
 
 <main class="page">
-  <section class="intro card">
-    <div>
-      <h1>User Management</h1>
-      <p>Drag employees between departments, add new employees, remove cards, and review the unsaved state before saving. This is a browser-only mockup until the backend management API is approved.</p>
-    </div>
-    <div class="intro-actions">
-      <span id="statusPill" class="pill">Locked</span>
-      <span class="pill">Demo password: admin2026</span>
-    </div>
-  </section>
-
   <section id="lockScreen" class="lock-screen card">
     <div class="lock-panel">
       <h2>Password required</h2>
@@ -351,15 +323,13 @@
       <ul>
         <li>Password check runs in the browser and is hard-coded for review.</li>
         <li>Save copies the edited board into memory only; it does not write files yet.</li>
-        <li>Initial data is twelve sample employees across five departments.</li>
+        <li>Initial data comes from employee_roster.json and sections.json.</li>
         <li>The real build can replace this with login, roster GET/PUT, employee POST/DELETE, hashed admin storage, and a 30-minute session cookie.</li>
       </ul>
     </div>
   </section>
 
   <section id="management" class="management">
-    <div id="board" class="board" aria-live="polite"></div>
-
     <section class="add-panel card">
       <h2>+ Add employee</h2>
       <form id="addForm" class="add-grid">
@@ -372,45 +342,31 @@
           <input id="nameInput" placeholder="山田 太郎" />
         </div>
         <div class="field">
-          <label for="deptInput">Department</label>
+          <label for="deptInput">Section</label>
           <select id="deptInput"></select>
         </div>
         <button class="button primary" type="submit">Add employee</button>
       </form>
       <div id="message" class="message"></div>
     </section>
+
+    <div id="board" class="board" aria-live="polite"></div>
   </section>
 </main>
 
 <script>
 (() => {
   const PASSWORD = "admin2026";
-  const departments = [
-    { id: "sales", label: "営業部" },
-    { id: "dev", label: "開発部" },
-    { id: "admin", label: "管理部" },
-    { id: "manufacturing", label: "製造部" },
-    { id: "unassigned", label: "未配属" },
+  const fallbackSections = [
+    { id: 1, label: "製造１課", codes: [] },
+    { id: 2, label: "製造２課", codes: [] },
   ];
-  const sampleEmployees = [
-    { code: "00001001", name: "佐藤 明", dept: "sales" },
-    { code: "00001002", name: "鈴木 花子", dept: "sales" },
-    { code: "00001003", name: "田中 健", dept: "dev" },
-    { code: "00001004", name: "高橋 美咲", dept: "dev" },
-    { code: "00001005", name: "伊藤 翔", dept: "dev" },
-    { code: "00001006", name: "渡辺 優子", dept: "admin" },
-    { code: "00001007", name: "山本 直樹", dept: "admin" },
-    { code: "00001008", name: "中村 大輔", dept: "manufacturing" },
-    { code: "00001009", name: "小林 彩", dept: "manufacturing" },
-    { code: "00001010", name: "加藤 真", dept: "manufacturing" },
-    { code: "00001011", name: "吉田 莉子", dept: "manufacturing" },
-    { code: "00001012", name: "井上 拓也", dept: "unassigned" },
-  ];
-
-  let savedEmployees = clone(sampleEmployees);
-  let employees = clone(savedEmployees);
+  let sections = [];
+  let savedEmployees = [];
+  let employees = [];
   let unlocked = false;
   let draggingCode = null;
+  let dataLoaded = false;
 
   const $ = (id) => document.getElementById(id);
   const board = $("board");
@@ -427,8 +383,17 @@
     return JSON.parse(JSON.stringify(value));
   }
 
-  function departmentLabel(id) {
-    return departments.find((d) => d.id === id)?.label || "未配属";
+  function sectionLabel(id) {
+    return sections.find((section) => Number(section.id) === Number(id))?.label || "未配属";
+  }
+
+  function normalizeEmployee(record) {
+    return {
+      code: record.code,
+      name: record.name,
+      section_id: Number(record.section_id) || 1,
+      section_label: record.section_label || sectionLabel(record.section_id),
+    };
   }
 
   function isDirty() {
@@ -451,16 +416,16 @@
   }
 
   function renderDeptOptions() {
-    $("deptInput").innerHTML = departments
+    $("deptInput").innerHTML = sections
       .map((dept) => `<option value="${dept.id}">${dept.label}</option>`)
       .join("");
   }
 
   function renderBoard() {
-    board.innerHTML = departments.map((dept) => {
-      const members = employees.filter((emp) => emp.dept === dept.id);
+    board.innerHTML = sections.map((dept) => {
+      const members = employees.filter((emp) => Number(emp.section_id) === Number(dept.id));
       return `
-        <section class="dept" data-dept="${dept.id}">
+        <section class="dept" data-section="${dept.id}">
           <div class="dept-head">
             <h2>${dept.label}</h2>
             <span class="count">${members.length}</span>
@@ -500,11 +465,12 @@
       deptEl.addEventListener("drop", (event) => {
         event.preventDefault();
         deptEl.classList.remove("drag-over");
-        const targetDept = deptEl.dataset.dept;
+        const targetDept = Number(deptEl.dataset.section);
         const emp = employees.find((item) => item.code === draggingCode);
-        if (emp && emp.dept !== targetDept) {
-          emp.dept = targetDept;
-          setMessage(`${emp.name} moved to ${departmentLabel(targetDept)}.`, "");
+        if (emp && Number(emp.section_id) !== targetDept) {
+          emp.section_id = targetDept;
+          emp.section_label = sectionLabel(targetDept);
+          setMessage(`${emp.name} moved to ${sectionLabel(targetDept)}.`, "");
           renderBoard();
         }
       });
@@ -519,14 +485,37 @@
         <div>
           <div class="emp-code">${emp.code}</div>
           <div class="emp-name">${emp.name}</div>
-          <div class="emp-dept">${departmentLabel(emp.dept)}</div>
+          <div class="emp-dept">${sectionLabel(emp.section_id)}</div>
         </div>
         <button class="remove" type="button" data-code="${emp.code}" aria-label="Remove ${emp.name}">×</button>
       </article>
     `;
   }
 
-  $("unlockForm").addEventListener("submit", (event) => {
+  async function loadData() {
+    try {
+      const response = await fetch("./api/management/bootstrap", { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      sections = Array.isArray(data.sections) && data.sections.length ? data.sections : fallbackSections;
+      employees = Array.isArray(data.employees) ? data.employees.map(normalizeEmployee) : [];
+      savedEmployees = clone(employees);
+      dataLoaded = true;
+    } catch (error) {
+      sections = fallbackSections;
+      employees = [];
+      savedEmployees = [];
+      dataLoaded = false;
+      setMessage("Using fallback empty management data. Backend bootstrap was not available.", "error");
+    }
+    renderDeptOptions();
+    if (employees.length) {
+      setMessage("Management board loaded from employee_roster.json and sections.json.", "ok");
+    }
+    renderBoard();
+  }
+
+  $("unlockForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const password = $("passwordInput").value;
     if (password !== PASSWORD) {
@@ -536,15 +525,19 @@
     unlocked = true;
     lockScreen.style.display = "none";
     management.classList.add("unlocked");
+    if (!dataLoaded) {
+      await loadData();
+    } else {
+      renderBoard();
+    }
     setMessage("Management board unlocked.", "ok");
-    renderBoard();
   });
 
   $("addForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const code = $("codeInput").value.trim();
     const name = $("nameInput").value.trim();
-    const dept = $("deptInput").value;
+    const sectionId = Number($("deptInput").value);
     if (!code || !name) {
       setMessage("Code and 氏名 are required.", "error");
       return;
@@ -553,10 +546,15 @@
       setMessage(`Employee code ${code} already exists.`, "error");
       return;
     }
-    employees.push({ code, name, dept });
+    employees.push({
+      code,
+      name,
+      section_id: sectionId,
+      section_label: sectionLabel(sectionId),
+    });
     $("codeInput").value = "";
     $("nameInput").value = "";
-    setMessage(`${name} added to ${departmentLabel(dept)}.`, "ok");
+    setMessage(`${name} added to ${sectionLabel(sectionId)}.`, "ok");
     renderBoard();
   });
 
@@ -581,8 +579,7 @@
     updateState();
   });
 
-  renderDeptOptions();
-  renderBoard();
+  loadData();
 })();
 </script>
 </body>
