@@ -1,15 +1,16 @@
-# Attendance Operations Console
+# V3 Attendance Console
 
 Live app:
 
 https://rnd.asiakawaii.com/attendance/
 
-This project is a FastAPI-based attendance PDF converter and dashboard.
+This project is a FastAPI-based V3 attendance console, PDF converter, and dashboard.
 It uploads attendance PDFs, parses rostered employee rows, previews extracted data in the browser, exports Excel files, stores records in PostgreSQL, and serves dashboard APIs for reporting.
 
 ## What this app does
 
 - Upload one PDF or multiple PDFs
+- Run the `/attendance/console` v3 workflow for attendance PDFs, temp staff, daily packs, and reports
 - Preview extracted attendance rows
 - Convert attendance PDFs into Excel files
 - Preserve the master employee roster order
@@ -22,6 +23,7 @@ It uploads attendance PDFs, parses rostered employee rows, previews extracted da
 
 - Backend: `main.py`
 - Frontend: `index.html`
+- V3 console: `static/console.html`
 - Employee roster: `employee_roster.json`
 - AI blueprint for agents: `PROJECT_INSIDE_AI_BLUEPRINT.md`
 
@@ -41,6 +43,9 @@ It uploads attendance PDFs, parses rostered employee rows, previews extracted da
 ## API shortcuts
 
 - Health check: `/attendance/api/health`
+- V3 console: `/attendance/console`
+- Gantt report: `/attendance/gantt`
+- Summary report: `/attendance/summary`
 - Preview one file: `/attendance/api/preview`
 - Preview many files: `/attendance/api/preview-multiple`
 - Convert one file: `/attendance/api/convert`

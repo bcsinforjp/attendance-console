@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>生産性サマリー · Productivity Summary</title>
+<style>
+/* -------- Base / reset -------- */
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#eef3f5;--panel:#fff;--ink:#132026;--muted:#5a6b73;--hint:#8a9ba3;
+  --line:#d4e2e8;--soft:#f7fbfc;--pop:#f0f3f5;
+  --brand:#0d8f71;--brand-dark:#0b6f58;--brand-tint:#d6f0e5;
+  --s1:#125e91;--s1-tint:#dceaf4;
+  --s2:#c7701b;--s2-tint:#f4e0cd;
+  --cb:#6b3fa0;--cb-tint:#e4daf2;
+  --ok:#0d8f71;--warn:#c7701b;--bad:#b42318;
+  --bad-tint:#fadadc;
+}
+html,body{height:100%;}
+body{
+  font-family:"Space Grotesk","Hiragino Sans","Meiryo",sans-serif;
+  background:var(--bg);color:var(--ink);font-size:13px;line-height:1.45;
+  min-height:100vh;padding:16px;
+}
+
+/* -------- Page frame -------- */
+.wrap{max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:12px;}
+.card{background:var(--panel);border-radius:8px;box-shadow:0 4px 16px rgba(19,32,38,.06);padding:14px 18px;}
+.card h2{font-size:14px;font-weight:700;letter-spacing:.02em;margin-bottom:10px;display:flex;align-items:baseline;gap:8px;}
+.card h2 small{font-size:10px;font-weight:500;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;}
+
+/* -------- Header -------- */
+.topbar{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;}
+.brand{display:flex;align-items:baseline;gap:10px;}
+.brand h1{font-size:18px;font-weight:800;letter-spacing:-.01em;}
+.brand small{font-size:11px;color:var(--muted);font-weight:500;}
+.topbar-links{display:flex;gap:4px;}
+.topbar-links a{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;color:var(--muted);text-decoration:none;border:1px solid transparent;}
+.topbar-links a:hover{background:var(--soft);color:var(--ink);border-color:var(--line);}
+.topbar-links a.active{color:var(--brand);background:var(--brand-tint);border-color:var(--brand);}
+
+/* -------- Controls -------- */
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 14px;background:var(--panel);border-radius:8px;box-shadow:0 4px 16px rgba(19,32,38,.06);}
+.controls label{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
+.controls input[type=date]{padding:5px 8px;border:1px solid var(--line);border-radius:4px;font:inherit;}
+.pill-group{display:flex;gap:2px;background:var(--pop);border-radius:5px;padding:2px;}
+.pill{padding:5px 11px;border:none;background:transparent;cursor:pointer;font:600 11px/1 inherit;color:var(--muted);border-radius:4px;letter-spacing:.02em;}
+.pill.active{background:var(--brand);color:#fff;}
+.pill:hover:not(.active){background:#fff;color:var(--ink);}
+.sep{width:1px;height:22px;background:var(--line);}
+.ctrl-spacer{flex:1;}
+.btn{padding:5px 12px;border:1px solid var(--line);border-radius:4px;background:#fff;cursor:pointer;font:600 11px/1.1 inherit;color:var(--ink);}
+.btn:hover{background:var(--soft);}
+.btn.primary{background:var(--brand);color:#fff;border-color:var(--brand);}
+.btn.primary:hover{background:var(--brand-dark);}
+
+/* -------- KPI cards (target vs actual) -------- */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.kpi{position:relative;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,#fff 0%,var(--soft) 100%);overflow:hidden;}
+.kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--line);}
+.kpi.s1::before{background:var(--s1);} .kpi.s1{border-color:#c3d7e6;}
+.kpi.s2::before{background:var(--s2);} .kpi.s2{border-color:#e6c8a6;}
+.kpi.cb::before{background:var(--cb);} .kpi.cb{border-color:#d4c2ea;background:linear-gradient(180deg,#fff 0%,#fafaff 100%);}
+.kpi.packs::before{background:var(--brand);} .kpi.packs{border-color:#a3d7c2;background:linear-gradient(180deg,#fff 0%,#eaf7f2 100%);}
+.kpi .hdr{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.kpi .lbl-ja{font-size:12px;font-weight:700;}
+.kpi .lbl-en{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;}
+.kpi .big{display:flex;align-items:baseline;gap:4px;line-height:1;margin-bottom:4px;}
+.kpi .big .v{font-size:26px;font-weight:800;letter-spacing:-.01em;}
+.kpi .big .u{font-size:11px;font-weight:700;color:var(--muted);}
+.kpi .target{display:flex;align-items:baseline;gap:6px;font-size:10px;color:var(--muted);}
+.kpi .target .t-val{color:var(--ink);font-weight:700;}
+.kpi .pct-bar{margin-top:6px;height:5px;border-radius:3px;background:var(--pop);overflow:hidden;}
+.kpi .pct-fill{height:100%;border-radius:3px;transition:width .4s ease;}
+.kpi.s1 .pct-fill{background:var(--s1);}
+.kpi.s2 .pct-fill{background:var(--s2);}
+.kpi.cb .pct-fill{background:var(--cb);}
+.kpi.packs .pct-fill{background:var(--brand);}
+.kpi .pct-hint{display:flex;align-items:center;justify-content:space-between;margin-top:3px;font-size:9px;color:var(--hint);font-weight:600;letter-spacing:.04em;}
+.kpi .pct-hint .delta{display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:6px;font-weight:700;font-size:9px;}
+.delta.up{background:var(--brand-tint);color:var(--ok);}
+.delta.down{background:var(--bad-tint);color:var(--bad);}
+.delta.flat{background:var(--pop);color:var(--muted);}
+.delta.na{background:transparent;color:var(--hint);border:1px dashed var(--line);}
+
+/* -------- Main chart -------- */
+.chart-box{position:relative;}
+.chart-legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;align-items:center;}
+.chart-legend .leg{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);font-weight:600;cursor:pointer;padding:2px 8px;border-radius:4px;border:1px solid var(--line);background:#fff;}
+.chart-legend .leg.off{opacity:.35;}
+.chart-legend .leg .sw{width:14px;height:3px;border-radius:2px;}
+.chart-legend .leg .dot{width:8px;height:8px;border-radius:50%;border:1.5px solid;}
+.chart-legend .leg.is-target .sw{border-top:2px dashed currentColor;background:transparent!important;height:0;width:14px;}
+.chart-svg{width:100%;height:auto;display:block;overflow:visible;}
+.chart-svg .axis{stroke:var(--line);stroke-width:1;}
+.chart-svg .grid{stroke:#edf2f4;stroke-width:1;}
+.chart-svg .axis-lbl{fill:var(--hint);font-size:10px;font-family:inherit;}
+.chart-svg .axis-ttl{fill:var(--muted);font-size:9px;font-family:inherit;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+.chart-svg .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;}
+.chart-svg .ln-prev{fill:none;stroke-width:1.2;stroke-dasharray:4 3;opacity:.6;}
+.chart-svg .tg{fill:none;stroke-width:1.3;stroke-dasharray:6 4;opacity:.8;}
+.chart-svg .tg-lbl{font-size:9px;font-weight:700;fill:currentColor;font-family:inherit;}
+.chart-svg .dot{stroke:#fff;stroke-width:1.5;r:3;}
+.chart-svg .bar{fill:#d6f0e5;opacity:.55;}
+.chart-svg .bar.hi{opacity:.85;}
+.chart-svg .cross{stroke:var(--ink);stroke-width:1;stroke-dasharray:2 2;opacity:0;}
+.chart-svg.hover .cross{opacity:.45;}
+.chart-tip{position:absolute;background:var(--ink);color:#fff;padding:7px 9px;border-radius:4px;font:600 10px/1.45 inherit;pointer-events:none;white-space:nowrap;opacity:0;transition:opacity .12s;z-index:30;box-shadow:0 8px 20px rgba(0,0,0,.18);}
+.chart-tip.show{opacity:1;}
+.chart-tip .tip-date{color:#a9d9c8;font-weight:700;margin-bottom:3px;font-size:10px;letter-spacing:.04em;}
+.chart-tip .tip-row{display:flex;justify-content:space-between;gap:12px;}
+.chart-tip .tip-row .k{color:#b7c3c8;font-weight:500;}
+.chart-tip .tip-row .v{font-weight:800;}
+
+/* -------- Comparisons grid -------- */
+.cmp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.cmp{position:relative;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;}
+.cmp .title{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:4px;}
+.cmp .title small{font-weight:500;color:var(--hint);text-transform:none;letter-spacing:0;display:block;font-size:9px;margin-top:1px;}
+.cmp .rows{display:flex;flex-direction:column;gap:4px;}
+.cmp .row{display:grid;grid-template-columns:44px 1fr auto;gap:8px;align-items:center;font-size:11px;}
+.cmp .row .k{font-weight:700;color:var(--muted);letter-spacing:.02em;font-size:10px;}
+.cmp .row .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
+.cmp .row .d{text-align:right;}
+.cmp .row .d .delta{padding:1px 5px;font-size:9px;border-radius:6px;}
+
+/* -------- Dept breakdown table -------- */
+.tbl{width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums;}
+.tbl th{text-align:left;padding:7px 8px;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);}
+.tbl th.num,.tbl td.num{text-align:right;}
+.tbl td{padding:6px 8px;border-bottom:0.5px solid #eef3f5;}
+.tbl tbody tr:hover{background:var(--soft);}
+.tbl .pill-sm{display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:700;}
+.tbl .date-cell{font-weight:700;color:var(--ink);}
+.tbl .date-cell small{color:var(--hint);font-weight:500;margin-left:4px;font-size:9px;}
+
+/* -------- Status / loading -------- */
+.loading{padding:30px 10px;text-align:center;color:var(--hint);font-size:11px;}
+.error{padding:14px;background:var(--bad-tint);color:var(--bad);border:1px solid var(--bad);border-radius:6px;font-size:11px;font-weight:600;}
+
+/* -------- Responsive -------- */
+@media (max-width:1000px){
+  .kpi-grid{grid-template-columns:repeat(2,1fr);}
+  .cmp-grid{grid-template-columns:repeat(2,1fr);}
+  .topbar{grid-template-columns:1fr;gap:8px;}
+}
+@media (max-width:600px){
+  body{padding:8px;}
+  .card{padding:10px 12px;}
+  .kpi-grid{grid-template-columns:1fr;}
+  .cmp-grid{grid-template-columns:1fr;}
+  .controls{padding:8px 10px;gap:6px;}
+  .kpi .big .v{font-size:22px;}
+}
+
+/* -------- Print -------- */
+@media print{
+  /* PDF output = B3 landscape (353 × 500 mm) — wide enough to fit the chart,
+     comparison grid and full 14-day table side-by-side without column truncation. */
+  body{background:#fff;padding:0;font-size:12px;}
+  .wrap{max-width:none;gap:8px;}
+  .controls,.topbar-links,.no-print{display:none!important;}
+  .card{box-shadow:none;border:1px solid var(--line);break-inside:avoid;padding:10px 14px;}
+  .card h2{font-size:15px;}
+  .chart-svg{height:auto!important;max-height:none;}
+  .kpi-grid{gap:10px;}
+  .compare-grid{gap:10px;}
+  table{font-size:11px;}
+  @page{size:B3 landscape;margin:10mm;}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="card topbar">
+    <div class="brand">
+      <h1>生産性サマリー</h1>
+      <small>Productivity Summary · <span id="brandDate">—</span></small>
+    </div>
+    <div class="topbar-links">
+      <a href="console">Console</a>
+      <a href="gantt">Gantt</a>
+      <a href="summary" class="active">Summary</a>
+    </div>
+    <div class="topbar-links no-print">
+      <button class="btn primary" id="btnPrint" type="button">⬇ PDF</button>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <label>日付 · Date <input type="date" id="endDate"></label>
+    <span class="sep"></span>
+    <div class="pill-group" id="rangeGroup" role="tablist">
+      <button type="button" class="pill" data-range="day">Day</button>
+      <button type="button" class="pill active" data-range="week">Week</button>
+      <button type="button" class="pill" data-range="month">Month</button>
+      <button type="button" class="pill" data-range="3month">3 Month</button>
+    </div>
+    <span class="sep"></span>
+    <label><input type="checkbox" id="chkPrev" checked> Compare previous period</label>
+    <label><input type="checkbox" id="chkTargets" checked> Show target lines</label>
+    <div class="ctrl-spacer"></div>
+    <button class="btn" id="btnReload" type="button">↻ Reload</button>
+  </div>
+
+  <!-- KPI cards (target vs actual) -->
+  <div class="card">
+    <h2>目標対実績 <small>Target vs Actual · Current period</small></h2>
+    <div class="kpi-grid" id="kpiGrid">
+      <div class="loading" style="grid-column:1/-1;">loading…</div>
+    </div>
+  </div>
+
+  <!-- Main combined chart -->
+  <div class="card">
+    <h2>人時生産性の推移 <small>Labor Productivity Trend · with target lines (S1 85 / S2 35 / Combined 25)</small></h2>
+    <div class="chart-legend" id="chartLegend"></div>
+    <div class="chart-box" id="chartBox">
+      <svg class="chart-svg" id="chartSvg" viewBox="0 0 1000 340"></svg>
+      <div class="chart-tip" id="chartTip"></div>
+    </div>
+  </div>
+
+  <!-- Comparisons -->
+  <div class="card">
+    <h2>比較 <small>Comparisons · all angles vs prior period and same weekday</small></h2>
+    <div class="cmp-grid" id="cmpGrid">
+      <div class="loading" style="grid-column:1/-1;">loading…</div>
+    </div>
+  </div>
+
+  <!-- Dept breakdown -->
+  <div class="card">
+    <h2>日次内訳 <small>Daily breakdown · per-department LP + target %</small></h2>
+    <div style="overflow-x:auto;">
+      <table class="tbl" id="breakdown">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th class="num">Packs</th>
+            <th class="num">S1 Hrs</th>
+            <th class="num">S1 LP</th>
+            <th class="num">S1 / Tgt</th>
+            <th class="num">S2 Hrs</th>
+            <th class="num">S2 LP</th>
+            <th class="num">S2 / Tgt</th>
+            <th class="num">Comb Hrs</th>
+            <th class="num">Comb LP</th>
+            <th class="num">Comb / Tgt</th>
+          </tr>
+        </thead>
+        <tbody id="breakdownBody"><tr><td colspan="11" class="loading">loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ==================================================================
+   Targets — editable single source of truth.
+   Dept 1  85 P/h   ·   Dept 2  35 P/h   ·   Combined  25 P/h
+   Also mirrored in backend so the two never drift.
+   ================================================================== */
+const TARGETS = { s1: 85, s2: 35, combined: 25, packs: null };
+const COLORS  = { s1:"#125e91", s2:"#c7701b", cb:"#6b3fa0", packs:"#0d8f71", ink:"#132026" };
+const LABELS  = {
+  s1: { ja:"製造１課 人時生産性", en:"Dept 1 Labor Productivity" },
+  s2: { ja:"製造２課 人時生産性", en:"Dept 2 Labor Productivity" },
+  cb: { ja:"合計 人時生産性",     en:"Combined Labor Productivity" },
+  packs: { ja:"製造パック数",     en:"Packs Manufactured" },
+};
+const WEEKDAYS_JA = ["日","月","火","水","木","金","土"];
+
+/* ==================================================================
+   API helpers — base resolves to /attendance when behind nginx.
+   ================================================================== */
+const BASE = (() => {
+  const p = location.pathname;
+  const i = p.lastIndexOf("/summary");
+  return i >= 0 ? p.slice(0, i) : "";
+})();
+const api = (p) => BASE + (p.startsWith("/") ? p : "/" + p);
+const $ = id => document.getElementById(id);
+const fmt = {
+  num : n => (n == null || !isFinite(n)) ? "—" : Number(n).toLocaleString(undefined, {maximumFractionDigits:0}),
+  lp  : n => (n == null || !isFinite(n) || n <= 0) ? "—" : Number(n).toFixed(2),
+  hrs : n => (n == null || !isFinite(n) || n <= 0) ? "0:00" : `${Math.floor(n)}:${String(Math.round((n-Math.floor(n))*60)).padStart(2,"0")}`,
+  pct : n => (n == null || !isFinite(n)) ? "—" : (n >= 100 ? n.toFixed(0) : n.toFixed(1)) + "%",
+  dateJa: iso => {
+    if (!iso) return "—";
+    const d = new Date(iso + "T00:00:00");
+    return `${iso} (${WEEKDAYS_JA[d.getDay()]})`;
+  },
+};
+
+/* ==================================================================
+   State — single bag of truth, re-render on mutation.
+   ================================================================== */
+const state = {
+  range: "week",
+  end:   null,      // ISO yyyy-mm-dd
+  comparePrev: true,
+  showTargets: true,
+  data: null,       // from /api/productivity
+  legend: { s1:true, s2:true, cb:true, packs:false },
+};
+
+/* Set default end date = latest date that has data, fall back to today. */
+async function resolveEndDate() {
+  try {
+    const r = await fetch(api("/api/gantt/latest-date"), {cache:"no-store"});
+    if (r.ok) {
+      const j = await r.json();
+      if (j && j.latest_date) return j.latest_date;
+    }
+  } catch(_){}
+  return new Date().toISOString().slice(0,10);
+}
+
+/* ==================================================================
+   Data fetch — /api/productivity returns { range, current, previous }
+   where current/previous = { start, end, summary, series }.
+   ================================================================== */
+async function loadData() {
+  $("kpiGrid").innerHTML     = `<div class="loading" style="grid-column:1/-1;">loading…</div>`;
+  $("cmpGrid").innerHTML     = `<div class="loading" style="grid-column:1/-1;">loading…</div>`;
+  $("breakdownBody").innerHTML = `<tr><td colspan="11" class="loading">loading…</td></tr>`;
+  $("chartSvg").innerHTML     = "";
+
+  try {
+    const url = api(`/api/productivity?range=${state.range}&end=${state.end}&_=${Date.now()}`);
+    const r = await fetch(url, {cache:"no-store"});
+    if (!r.ok) throw new Error(await r.text());
+    state.data = await r.json();
+    $("brandDate").textContent = fmt.dateJa(state.end);
+    renderAll();
+  } catch (err) {
+    const msg = `<div class="error">Failed to load summary data: ${String(err.message||err)}</div>`;
+    $("kpiGrid").innerHTML = msg;
+    $("chartSvg").innerHTML = "";
+    $("cmpGrid").innerHTML = "";
+    $("breakdownBody").innerHTML = `<tr><td colspan="11" class="error">load failed</td></tr>`;
+  }
+}
+
+/* ==================================================================
+   Derivations — all downstream widgets pull from these pure helpers.
+   ================================================================== */
+function deltaBadge(cur, prv, digits=2, prefix="") {
+  if (cur == null || prv == null || !isFinite(cur) || !isFinite(prv) || prv <= 0 || cur <= 0) {
+    return { cls:"na", text:"— n/a", pct: null };
+  }
+  const pct = ((cur - prv) / prv) * 100;
+  const cls = pct >  0.5 ? "up" : (pct < -0.5 ? "down" : "flat");
+  const arrow = cls === "up" ? "▲" : (cls === "down" ? "▼" : "–");
+  const sign = pct > 0 ? "+" : "";
+  return { cls, text:`${arrow} ${sign}${pct.toFixed(1)}%`, pct };
+}
+
+function pctOfTarget(actual, target) {
+  if (!target || !isFinite(actual) || actual <= 0) return null;
+  return (actual / target) * 100;
+}
+
+/* Find same-weekday comparison: (end − 7d) value vs end value */
+function sameWeekdayPair(seriesLabels, seriesVals) {
+  if (!seriesLabels || seriesLabels.length === 0) return [null, null, null, null];
+  const n = seriesLabels.length;
+  const cur = seriesVals[n-1];
+  const curLbl = seriesLabels[n-1];
+  const prvIdx = n - 8; // 7 days earlier
+  const prv = prvIdx >= 0 ? seriesVals[prvIdx] : null;
+  const prvLbl = prvIdx >= 0 ? seriesLabels[prvIdx] : null;
+  return [cur, prv, curLbl, prvLbl];
+}
+
+/* ==================================================================
+   Renderers
+   ================================================================== */
+function renderAll(){ renderKPI(); renderChart(); renderComparisons(); renderBreakdown(); }
+
+function renderKPI() {
+  const s = state.data.current.summary;
+  const p = state.data.previous.summary;
+  const cards = [
+    {
+      key:"s1", cls:"s1", lblJa: LABELS.s1.ja, lblEn: LABELS.s1.en, unit:"P/h",
+      actual: s.lp_s1, prev: p.lp_s1, target: TARGETS.s1,
+      sub: `Hours ${fmt.hrs(s.total_hours_s1)} · ${state.range}`,
+    },
+    {
+      key:"s2", cls:"s2", lblJa: LABELS.s2.ja, lblEn: LABELS.s2.en, unit:"P/h",
+      actual: s.lp_s2, prev: p.lp_s2, target: TARGETS.s2,
+      sub: `Hours ${fmt.hrs(s.total_hours_s2)} · ${state.range}`,
+    },
+    {
+      key:"cb", cls:"cb", lblJa: LABELS.cb.ja, lblEn: LABELS.cb.en, unit:"P/h",
+      actual: s.lp_combined, prev: p.lp_combined, target: TARGETS.combined,
+      sub: `Hours ${fmt.hrs(s.total_hours_combined)} · ${state.range}`,
+    },
+    {
+      key:"packs", cls:"packs", lblJa: LABELS.packs.ja, lblEn: LABELS.packs.en, unit:"P",
+      actual: s.total_packs, prev: p.total_packs, target: null,
+      sub: `Range total · ${state.data.current.start} → ${state.data.current.end}`,
+    },
+  ];
+
+  $("kpiGrid").innerHTML = cards.map(c => {
+    const pct = pctOfTarget(c.actual, c.target);
+    const pctTxt = pct == null ? "—" : fmt.pct(pct);
+    const barW = pct == null ? 0 : Math.min(100, Math.max(0, pct));
+    const d = deltaBadge(c.actual, c.prev);
+    const actTxt = c.unit === "P" ? fmt.num(c.actual) : fmt.lp(c.actual);
+    const tgtBlock = c.target
+      ? `<div class="target">Target <span class="t-val">${c.target} ${c.unit}</span> · ${pctTxt} of target</div>
+         <div class="pct-bar"><div class="pct-fill" style="width:${barW}%"></div></div>`
+      : `<div class="target">${c.sub}</div>`;
+    return `
+      <div class="kpi ${c.cls}">
+        <div class="hdr"><span class="lbl-ja">${c.lblJa}</span><span class="lbl-en">${c.lblEn}</span></div>
+        <div class="big"><span class="v">${actTxt}</span><span class="u">${c.unit}</span></div>
+        ${tgtBlock}
+        <div class="pct-hint">
+          <span>${c.sub}</span>
+          <span class="delta ${d.cls}">${d.text}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+/* --- Combined chart: 3 LP lines (+ optional packs bars), target dashed lines,
+     previous-period dashed series, hover crosshair + tooltip. --- */
+function renderChart() {
+  const svg = $("chartSvg");
+  const W = 1000, H = 340;
+  const PL = 52, PR = 70, PT = 16, PB = 40;
+  const cur = state.data.current.series;
+  const prv = state.data.previous.series;
+  const labels = cur.labels || [];
+  const n = labels.length;
+  if (n === 0) { svg.innerHTML = `<text x="500" y="170" text-anchor="middle" fill="#8a9ba3">No data in range</text>`; return; }
+
+  // Determine y scale — max of enabled series + target; pad 10%.
+  const seriesForMax = [];
+  if (state.legend.s1) seriesForMax.push(...cur.lp_s1, ...(state.comparePrev?prv.lp_s1:[]));
+  if (state.legend.s2) seriesForMax.push(...cur.lp_s2, ...(state.comparePrev?prv.lp_s2:[]));
+  if (state.legend.cb) seriesForMax.push(...cur.lp_combined, ...(state.comparePrev?prv.lp_combined:[]));
+  if (state.showTargets) seriesForMax.push(TARGETS.s1, TARGETS.s2, TARGETS.combined);
+  const maxV = Math.max(5, ...seriesForMax.filter(isFinite));
+
+  // Independent axis for packs (right side) if toggled on
+  const showPacks = state.legend.packs;
+  const packMax = showPacks ? Math.max(1, ...cur.packs) * 1.05 : 1;
+
+  const xs = i => PL + (n <= 1 ? 0 : i*(W-PL-PR)/(n-1));
+  const ys = v => PT + (H-PT-PB) - (Math.max(0,v)/maxV) * (H-PT-PB);
+  const ysPacks = v => PT + (H-PT-PB) - (Math.max(0,v)/packMax) * (H-PT-PB);
+
+  // Y grid + ticks
+  const tickCount = 5;
+  const gridSvg = [];
+  for (let i=0; i<=tickCount; i++) {
+    const v = (maxV*i/tickCount);
+    const y = ys(v);
+    gridSvg.push(`<line class="grid" x1="${PL}" x2="${W-PR}" y1="${y}" y2="${y}"/>`);
+    gridSvg.push(`<text class="axis-lbl" x="${PL-6}" y="${y+3}" text-anchor="end">${v.toFixed(v<10?1:0)}</text>`);
+    if (showPacks) {
+      const pv = packMax*i/tickCount;
+      gridSvg.push(`<text class="axis-lbl" x="${W-PR+6}" y="${y+3}" fill="#0d8f71">${fmt.num(pv)}</text>`);
+    }
+  }
+  gridSvg.push(`<text class="axis-ttl" x="${PL-42}" y="${PT+10}" transform="rotate(-90 ${PL-42} ${PT+10})">P/h</text>`);
+  if (showPacks) gridSvg.push(`<text class="axis-ttl" x="${W-PR+18}" y="${PT+18}" fill="#0d8f71">Packs</text>`);
+
+  // X ticks
+  const xStep = Math.max(1, Math.ceil(n/10));
+  const xTickIdx = [];
+  for (let i=0; i<n; i+=xStep) xTickIdx.push(i);
+  if (xTickIdx[xTickIdx.length-1] !== n-1) xTickIdx.push(n-1);
+  const xTicks = xTickIdx.map(i => {
+    const lbl = labels[i];
+    const d = new Date(lbl + "T00:00:00");
+    const show = `${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}`;
+    const dow = WEEKDAYS_JA[d.getDay()];
+    return `<text class="axis-lbl" x="${xs(i)}" y="${H-PB+14}" text-anchor="middle">${show}</text>
+            <text class="axis-lbl" x="${xs(i)}" y="${H-PB+26}" text-anchor="middle" fill="${d.getDay()===0||d.getDay()===6?"#c7701b":"#8a9ba3"}">${dow}</text>`;
+  }).join("");
+
+  // Target horizontal lines (dashed) + label on the right
+  const tgtSvg = [];
+  if (state.showTargets) {
+    const tgts = [
+      state.legend.s1 ? {v:TARGETS.s1, c:COLORS.s1, lbl:`S1 目標 85`} : null,
+      state.legend.s2 ? {v:TARGETS.s2, c:COLORS.s2, lbl:`S2 目標 35`} : null,
+      state.legend.cb ? {v:TARGETS.combined, c:COLORS.cb, lbl:`合計 目標 25`} : null,
+    ].filter(Boolean);
+    for (const t of tgts) {
+      const y = ys(t.v);
+      tgtSvg.push(`<line class="tg" x1="${PL}" x2="${W-PR}" y1="${y}" y2="${y}" stroke="${t.c}"/>`);
+      tgtSvg.push(`<text class="tg-lbl" x="${W-PR+6}" y="${y+3}" style="color:${t.c}">${t.lbl}</text>`);
+    }
+  }
+
+  // Bars (packs) — optional
+  let barsSvg = "";
+  if (showPacks) {
+    const bw = Math.max(3, (W-PL-PR)/n - 2);
+    barsSvg = cur.packs.map((p,i) => {
+      if (p<=0) return "";
+      const x = xs(i) - bw/2;
+      const y = ysPacks(p);
+      const h = (H-PB) - y;
+      return `<rect class="bar" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}"/>`;
+    }).join("");
+  }
+
+  // Line builder
+  const path = (vals) => {
+    const pts = [];
+    for (let i=0;i<vals.length;i++) {
+      const v = vals[i];
+      if (v <= 0 || !isFinite(v)) { pts.push(null); continue; }
+      pts.push([xs(i), ys(v)]);
+    }
+    let d = "", last = null;
+    for (let i=0;i<pts.length;i++) {
+      const p = pts[i];
+      if (!p) { last = null; continue; }
+      d += (last ? " L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1);
+      last = p;
+    }
+    return d || "M0,0";
+  };
+
+  const dotsFor = (vals, color) =>
+    vals.map((v,i) => {
+      if (v<=0 || !isFinite(v)) return "";
+      return `<circle class="dot" cx="${xs(i).toFixed(1)}" cy="${ys(v).toFixed(1)}" fill="${color}"/>`;
+    }).join("");
+
+  const series = [
+    state.legend.s1 ? {key:"s1",  color:COLORS.s1, cur:cur.lp_s1,       prev:prv.lp_s1}       : null,
+    state.legend.s2 ? {key:"s2",  color:COLORS.s2, cur:cur.lp_s2,       prev:prv.lp_s2}       : null,
+    state.legend.cb ? {key:"cb",  color:COLORS.cb, cur:cur.lp_combined, prev:prv.lp_combined} : null,
+  ].filter(Boolean);
+
+  const prevLines = state.comparePrev
+    ? series.map(s => `<path class="ln-prev" d="${path(s.prev)}" stroke="${s.color}"/>`).join("")
+    : "";
+  const curLines = series.map(s =>
+    `<path class="ln" d="${path(s.cur)}" stroke="${s.color}"/>`
+  ).join("");
+  const dots = series.map(s => dotsFor(s.cur, s.color)).join("");
+
+  const cross = `<line class="cross" id="chartCross" x1="${xs(0)}" x2="${xs(0)}" y1="${PT}" y2="${H-PB}"/>`;
+  const hoverRect = `<rect id="chartHover" x="${PL}" y="${PT}" width="${W-PL-PR}" height="${H-PT-PB}" fill="transparent"/>`;
+
+  svg.innerHTML = `
+    ${gridSvg.join("")}
+    <line class="axis" x1="${PL}" x2="${W-PR}" y1="${H-PB}" y2="${H-PB}"/>
+    <line class="axis" x1="${PL}" x2="${PL}" y1="${PT}" y2="${H-PB}"/>
+    ${barsSvg}
+    ${prevLines}${tgtSvg.join("")}${curLines}${dots}
+    ${xTicks}
+    ${cross}${hoverRect}
+  `;
+
+  // Legend + hover
+  renderLegend();
+  attachChartHover({xs,ys,labels,cur,prv,series});
+}
+
+function renderLegend() {
+  const items = [
+    {key:"s1", label:`${LABELS.s1.ja} (S1)`, color:COLORS.s1},
+    {key:"s2", label:`${LABELS.s2.ja} (S2)`, color:COLORS.s2},
+    {key:"cb", label:`${LABELS.cb.ja} (Combined)`, color:COLORS.cb},
+    {key:"packs", label:`${LABELS.packs.ja} (Bars)`, color:COLORS.packs},
+  ];
+  $("chartLegend").innerHTML = items.map(it =>
+    `<div class="leg ${state.legend[it.key]?"":"off"}" data-key="${it.key}">
+      <span class="sw" style="background:${it.color}"></span>${it.label}
+    </div>`
+  ).join("");
+  document.querySelectorAll("#chartLegend .leg").forEach(el => {
+    el.onclick = () => { state.legend[el.dataset.key] = !state.legend[el.dataset.key]; renderChart(); };
+  });
+}
+
+function attachChartHover({xs,ys,labels,cur,prv,series}) {
+  const svg = $("chartSvg");
+  const tip = $("chartTip");
+  const cross = $("chartCross");
+  const hoverRect = $("chartHover");
+  const box = $("chartBox");
+  const W = 1000;
+  const n = labels.length;
+  function idxAt(clientX) {
+    const r = svg.getBoundingClientRect();
+    const ratio = W / r.width;
+    const px = (clientX - r.left) * ratio;
+    let best = 0, bestD = Infinity;
+    for (let i=0;i<n;i++) {
+      const d = Math.abs(xs(i) - px);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+  hoverRect.addEventListener("mousemove", e => {
+    const i = idxAt(e.clientX);
+    svg.classList.add("hover");
+    cross.setAttribute("x1", xs(i).toFixed(1));
+    cross.setAttribute("x2", xs(i).toFixed(1));
+    const lbl = labels[i];
+    const lines = [
+      `<div class="tip-date">${fmt.dateJa(lbl)}</div>`,
+      ...series.map(s => {
+        const v = s.cur[i] || 0;
+        const prvV = s.prev[i] || 0;
+        const d = deltaBadge(v, prvV);
+        const name = s.key.toUpperCase();
+        const tgt = TARGETS[s.key === "cb" ? "combined" : s.key];
+        const pct = pctOfTarget(v, tgt);
+        const pctStr = pct == null ? "" : ` · ${fmt.pct(pct)}`;
+        return `<div class="tip-row"><span class="k" style="color:${s.color}">${name}</span>
+                  <span class="v">${fmt.lp(v)} P/h${pctStr}</span></div>
+                <div class="tip-row"><span class="k">vs prev</span><span class="v" style="color:${d.cls==='up'?'#9be0c1':d.cls==='down'?'#f6b9be':'#b7c3c8'}">${d.text}</span></div>`;
+      }),
+      `<div class="tip-row"><span class="k">Packs</span><span class="v">${fmt.num(cur.packs[i])}</span></div>`,
+    ];
+    tip.innerHTML = lines.join("");
+    const svgRect = svg.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+    const px = e.clientX - boxRect.left;
+    const py = e.clientY - boxRect.top;
+    const tipW = tip.offsetWidth;
+    const left = Math.min(boxRect.width - tipW - 6, Math.max(6, px + 14));
+    tip.style.left = left + "px";
+    tip.style.top  = Math.max(6, py - 30) + "px";
+    tip.classList.add("show");
+  });
+  hoverRect.addEventListener("mouseleave", () => {
+    svg.classList.remove("hover");
+    tip.classList.remove("show");
+  });
+}
+
+/* Comparisons block — 4 angles:
+   1) vs Prior day      (last value in current range vs the value before it — within-range day-over-day)
+   2) vs Same weekday   (last value vs value 7 days earlier inside current range)
+   3) Current period    (current summary vs previous summary — whole range aggregate)
+   4) Best / Worst days (inside the current range) */
+function renderComparisons() {
+  const c = state.data.current;
+  const p = state.data.previous;
+  const s = c.series, pp = p.series;
+
+  // 1) Day-over-day: last two points of current series (needs n≥2).
+  const nCur = s.labels.length;
+  const dodBlock = (() => {
+    if (nCur < 2) return null;
+    const curLbl = s.labels[nCur-1], prvLbl = s.labels[nCur-2];
+    return [
+      {k:"S1", v:s.lp_s1[nCur-1], prv:s.lp_s1[nCur-2]},
+      {k:"S2", v:s.lp_s2[nCur-1], prv:s.lp_s2[nCur-2]},
+      {k:"CB", v:s.lp_combined[nCur-1], prv:s.lp_combined[nCur-2]},
+    ].map(r => ({...r, delta: deltaBadge(r.v, r.prv)})).concat([{
+      __hdr: `${curLbl} vs ${prvLbl}`
+    }]);
+  })();
+
+  // 2) Same weekday: current end vs 7 days earlier within range.
+  const [s1cur, s1prv, curL, prvL] = sameWeekdayPair(s.labels, s.lp_s1);
+  const [s2cur, s2prv] = sameWeekdayPair(s.labels, s.lp_s2);
+  const [cbcur, cbprv] = sameWeekdayPair(s.labels, s.lp_combined);
+  const swBlock = (curL && prvL)
+    ? [
+        {k:"S1", v:s1cur, prv:s1prv},
+        {k:"S2", v:s2cur, prv:s2prv},
+        {k:"CB", v:cbcur, prv:cbprv},
+      ].map(r=>({...r,delta:deltaBadge(r.v,r.prv)})).concat([{__hdr:`${curL} vs ${prvL}`}])
+    : null;
+
+  // 3) Current range vs previous range (aggregate).
+  const agg = [
+    {k:"S1", v:c.summary.lp_s1, prv:p.summary.lp_s1},
+    {k:"S2", v:c.summary.lp_s2, prv:p.summary.lp_s2},
+    {k:"CB", v:c.summary.lp_combined, prv:p.summary.lp_combined},
+    {k:"Pks", v:c.summary.total_packs, prv:p.summary.total_packs},
+  ].map(r=>({...r, delta: deltaBadge(r.v, r.prv, 0)}))
+   .concat([{__hdr:`${c.start} → ${c.end} vs ${p.start} → ${p.end}`}]);
+
+  // 4) Best / Worst day (by combined LP).
+  let bestIdx=-1,bestV=-Infinity,worstIdx=-1,worstV=Infinity;
+  for (let i=0;i<s.lp_combined.length;i++) {
+    const v = s.lp_combined[i];
+    if (v>0 && v>bestV) { bestV=v; bestIdx=i; }
+    if (v>0 && v<worstV) { worstV=v; worstIdx=i; }
+  }
+  const bestWorst = [];
+  if (bestIdx>=0) bestWorst.push({k:"BEST", v:s.lp_combined[bestIdx], date:s.labels[bestIdx]});
+  if (worstIdx>=0) bestWorst.push({k:"WORST", v:s.lp_combined[worstIdx], date:s.labels[worstIdx]});
+  if (bestIdx>=0 && worstIdx>=0) bestWorst.push({
+    k:"GAP", v: s.lp_combined[bestIdx] - s.lp_combined[worstIdx], date:`${s.labels[bestIdx]} − ${s.labels[worstIdx]}`
+  });
+
+  function blockHtml(title, subtitle, rows) {
+    if (!rows) return `<div class="cmp"><div class="title">${title}<small>${subtitle}</small></div><div class="rows"><div class="row"><span class="k" style="grid-column:1/-1;color:var(--hint);font-weight:500;">needs at least 2 points</span></div></div></div>`;
+    const hdr = rows.find(r=>r.__hdr);
+    const body = rows.filter(r=>!r.__hdr).map(r=>`
+      <div class="row">
+        <span class="k">${r.k}</span>
+        <span class="v">${r.k==="Pks"?fmt.num(r.v):fmt.lp(r.v)}</span>
+        <span class="d"><span class="delta ${r.delta.cls}">${r.delta.text}</span></span>
+      </div>`).join("");
+    return `
+      <div class="cmp">
+        <div class="title">${title}<small>${hdr ? hdr.__hdr : subtitle}</small></div>
+        <div class="rows">${body}</div>
+      </div>`;
+  }
+
+  const bestWorstHtml = `
+    <div class="cmp">
+      <div class="title">ベスト / ワースト<small>by combined LP · in range</small></div>
+      <div class="rows">
+        ${bestWorst.length === 0
+          ? `<div class="row"><span class="k" style="grid-column:1/-1;color:var(--hint);font-weight:500;">no data</span></div>`
+          : bestWorst.map(b=>`
+            <div class="row">
+              <span class="k">${b.k}</span>
+              <span class="v">${fmt.lp(b.v)}</span>
+              <span class="d" style="color:var(--muted);font-size:9px;font-weight:600;">${b.date}</span>
+            </div>`).join("")}
+      </div>
+    </div>`;
+
+  $("cmpGrid").innerHTML = [
+    blockHtml("前日比",    "vs Previous Day (within range)",      dodBlock),
+    blockHtml("同曜日比",  "vs Same Weekday (−7 days)",           swBlock),
+    blockHtml("期間集計比","vs Previous Period (aggregate)",       agg),
+    bestWorstHtml,
+  ].join("");
+}
+
+function renderBreakdown() {
+  const s = state.data.current.series;
+  const n = s.labels.length;
+  const rows = [];
+  // Show latest ~14 rows, newest first.
+  const start = Math.max(0, n - 14);
+  for (let i=n-1; i>=start; i--) {
+    const d = new Date(s.labels[i] + "T00:00:00");
+    const dow = WEEKDAYS_JA[d.getDay()];
+    const pct = (v,tgt) => {
+      const p = pctOfTarget(v, tgt);
+      if (p == null) return `<span class="pill-sm" style="background:var(--pop);color:var(--hint);">—</span>`;
+      const cls = p >= 100 ? "up" : (p >= 90 ? "flat" : "down");
+      const bg = cls === "up" ? "var(--brand-tint)" : cls === "down" ? "var(--bad-tint)" : "var(--pop)";
+      const co = cls === "up" ? "var(--ok)" : cls === "down" ? "var(--bad)" : "var(--muted)";
+      return `<span class="pill-sm" style="background:${bg};color:${co};">${fmt.pct(p)}</span>`;
+    };
+    rows.push(`
+      <tr>
+        <td class="date-cell">${s.labels[i]} <small>(${dow})</small></td>
+        <td class="num">${fmt.num(s.packs[i])}</td>
+        <td class="num">${fmt.hrs(s.hours_s1[i])}</td>
+        <td class="num">${fmt.lp(s.lp_s1[i])}</td>
+        <td class="num">${pct(s.lp_s1[i], TARGETS.s1)}</td>
+        <td class="num">${fmt.hrs(s.hours_s2[i])}</td>
+        <td class="num">${fmt.lp(s.lp_s2[i])}</td>
+        <td class="num">${pct(s.lp_s2[i], TARGETS.s2)}</td>
+        <td class="num">${fmt.hrs(s.hours_combined[i])}</td>
+        <td class="num">${fmt.lp(s.lp_combined[i])}</td>
+        <td class="num">${pct(s.lp_combined[i], TARGETS.combined)}</td>
+      </tr>`);
+  }
+  $("breakdownBody").innerHTML = rows.length ? rows.join("") : `<tr><td colspan="11" class="loading">No rows in range</td></tr>`;
+}
+
+/* ==================================================================
+   Wire controls
+   ================================================================== */
+document.querySelectorAll("#rangeGroup .pill").forEach(b =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll("#rangeGroup .pill").forEach(x => x.classList.toggle("active", x===b));
+    state.range = b.dataset.range;
+    loadData();
+  })
+);
+$("endDate").addEventListener("change", () => { state.end = $("endDate").value || null; loadData(); });
+$("chkPrev").addEventListener("change", () => { state.comparePrev = $("chkPrev").checked; renderChart(); renderComparisons(); });
+$("chkTargets").addEventListener("change", () => { state.showTargets = $("chkTargets").checked; renderChart(); });
+$("btnReload").addEventListener("click", loadData);
+$("btnPrint").addEventListener("click", () => window.print());
+
+/* Boot */
+(async () => {
+  state.end = await resolveEndDate();
+  $("endDate").value = state.end;
+  await loadData();
+})();
+</script>
+</body>
+</html>

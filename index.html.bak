@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>V3 Attendance Console</title>
+    <title>Attendance Operations Console</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1065,57 +1065,56 @@
             }
         }
     </style>
-  <script defer src="/js/i18n.js"></script>
 </head>
 <body>
     <header class="topbar">
-        <div class="brand" data-i18n="att.brand">V3 Attendance Console</div>
-        <button class="icon-button lang-toggle" type="button" aria-label="Toggle language" data-lang-toggle onclick="I18N.toggle()" style="border:1px solid var(--line);background:var(--surface-soft);color:var(--brand-strong);padding:.4rem .7rem;border-radius:999px;cursor:pointer;font:700 .75rem 'IBM Plex Mono',monospace;letter-spacing:.06em;min-width:2.5rem;text-align:center">JP</button>
+        <div class="brand">Attendance Operations Console</div>
         <nav class="topnav" aria-label="Quick navigation">
-            <a href="/" data-i18n="att.nav_home">Home</a>
-            <a href="/attendance/" data-i18n="att.nav_attendance">Attendance</a>
-            <a href="/dashboard/" data-i18n="att.nav_dashboard">System Dashboard</a>
-            <a href="/pdf/" data-i18n="att.nav_pdf">PDF Tools</a>
-            <a href="/grafana/" target="_blank" rel="noopener" data-i18n="att.nav_grafana">Grafana</a>
+            <a href="/">Home</a>
+            <a href="/attendance/">Attendance</a>
+            <a href="/dashboard/">System Dashboard</a>
+            <a href="/pdf/">PDF Tools</a>
+            <a href="/grafana/" target="_blank" rel="noopener">Grafana</a>
         </nav>
     </header>
 
     <main class="page">
         <section class="hero card">
             <div>
-                <span class="eyebrow" data-i18n="att.eyebrow">stable pipeline for roster-based exports</span>
-                <h1 data-i18n="att.hero_heading">Convert Japanese attendance PDFs into clean, reviewable HR output.</h1>
+                <span class="eyebrow">stable pipeline for roster-based exports</span>
+                <h1>Convert Japanese attendance PDFs into clean, reviewable HR output.</h1>
                 <p>
-                    <span data-i18n="att.hero_desc">This console is tuned for Raspberry Pi hosting: low client overhead, guarded uploads, and a practical data worktable for quick checks before Excel export.</span>
+                    This console is tuned for Raspberry Pi hosting: low client overhead, guarded uploads, and a
+                    practical data worktable for quick checks before Excel export.
                 </p>
             </div>
             <div class="status-pills">
                 <span id="apiHealth" class="pill">API: checking</span>
-                <span class="pill" data-i18n="att.pill_conversion">Single and multi-file conversion</span>
-                <span class="pill" data-i18n="att.pill_roster">Roster alignment and overnight handling</span>
+                <span class="pill">Single and multi-file conversion</span>
+                <span class="pill">Roster alignment and overnight handling</span>
             </div>
         </section>
 
         <section class="workspace">
             <article class="panel card" id="processingPanel">
-                <h2 data-i18n="att.processing_title">Processing protection and optimization</h2>
-                <p data-i18n="att.processing_desc">These controls reduce bad uploads and keep the interface responsive on low-power hardware.</p>
+                <h2>Processing protection and optimization</h2>
+                <p>These controls reduce bad uploads and keep the interface responsive on low-power hardware.</p>
                 <div class="guide-list">
-                    <div class="guide-item"><span><strong data-i18n="att.guide_validation_label">Validation:</strong> <span data-i18n="att.guide_validation">extension, size, duplicate name detection, and PDF signature checks before upload.</span></span></div>
-                    <div class="guide-item"><span><strong data-i18n="att.guide_resilience_label">Resilience:</strong> <span data-i18n="att.guide_resilience">in-flight request cancellation, timeout guard, and clear API error details.</span></span></div>
-                    <div class="guide-item"><span><strong data-i18n="att.guide_worktable_label">Worktable:</strong> <span data-i18n="att.guide_worktable">search, sort, missing-leave and overnight filters, and pagination.</span></span></div>
-                    <div class="guide-item"><span><strong data-i18n="att.guide_pi_label">Pi mode:</strong> <span data-i18n="att.guide_pi">reduced-motion and low-overhead rendering behavior for stable browser performance.</span></span></div>
+                    <div class="guide-item"><strong>Validation:</strong> extension, size, duplicate name detection, and PDF signature checks before upload.</div>
+                    <div class="guide-item"><strong>Resilience:</strong> in-flight request cancellation, timeout guard, and clear API error details.</div>
+                    <div class="guide-item"><strong>Worktable:</strong> search, sort, missing-leave and overnight filters, and pagination.</div>
+                    <div class="guide-item"><strong>Pi mode:</strong> reduced-motion and low-overhead rendering behavior for stable browser performance.</div>
                 </div>
             </article>
 
             <article class="panel card" id="ganttPanel" aria-label="Daily attendance chart">
-                <h2 data-i18n="att.gantt_title">Daily attendance chart</h2>
-                <p data-i18n="att.gantt_desc">Open the A4-portrait Gantt view for any date. Sections are shown as tabs, and the new tab includes a one-click PDF download.</p>
+                <h2>Daily attendance chart</h2>
+                <p>Open the A4-portrait Gantt view for any date. Sections are shown as tabs, and the new tab includes a one-click PDF download.</p>
                 <div class="gantt-controls">
                     <label class="gantt-date-label">Date
                         <input type="date" id="ganttDate">
                     </label>
-                    <a id="ganttOpenBtn" class="button button-accent" href="gantt" target="_blank" rel="noopener"><span data-i18n="att.gantt_view">View chart</span> &nbsp;↗</a>
+                    <a id="ganttOpenBtn" class="button button-accent" href="gantt" target="_blank" rel="noopener">View chart &nbsp;↗</a>
                 </div>
                 <style>
                     .gantt-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 0;}
@@ -1147,13 +1146,13 @@
             </article>
 
             <article class="panel card" id="uploadPanel">
-                <h2 data-i18n="att.upload_title">Upload and conversion</h2>
-                <p data-i18n="att.upload_desc">Drop one or more PDF files. We verify signatures client-side before sending to the backend.</p>
+                <h2>Upload and conversion</h2>
+                <p>Drop one or more PDF files. We verify signatures client-side before sending to the backend.</p>
 
                 <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Upload PDF files">
-                    <strong data-i18n="att.drop_title">Drop attendance PDF files here</strong>
-                    <div data-i18n="att.drop_browse">or click to browse</div>
-                    <small data-i18n="att.drop_limits">Limits: up to 500 MB per batch, multiple files supported, PDF extension and header required</small>
+                    <strong>Drop attendance PDF files here</strong>
+                    <div>or click to browse</div>
+                    <small>Limits: up to 500 MB per batch, multiple files supported, PDF extension and header required</small>
                 </div>
                 <input id="fileInput" class="hidden" type="file" accept=".pdf,application/pdf" multiple>
 
@@ -1161,41 +1160,41 @@
                 <div id="message" class="message" role="status"></div>
 
                 <div class="action-row">
-                    <button id="previewBtn" class="button button-primary hidden" data-i18n="att.btn_preview">Preview Data</button>
-                    <button id="convertBtn" class="button button-accent hidden" data-i18n="att.btn_convert">Convert and Download</button>
-                    <button id="cancelBtn" class="button button-muted hidden" data-i18n="att.btn_cancel">Cancel Request</button>
-                    <button id="resetBtn" class="button button-muted hidden" data-i18n="att.btn_reset">Reset</button>
+                    <button id="previewBtn" class="button button-primary hidden">Preview Data</button>
+                    <button id="convertBtn" class="button button-accent hidden">Convert and Download</button>
+                    <button id="cancelBtn" class="button button-muted hidden">Cancel Request</button>
+                    <button id="resetBtn" class="button button-muted hidden">Reset</button>
                 </div>
 
                 <div class="daily-packs">
-                    <div class="daily-packs-title" data-i18n="att.packs_title">Daily packs</div>
-                    <div class="daily-packs-help" data-i18n="att.packs_help">One pack count per date (shared across all employees that day). Enter manually or upload a PDF to auto-fill.</div>
+                    <div class="daily-packs-title">Daily packs</div>
+                    <div class="daily-packs-help">One pack count per date (shared across all employees that day). Enter manually or upload a PDF to auto-fill.</div>
 
                     <div class="daily-packs-tabs" role="tablist">
-                        <button id="dailyPacksTabManual" class="daily-packs-tab active" type="button" role="tab" aria-selected="true" data-i18n="att.packs_manual">Manual entry</button>
-                        <button id="dailyPacksTabPdf" class="daily-packs-tab" type="button" role="tab" aria-selected="false" data-i18n="att.packs_upload_pdf">Upload PDF</button>
+                        <button id="dailyPacksTabManual" class="daily-packs-tab active" type="button" role="tab" aria-selected="true">Manual entry</button>
+                        <button id="dailyPacksTabPdf" class="daily-packs-tab" type="button" role="tab" aria-selected="false">Upload PDF</button>
                     </div>
 
                     <div id="dailyPacksManualPane" class="daily-packs-pane">
                         <div class="daily-packs-row">
                             <label class="daily-packs-field">
-                                <span data-i18n="att.label_date">Date</span>
+                                <span>Date</span>
                                 <input id="dailyPacksDate" type="date">
                             </label>
                             <label class="daily-packs-field">
-                                <span data-i18n="att.label_packs">Number of packs</span>
+                                <span>Number of packs</span>
                                 <input id="dailyPacksCount" type="number" min="0" step="1" placeholder="0">
                             </label>
-                            <button id="dailyPacksSaveBtn" class="button button-primary" type="button" data-i18n="att.btn_save_packs">Save packs</button>
+                            <button id="dailyPacksSaveBtn" class="button button-primary" type="button">Save packs</button>
                         </div>
                     </div>
 
                     <div id="dailyPacksPdfPane" class="daily-packs-pane hidden">
-                        <div class="daily-packs-pdf-help" data-i18n="att.packs_pdf_help">Drop one or more daily report PDFs — we extract the production date and pack count for each, compare attendance times against the database, then you can save them all.</div>
+                        <div class="daily-packs-pdf-help">Drop one or more daily report PDFs — we extract the production date and pack count for each, compare attendance times against the database, then you can save them all.</div>
                         <div id="dailyPacksDropzone" class="daily-packs-dropzone" role="button" tabindex="0" aria-label="Upload PDFs for pack extraction">
-                            <strong data-i18n="att.packs_drop_title">Drop PDF files here</strong>
-                            <div data-i18n="att.packs_drop_browse">or click to browse (multiple files supported)</div>
-                            <small data-i18n="att.packs_drop_hint">Auto-extracts 製造パック数 and date from each file</small>
+                            <strong>Drop PDF files here</strong>
+                            <div>or click to browse (multiple files supported)</div>
+                            <small>Auto-extracts 製造パック数 and date from each file</small>
                         </div>
                         <input id="dailyPacksPdfInput" class="hidden" type="file" accept=".pdf,application/pdf" multiple>
                         <div id="dailyPacksPdfPreview" class="daily-packs-pdf-preview hidden">
@@ -1207,7 +1206,7 @@
                             </div>
                             <ul id="dailyPacksPdfFileList" class="daily-packs-pdf-file-list hidden"></ul>
                             <div id="dailyPacksPdfMismatches"></div>
-                            <button id="dailyPacksPdfSaveBtn" class="button button-primary" type="button" data-i18n="att.btn_save_extracted">Save extracted packs</button>
+                            <button id="dailyPacksPdfSaveBtn" class="button button-primary" type="button">Save extracted packs</button>
                         </div>
                     </div>
 
@@ -1219,8 +1218,8 @@
 
         <section id="batchPanel" class="panel card batch-panel hidden" aria-label="Batch conversion progress">
             <div class="batch-panel-header">
-                <h2 data-i18n="att.batch_title">Batch conversion</h2>
-                <p data-i18n="att.batch_desc">Real-time status for the current upload job. Files are converted one at a time with automatic CPU and RAM throttling to keep the Raspberry Pi responsive.</p>
+                <h2>Batch conversion</h2>
+                <p>Real-time status for the current upload job. Files are converted one at a time with automatic CPU and RAM throttling to keep the Raspberry Pi responsive.</p>
             </div>
 
             <div class="batch-progress-bar" aria-hidden="true">
@@ -1243,15 +1242,15 @@
             <ul id="batchFileList" class="batch-file-list" aria-live="polite"></ul>
 
             <div class="batch-actions">
-                <a id="batchDownloadBtn" class="button button-accent hidden" href="#" download data-i18n="att.btn_download_zip">Download ZIP bundle</a>
-                <button id="batchResetBtn" class="button button-muted hidden" type="button" data-i18n="att.btn_clear_batch">Clear batch</button>
+                <a id="batchDownloadBtn" class="button button-accent hidden" href="#" download>Download ZIP bundle</a>
+                <button id="batchResetBtn" class="button button-muted hidden" type="button">Clear batch</button>
             </div>
         </section>
 
         <section id="pdfResultSection" class="panel card pdf-result-section hidden" aria-label="Final upload result">
             <div class="pdf-result-section-header">
-                <h2 data-i18n="att.result_title">Final upload result</h2>
-                <p data-i18n="att.result_desc">Auto-extracted production date and pack count, plus any time mismatches detected against existing database entries.</p>
+                <h2>Final upload result</h2>
+                <p>Auto-extracted production date and pack count, plus any time mismatches detected against existing database entries.</p>
             </div>
             <div id="pdfResult" class="pdf-result" aria-live="polite">
                 <div id="pdfResultMeta" class="pdf-result-meta"></div>
@@ -1261,50 +1260,50 @@
 
         <section id="statsPanel" class="stats hidden" aria-label="Preview statistics">
             <div class="stat">
-                <div class="label" data-i18n="att.stat_rows">Rows in output</div>
+                <div class="label">Rows in output</div>
                 <div id="statRows" class="value">0</div>
             </div>
             <div class="stat">
-                <div class="label" data-i18n="att.stat_rows_data">Rows with data</div>
+                <div class="label">Rows with data</div>
                 <div id="statRowsWithData" class="value">0</div>
             </div>
             <div class="stat">
-                <div class="label" data-i18n="att.stat_files">File count</div>
+                <div class="label">File count</div>
                 <div id="statFileCount" class="value">0</div>
             </div>
             <div class="stat">
-                <div class="label" data-i18n="att.stat_size">Selected size</div>
+                <div class="label">Selected size</div>
                 <div id="statTotalSize" class="value mono">0 MB</div>
             </div>
         </section>
 
         <section id="tablePanel" class="table-panel card hidden">
             <div class="table-header">
-                <h2 data-i18n="att.table_title">Attendance worktable</h2>
+                <h2>Attendance worktable</h2>
                 <div id="tableCount" class="mono" style="color: var(--muted); font-size: 0.82rem;">0 rows</div>
             </div>
 
             <div class="table-toolbar">
-                <input id="searchInput" class="search" type="search" placeholder="Search by ID, name, or time" data-i18n-placeholder="att.search_placeholder">
+                <input id="searchInput" class="search" type="search" placeholder="Search by ID, name, or time">
                 <select id="pageSize" class="select" aria-label="Rows per page">
-                    <option value="10" data-i18n="att.rows_10">10 rows</option>
-                    <option value="25" selected data-i18n="att.rows_25">25 rows</option>
-                    <option value="50" data-i18n="att.rows_50">50 rows</option>
-                    <option value="100" data-i18n="att.rows_100">100 rows</option>
+                    <option value="10">10 rows</option>
+                    <option value="25" selected>25 rows</option>
+                    <option value="50">50 rows</option>
+                    <option value="100">100 rows</option>
                 </select>
-                <label class="toggle"><input id="missingFilter" type="checkbox" data-i18n="att.filter_missing">Missing leave only</label>
-                <label class="toggle"><input id="overnightFilter" type="checkbox" data-i18n="att.filter_overnight">Overnight only</label>
+                <label class="toggle"><input id="missingFilter" type="checkbox">Missing leave only</label>
+                <label class="toggle"><input id="overnightFilter" type="checkbox">Overnight only</label>
             </div>
 
             <div class="table-wrap">
                 <table aria-label="Preview attendance table">
                     <thead>
                         <tr>
-                            <th data-sort-key="employee_code" data-i18n="att.th_id">ID Number</th>
-                            <th data-sort-key="name" data-i18n="att.th_name">Name</th>
-                            <th data-sort-key="commute_time" data-i18n="att.th_start">Start</th>
-                            <th data-sort-key="leave_time" data-i18n="att.th_leave">Leave</th>
-                            <th data-sort-key="working_hours" data-i18n="att.th_hours">Working Hours</th>
+                            <th data-sort-key="employee_code">ID Number</th>
+                            <th data-sort-key="name">Name</th>
+                            <th data-sort-key="commute_time">Start</th>
+                            <th data-sort-key="leave_time">Leave</th>
+                            <th data-sort-key="working_hours">Working Hours</th>
                         </tr>
                     </thead>
                     <tbody id="previewBody"></tbody>
@@ -1314,30 +1313,30 @@
             <div class="table-footer">
                 <div id="pageInfo" class="mono" style="color: var(--muted); font-size: 0.82rem;">Page 1</div>
                 <div class="pager">
-                    <button id="prevPage" type="button" aria-label="Previous page" data-i18n="att.btn_prev">Prev</button>
-                    <button id="nextPage" type="button" aria-label="Next page" data-i18n="att.btn_next">Next</button>
+                    <button id="prevPage" type="button" aria-label="Previous page">Prev</button>
+                    <button id="nextPage" type="button" aria-label="Next page">Next</button>
                 </div>
             </div>
         </section>
 
         <section class="quick-links card">
             <a href="/grafana/" target="_blank" rel="noopener">
-                <strong data-i18n="att.link_grafana">Attendance Grafana</strong>
-                <span data-i18n="att.link_grafana_desc">Executive analytics and KPI dashboard</span>
+                <strong>Attendance Grafana</strong>
+                <span>Executive analytics and KPI dashboard</span>
             </a>
             <a href="/dashboard/">
-                <strong data-i18n="att.link_dashboard">System Dashboard</strong>
-                <span data-i18n="att.link_dashboard_desc">CPU, memory, disk, service health</span>
+                <strong>System Dashboard</strong>
+                <span>CPU, memory, disk, service health</span>
             </a>
             <a href="/pdf/">
-                <strong data-i18n="att.link_pdf">PDF Utility Suite</strong>
-                <span data-i18n="att.link_pdf_desc">Text, image, merge, extract tools</span>
+                <strong>PDF Utility Suite</strong>
+                <span>Text, image, merge, extract tools</span>
             </a>
         </section>
     </main>
 
     <footer>
-        <p data-i18n="att.footer">V3 Attendance Console | FastAPI, PostgreSQL, Grafana | Optimized for Raspberry Pi</p>
+        <p>Attendance Operations Console | FastAPI, PostgreSQL, Grafana | Optimized for Raspberry Pi</p>
     </footer>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

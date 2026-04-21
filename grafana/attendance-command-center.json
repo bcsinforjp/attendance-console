@@ -1,0 +1,694 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": "AttendanceDB",
+      "description": "Employees with at least one shift in the selected month.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "limit": 1,
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COUNT(DISTINCT personal_code) AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data;",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Employees",
+      "type": "stat"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Attendance rows with actual shift data.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 3,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "limit": 1,
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data;",
+          "refId": "A"
+        }
+      ],
+      "title": "Worked Shifts",
+      "type": "stat"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Total hours worked in the selected month.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "h"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 6,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "limit": 1,
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT ROUND(COALESCE(SUM(working_minutes), 0) / 60.0, 1) AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data;",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Hours",
+      "type": "stat"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Average duration of a worked shift.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "unit": "h"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 9,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "limit": 1,
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT ROUND(AVG(working_minutes) / 60.0, 2) AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data AND working_minutes IS NOT NULL;",
+          "refId": "A"
+        }
+      ],
+      "title": "Avg Hours / Shift",
+      "type": "stat"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Shifts starting at 16:00 or later.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 800
+              },
+              {
+                "color": "red",
+                "value": 1600
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 12,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "limit": 1,
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data AND is_evening_start;",
+          "refId": "A"
+        }
+      ],
+      "title": "Evening Starts",
+      "type": "stat"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Shifts that crossed midnight.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 15,
+        "y": 0
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "limit": 1,
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data AND is_overnight;",
+          "refId": "A"
+        }
+      ],
+      "title": "Overnight Shifts",
+      "type": "stat"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Shifts missing a leave punch.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 18,
+        "y": 0
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "limit": 1,
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data AND missing_leave;",
+          "refId": "A"
+        }
+      ],
+      "title": "Missing Leave Punches",
+      "type": "stat"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Worked shifts at 10 hours or more.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 21,
+        "y": 0
+      },
+      "id": 8,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "limit": 1,
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data AND is_long_shift;",
+          "refId": "A"
+        }
+      ],
+      "title": "10h+ Shifts",
+      "type": "stat"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Worked shifts recorded per day.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 14,
+            "lineInterpolation": "smooth",
+            "lineWidth": 3,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 6
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT record_date AS time, COUNT(*)::double precision AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data GROUP BY record_date ORDER BY record_date;",
+          "refId": "A"
+        }
+      ],
+      "title": "Daily Shift Volume",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Total hours worked per day.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineInterpolation": "smooth",
+            "lineWidth": 3,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "decimals": 2,
+          "unit": "h"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 6
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT record_date AS time, ROUND(COALESCE(SUM(working_minutes), 0) / 60.0, 2)::double precision AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data GROUP BY record_date ORDER BY record_date;",
+          "refId": "A"
+        }
+      ],
+      "title": "Daily Worked Hours",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Daily count of high-signal attendance exceptions.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 6
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT record_date AS time, 'Overnight shifts' AS metric, COUNT(*)::double precision AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data AND is_overnight GROUP BY record_date UNION ALL SELECT record_date AS time, 'Missing leave' AS metric, COUNT(*)::double precision AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data AND missing_leave GROUP BY record_date UNION ALL SELECT record_date AS time, '10h+ shifts' AS metric, COUNT(*)::double precision AS value FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data AND is_long_shift GROUP BY record_date ORDER BY 1, 2;",
+          "refId": "A"
+        }
+      ],
+      "title": "Daily Exceptions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Employees with the highest exception counts for manager review.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 12,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT personal_code AS id_number, full_name AS employee, COUNT(*) FILTER (WHERE has_data) AS shifts, COUNT(*) FILTER (WHERE is_overnight) AS overnight_shifts, COUNT(*) FILTER (WHERE missing_leave) AS missing_leave, COUNT(*) FILTER (WHERE is_long_shift) AS long_shifts, COUNT(*) FILTER (WHERE is_short_shift) AS short_shifts, ROUND(COALESCE(SUM(working_minutes), 0) / 60.0, 2) AS total_hours FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data GROUP BY personal_code, full_name HAVING COUNT(*) FILTER (WHERE is_overnight OR missing_leave OR is_long_shift OR is_short_shift) > 0 ORDER BY missing_leave DESC, overnight_shifts DESC, long_shifts DESC, short_shifts DESC, total_hours DESC, employee LIMIT 20;",
+          "refId": "A"
+        }
+      ],
+      "title": "Risk Leaders",
+      "type": "table"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Employees carrying the most work across the selected month.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 13,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT personal_code AS id_number, full_name AS employee, COUNT(*) FILTER (WHERE has_data) AS shifts, COUNT(*) FILTER (WHERE is_evening_start) AS evening_starts, COUNT(*) FILTER (WHERE is_long_shift) AS long_shifts, ROUND(COALESCE(SUM(working_minutes), 0) / 60.0, 2) AS total_hours, ROUND(AVG(working_minutes) / 60.0, 2) AS avg_shift_hours, ROUND(MAX(working_minutes) / 60.0, 2) AS longest_shift_hours FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data GROUP BY personal_code, full_name ORDER BY total_hours DESC, long_shifts DESC, employee LIMIT 20;",
+          "refId": "A"
+        }
+      ],
+      "title": "Hours Leaders",
+      "type": "table"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Manager rollup by employee for the selected month.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 14,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT personal_code AS id_number, full_name AS employee, COUNT(*) FILTER (WHERE has_data) AS shifts, ROUND(COALESCE(SUM(working_minutes), 0) / 60.0, 2) AS total_hours, ROUND(AVG(working_minutes) / 60.0, 2) AS avg_shift_hours, ROUND(MAX(working_minutes) / 60.0, 2) AS longest_shift_hours, COUNT(*) FILTER (WHERE is_evening_start) AS evening_starts, COUNT(*) FILTER (WHERE is_overnight) AS overnight_shifts, COUNT(*) FILTER (WHERE missing_leave) AS missing_leave, COUNT(*) FILTER (WHERE is_long_shift) AS long_shifts FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data GROUP BY personal_code, full_name ORDER BY total_hours DESC NULLS LAST, employee;",
+          "refId": "A"
+        }
+      ],
+      "title": "Manager Summary By Employee",
+      "type": "table"
+    },
+    {
+      "datasource": "AttendanceDB",
+      "description": "Rows that deserve manager review first.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "id": 15,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT record_date, personal_code AS id_number, full_name AS employee, commute_time AS start_time, CASE WHEN normalized_leave_time <> '' THEN normalized_leave_time ELSE time_to_leave END AS leave_time, working_hours_label AS working_hours, TRIM(BOTH ', ' FROM CONCAT_WS(', ', CASE WHEN missing_leave THEN 'Missing leave punch' END, CASE WHEN is_overnight THEN 'Overnight shift' END, CASE WHEN is_long_shift THEN '10h+ shift' END, CASE WHEN is_short_shift THEN 'Short shift under 4h' END)) AS issue FROM attendance_dashboard_records WHERE month_year LIKE '$month' AND has_data AND (missing_leave OR is_overnight OR is_long_shift OR is_short_shift) ORDER BY record_date DESC, missing_leave DESC, is_overnight DESC, working_minutes DESC NULLS LAST, employee LIMIT 100;",
+          "refId": "A"
+        }
+      ],
+      "title": "Exception Queue",
+      "type": "table"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [
+    "attendance",
+    "executive",
+    "operations"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": "%",
+        "current": {
+          "selected": false,
+          "text": "2026-03",
+          "value": "2026-03"
+        },
+        "datasource": "AttendanceDB",
+        "definition": "SELECT DISTINCT month_year FROM attendance_dashboard_records ORDER BY month_year DESC",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Month",
+        "multi": false,
+        "name": "month",
+        "options": [],
+        "query": "SELECT DISTINCT month_year FROM attendance_dashboard_records ORDER BY month_year DESC",
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Attendance Command Center",
+  "uid": "attendance-command-center",
+  "version": 1
+}

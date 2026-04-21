@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>V3 Attendance Console · Operations Workflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ===== Theme tokens — match index.html ===== */
+  :root {
+    --bg: #eef3f5;
+    --ink: #132026;
+    --muted: #5a6b73;
+    --surface: #ffffff;
+    --surface-soft: #f7fbfc;
+    --brand: #0d8f71;
+    --brand-strong: #0b6f58;
+    --accent: #125e91;
+    --warn: #9b640f;
+    --danger: #b42318;
+    --line: #d4e2e8;
+    --shadow: 0 10px 32px rgba(11, 35, 46, 0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 10% 15%, rgba(18, 94, 145, 0.09), transparent 35%),
+      radial-gradient(circle at 90% 20%, rgba(13, 143, 113, 0.11), transparent 40%),
+      var(--bg);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* ===== Topbar (identical pattern to index.html) ===== */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(8px);
+    gap: 0.9rem;
+  }
+  @media (max-width: 900px) {
+    .topbar {
+      grid-template-columns: 1fr auto;
+      grid-template-areas: "brand clock" "nav nav";
+      gap: 0.5rem;
+    }
+    .topbar > .brand   { grid-area: brand; }
+    .topbar > .topnav  { grid-area: nav;   justify-self: start; }
+    .topbar > .clockbox{ grid-area: clock; }
+  }
+  .brand { font-weight: 700; letter-spacing: 0.03em; color: var(--brand-strong); font-size: 0.95rem; }
+  .brand small { font-family: "IBM Plex Mono", monospace; font-weight: 500; color: var(--muted); margin-left: 0.4rem; font-size: 0.72rem; }
+  .topnav { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+  .topnav a {
+    text-decoration: none; color: var(--muted);
+    font-size: 0.9rem; font-weight: 500;
+    border: 1px solid transparent;
+    padding: 0.35rem 0.55rem; border-radius: 8px;
+    transition: all 0.2s ease;
+  }
+  .topnav a:hover { color: var(--brand-strong); border-color: var(--line); background: var(--surface-soft); }
+  .topnav a.active { color: var(--brand-strong); border-color: #b8e4d8; background: #ecfaf4; }
+
+  /* ===== Live clock widget (top-right) ===== */
+  .clockbox {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.3rem 0.55rem 0.3rem 0.65rem;
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    border-radius: 12px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+  .clockbox .now {
+    display: flex; flex-direction: column; align-items: flex-start;
+    gap: 0.08rem;
+    padding-right: 0.55rem;
+    border-right: 1px solid var(--line);
+  }
+  .clockbox .now .tm { font-size: 0.95rem; font-weight: 600; color: var(--brand-strong); }
+  .clockbox .now .dt { font-size: 0.7rem; color: var(--muted); }
+  .clockbox .pair { display: flex; flex-direction: column; gap: 0.08rem; }
+  .clockbox .pair b { color: var(--accent); font-weight: 600; }
+  .clockbox .pair span { color: var(--muted); font-size: 0.7rem; }
+  @media (max-width: 680px) {
+    .clockbox { font-size: 0.72rem; padding: 0.25rem 0.4rem; }
+    .clockbox .now .tm { font-size: 0.85rem; }
+  }
+
+  .page { width: min(1200px, 100%); margin: 1.2rem auto 2.5rem; padding: 0 0.9rem; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  /* ===== Pills ===== */
+  .pill {
+    border-radius: 999px; padding: 0.35rem 0.7rem; font-size: 0.76rem;
+    border: 1px solid var(--line);
+    background: var(--surface-soft); color: var(--muted);
+    font-family: "IBM Plex Mono", monospace;
+    white-space: nowrap;
+  }
+  .pill.ok   { color: var(--brand-strong); border-color: #b8e4d8; background: #ecfaf4; }
+  .pill.warn { color: var(--warn);         border-color: #f0dbb8; background: #fff8ea; }
+  .pill.err  { color: var(--danger);       border-color: #f0c8c4; background: #fff2f1; }
+  .pill.accent { color: var(--accent); border-color: #c6e1f4; background: #ecf5fb; }
+
+  /* ===== Tab bar ===== */
+  .console-tabs {
+    display: flex; flex-wrap: wrap; gap: 0.3rem;
+    padding: 0.6rem;
+    margin-bottom: 0.9rem;
+  }
+  .console-tab {
+    flex: 1 1 220px;
+    display: flex; align-items: center; gap: 0.6rem;
+    background: transparent; border: 1px solid transparent;
+    padding: 0.7rem 0.85rem;
+    font: inherit; font-weight: 600; font-size: 0.92rem;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 12px;
+    text-align: left;
+    transition: all 0.18s ease;
+  }
+  .console-tab:hover { color: var(--ink); background: var(--surface-soft); }
+  .console-tab.active {
+    color: var(--brand-strong);
+    background: #ecfaf4;
+    border-color: #b8e4d8;
+    box-shadow: 0 2px 8px rgba(13, 143, 113, 0.12);
+  }
+  .console-tab .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px;
+    background: var(--surface-soft); color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+  .console-tab.active .num {
+    background: var(--brand); color: #fff; border-color: var(--brand);
+  }
+
+  /* ===== Panel (one per tab) ===== */
+  .panel { padding: 1.1rem 1.15rem; margin-bottom: 0.9rem; display: none; }
+  .panel.active { display: block; }
+  .panel h2 { font-size: 1.1rem; margin-bottom: 0.25rem; letter-spacing: -0.01em; }
+  .panel .lede { color: var(--muted); font-size: 0.88rem; margin-bottom: 0.9rem; }
+
+  /* ===== Dropzone (responsive, fits card) ===== */
+  .dropzone {
+    display: block;
+    margin-top: 0.25rem;
+    border: 2px dashed #8cb8ca;
+    background: linear-gradient(160deg, #f5fbff 0%, #eef7fb 100%);
+    border-radius: 14px;
+    padding: 1rem 0.9rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+    width: 100%;
+  }
+  .dropzone:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .dropzone.dragover { border-color: var(--brand); background: linear-gradient(160deg, #edf9f5 0%, #eaf5f8 100%); }
+  .dropzone strong { display: block; font-size: 0.98rem; color: var(--ink); margin-bottom: 0.2rem; }
+  .dropzone small { color: var(--muted); font-size: 0.78rem; display: block; word-break: break-word; }
+
+  .file-list {
+    list-style: none;
+    margin-top: 0.75rem;
+    max-height: 170px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-soft);
+  }
+  .file-list:empty { display: none; }
+  .file-item {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.45rem 0.65rem;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.82rem;
+  }
+  .file-item:last-child { border-bottom: 0; }
+  .file-item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-item .size { color: var(--muted); font-size: 0.76rem; font-family: "IBM Plex Mono", monospace; }
+  .file-item .tag {
+    font-family: "IBM Plex Mono", monospace; font-size: 0.7rem;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--muted);
+  }
+  .file-item .tag.ok { color: var(--brand-strong); border-color: #b8e4d8; background: #ecfaf4; }
+
+  /* ===== PDF date banner (Tab 1 — highlights the working-day date found inside PDF) ===== */
+  .pdf-date-banner {
+    margin-top: 0.85rem;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem;
+    padding: 0.7rem 0.9rem;
+    border: 1px solid #b8e4d8;
+    background: #ecfaf4;
+    border-radius: 12px;
+    color: var(--brand-strong);
+    font-size: 0.88rem;
+  }
+  .pdf-date-banner strong { font-weight: 600; }
+  .pdf-date-banner .value { font-family: "IBM Plex Mono", monospace; font-size: 1rem; }
+  .pdf-date-banner .meta { color: var(--muted); font-size: 0.78rem; font-family: "IBM Plex Mono", monospace; }
+  .pdf-date-banner.hidden { display: none; }
+
+  /* ===== Buttons ===== */
+  .actions { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; }
+  .actions .spacer { flex: 1; }
+  .button {
+    border: 1px solid transparent; border-radius: 10px;
+    padding: 0.58rem 0.95rem;
+    font-family: inherit; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
+  }
+  .button:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
+  .button-primary { background: var(--brand); color: #fff; box-shadow: 0 4px 12px rgba(13, 143, 113, 0.28); }
+  .button-primary:hover:not(:disabled) { transform: translateY(-1px); }
+  .button-accent  { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(18, 94, 145, 0.25); }
+  .button-accent:hover:not(:disabled) { transform: translateY(-1px); }
+  .button-muted   { background: #f2f6f8; border-color: var(--line); color: var(--muted); }
+  .button-outline { background: #fff; border-color: var(--line); color: var(--ink); }
+  .button-outline:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+  /* ===== Message ===== */
+  .message {
+    margin-top: 0.8rem;
+    border-radius: 10px;
+    padding: 0.65rem 0.75rem;
+    font-size: 0.88rem;
+    border: 1px solid var(--line);
+    display: none;
+  }
+  .message.show { display: block; }
+  .message.info    { color: var(--accent);       background: #ecf5fb; border-color: #c6e1f4; }
+  .message.success { color: var(--brand-strong); background: #eaf9f3; border-color: #b8e4d8; }
+  .message.error   { color: var(--danger);       background: #fff2f1; border-color: #f0c8c4; }
+
+  /* ===== Field / form ===== */
+  .fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-top: 0.2rem; }
+  .field { display: flex; flex-direction: column; gap: 0.25rem; }
+  .field label {
+    color: var(--muted); font-size: 0.76rem;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    font-family: "IBM Plex Mono", monospace;
+  }
+  .field input, .field select {
+    font: inherit;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--line); border-radius: 9px;
+    background: #fff; color: var(--ink);
+  }
+  .field input:focus, .field select:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(18, 94, 145, 0.15);
+  }
+  .field .hint { color: var(--muted); font-size: 0.74rem; margin-top: 0.1rem; }
+
+  /* ===== Attendance worktable (Tab 1 preview) ===== */
+  .worktable { margin-top: 1rem; }
+  .worktable-header {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 0.75rem; flex-wrap: wrap;
+    margin-bottom: 0.55rem;
+  }
+  .worktable-header h3 { font-size: 1.02rem; font-weight: 600; }
+  .row-count { color: var(--muted); font-size: 0.8rem; font-family: "IBM Plex Mono", monospace; }
+  .table-toolbar {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 0.5rem;
+    margin-bottom: 0.55rem;
+  }
+  .search, .select, .toggle {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: #fff; color: var(--ink);
+    font-family: inherit; font-size: 0.87rem;
+  }
+  .search, .select { min-height: 38px; padding: 0 0.75rem; }
+  .toggle {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    padding: 0 0.72rem; min-height: 38px; cursor: pointer;
+  }
+  .toggle input { margin: 0; }
+  .table-wrap {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: auto;
+    max-height: 420px;
+    background: #fff;
+  }
+  .table-wrap table { width: 100%; border-collapse: collapse; min-width: 680px; }
+  .table-wrap th, .table-wrap td {
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .table-wrap th {
+    position: sticky; top: 0; z-index: 1;
+    background: #f3f8fb;
+    color: #24323a;
+    font-weight: 700;
+    user-select: none;
+  }
+  .table-wrap tr:nth-child(even) td { background: #fcfeff; }
+  .table-wrap tr.issue td { background: #fff7ea; }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+  .table-footer {
+    margin-top: 0.5rem;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 0.5rem; flex-wrap: wrap;
+    font-size: 0.82rem; color: var(--muted);
+  }
+  .pager { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .pager button {
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+    border-radius: 8px; min-width: 34px; min-height: 32px; cursor: pointer;
+    font: inherit;
+  }
+  .pager button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  @media (max-width: 760px) {
+    .fields { grid-template-columns: 1fr; }
+    .table-toolbar { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* ===== Fullcast row grid ===== */
+  .fc-rows { display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.6rem; }
+  .fc-row {
+    display: grid;
+    grid-template-columns: 120px 1fr 1fr 1fr 40px;
+    gap: 0.5rem; align-items: center;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.5rem 0.6rem;
+  }
+  .fc-row input[type=number], .fc-row input[type=time], .fc-row input[type=text] {
+    font: inherit; font-size: 0.9rem;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid var(--line); border-radius: 8px; background: #fff;
+    width: 100%;
+  }
+  .fc-row .company {
+    font-weight: 600; color: var(--ink);
+    background: #fff; text-align: center;
+  }
+  .fc-row .del {
+    border: 1px solid var(--line); background: #fff; color: var(--muted);
+    border-radius: 8px; min-height: 34px; cursor: pointer; font: inherit;
+  }
+  .fc-row .del:hover { color: var(--danger); border-color: var(--danger); }
+  .fc-row-header {
+    display: grid;
+    grid-template-columns: 120px 1fr 1fr 1fr 40px;
+    gap: 0.5rem;
+    padding: 0.3rem 0.65rem;
+    color: var(--muted); font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    font-family: "IBM Plex Mono", monospace;
+  }
+  @media (max-width: 640px) {
+    .fc-row, .fc-row-header { grid-template-columns: 1fr 1fr; }
+    .fc-row-header > div:nth-child(n+3) { display: none; }
+  }
+
+  .totals {
+    margin-top: 0.8rem;
+    display: flex; flex-wrap: wrap; gap: 1rem;
+    padding: 0.8rem 1rem;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .totals .item { min-width: 120px; }
+  .totals .label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; font-family: "IBM Plex Mono", monospace; }
+  .totals .value { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+  .totals .value small { font-size: 0.8rem; color: var(--muted); font-weight: 400; margin-left: 0.3rem; }
+
+  /* ===== Daily packs segmented ===== */
+  .segment-tabs {
+    display: inline-flex;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.25rem;
+    gap: 0.2rem;
+    margin-bottom: 0.8rem;
+  }
+  .segment-tabs button {
+    background: transparent; border: 0;
+    color: var(--muted);
+    padding: 0.4rem 0.8rem;
+    font: inherit; font-size: 0.85rem; font-weight: 500;
+    border-radius: 8px; cursor: pointer;
+  }
+  .segment-tabs button.active {
+    background: #fff; color: var(--ink);
+    box-shadow: 0 1px 3px rgba(11, 35, 46, 0.1);
+  }
+
+  /* ===== Reports cards ===== */
+  .reports-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0.9rem; margin-top: 0.8rem;
+  }
+  @media (max-width: 700px) { .reports-grid { grid-template-columns: 1fr; } }
+  .report-card {
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: linear-gradient(160deg, #fafdff 0%, #f3f9fb 100%);
+  }
+  .report-card h3 { font-size: 1.02rem; margin-bottom: 0.25rem; }
+  .report-card p { color: var(--muted); font-size: 0.84rem; margin-bottom: 0.6rem; }
+  .report-card .datebadge {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-family: "IBM Plex Mono", monospace; font-size: 0.8rem;
+    color: var(--accent);
+    background: #ecf5fb;
+    border: 1px solid #c6e1f4;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    margin-bottom: 0.55rem;
+  }
+  .report-card.pending .datebadge { color: var(--warn); background: #fff8ea; border-color: #f0dbb8; }
+
+  /* ===== misc ===== */
+  .hidden { display: none !important; }
+  .no-data {
+    padding: 1rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">V3 Attendance Console</div>
+  <nav class="topnav">
+    <a href="./">Dashboard</a>
+    <a href="./console" class="active">Console</a>
+    <a href="./gantt">Gantt</a>
+    <span id="healthPill" class="pill">checking…</span>
+  </nav>
+  <div class="clockbox" id="clockBox" title="Live clock and computed shift / production dates">
+    <div class="now">
+      <span class="tm" id="clkTime">--:--:--</span>
+      <span class="dt" id="clkDate">----/--/--</span>
+    </div>
+    <div class="pair">
+      <span>Shift</span>
+      <b id="clkShift">—</b>
+    </div>
+    <div class="pair">
+      <span>Prod</span>
+      <b id="clkProd">—</b>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+
+  <nav class="console-tabs card" role="tablist">
+    <button type="button" class="console-tab active" data-tab="upload"><span class="num">1</span>Attendance PDF</button>
+    <button type="button" class="console-tab" data-tab="fullcast"><span class="num">2</span>フルキャスト</button>
+    <button type="button" class="console-tab" data-tab="packs"><span class="num">3</span>Daily Packs</button>
+    <button type="button" class="console-tab" data-tab="reports"><span class="num">4</span>Reports</button>
+  </nav>
+
+  <!-- ============================================================ -->
+  <!-- TAB 1 — Attendance PDF upload -->
+  <!-- ============================================================ -->
+  <section id="tab-upload" class="card panel active">
+    <h2>Upload attendance PDF</h2>
+    <p class="lede">Drop one or more attendance PDFs. Files are previewed automatically — review the table below, then click <strong>Confirm &amp; Save</strong> to persist to the database and move on.</p>
+
+    <label for="uploadInput" class="dropzone" id="uploadDz">
+      <strong>Click or drop PDF files here</strong>
+      <small>Only .pdf files are accepted. We verify signatures client-side before sending.</small>
+      <input id="uploadInput" type="file" accept="application/pdf" multiple hidden />
+    </label>
+
+    <ul id="uploadList" class="file-list"></ul>
+
+    <div id="pdfDateBanner" class="pdf-date-banner hidden">
+      <strong>Working-day date in PDF:</strong>
+      <span class="value" id="pdfDateValue">—</span>
+      <span class="meta" id="pdfDateMeta"></span>
+    </div>
+
+    <div id="uploadWorktable" class="worktable hidden">
+      <div class="worktable-header">
+        <h3>Attendance worktable</h3>
+        <span class="row-count" id="upRowCount">0 rows after filters</span>
+      </div>
+      <div class="table-toolbar">
+        <input id="upSearch" class="search" placeholder="Search code or name…" />
+        <select id="upPageSize" class="select">
+          <option value="10">10 rows</option>
+          <option value="25" selected>25 rows</option>
+          <option value="50">50 rows</option>
+          <option value="100">100 rows</option>
+        </select>
+        <label class="toggle"><input id="upMissing"   type="checkbox" />Missing leave only</label>
+        <label class="toggle"><input id="upOvernight" type="checkbox" />Overnight only</label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th><th>Name</th><th>In</th><th>Out</th><th>Hours</th>
+            </tr>
+          </thead>
+          <tbody id="upTbody"></tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <span id="upPageInfo">—</span>
+        <div class="pager">
+          <button type="button" id="upPrev" disabled>Prev</button>
+          <button type="button" id="upNext" disabled>Next</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="button button-primary" id="btnConfirmUpload" disabled>Confirm &amp; Save →</button>
+      <button type="button" class="button button-muted" id="btnClearUpload">Clear</button>
+    </div>
+    <div id="msgUpload" class="message"></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- TAB 2 — フルキャスト manual entry -->
+  <!-- ============================================================ -->
+  <section id="tab-fullcast" class="card panel">
+    <h2>フルキャスト 手動入力</h2>
+    <p class="lede">Manual entry for temp-staff buckets. Company is always <strong>フルキャスト</strong>. Start defaults to 19:00 per row. Leave times at or before 06:00 are treated as the next morning. <span class="mono" style="color:var(--accent);">Shift date</span> auto-selects today; if it's after midnight (before noon) it auto-shifts to yesterday. Selecting a date reloads its saved rows from the database.</p>
+
+    <div class="fields" style="grid-template-columns: 1fr 2fr;">
+      <div class="field">
+        <label for="fcDate">Shift date</label>
+        <input type="date" id="fcDate" />
+        <span class="hint" id="fcDateHint">auto: today</span>
+      </div>
+      <div class="field">
+        <label>Totals (live)</label>
+        <div class="totals" style="margin-top:0;">
+          <div class="item">
+            <div class="label">Persons</div>
+            <div class="value" id="fcTotalPeople">0 <small>名</small></div>
+          </div>
+          <div class="item">
+            <div class="label">Hours</div>
+            <div class="value" id="fcTotalHours">0.0 <small>hr</small></div>
+          </div>
+          <div class="item">
+            <div class="label">DB status</div>
+            <div class="value" id="fcDbStatus" style="font-size:0.95rem;">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fc-row-header">
+      <div>会社</div><div>人数</div><div>開始</div><div>退出</div><div></div>
+    </div>
+    <div id="fcRows" class="fc-rows"></div>
+
+    <div class="actions">
+      <button type="button" class="button button-outline" id="btnAddRow">+ Add row</button>
+      <div class="spacer"></div>
+      <button type="button" class="button button-primary" id="btnConfirmFc">Confirm &amp; Save →</button>
+      <button type="button" class="button button-muted" id="btnClearFc">Clear</button>
+    </div>
+    <div id="msgFc" class="message"></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- TAB 3 — Daily Packs -->
+  <!-- ============================================================ -->
+  <section id="tab-packs" class="card panel">
+    <h2>Daily Packs</h2>
+    <p class="lede">One pack count per production date (shared across all employees that day). Enter manually or upload a PDF to auto-fill. <span class="mono" style="color:var(--accent);">Production date</span> auto-selects today; between 19:00 and 23:59 it auto-shifts to tomorrow. Selecting a date reloads its saved pack count.</p>
+
+    <div class="segment-tabs" id="packSeg">
+      <button type="button" data-seg="manual" class="active">Manual entry</button>
+      <button type="button" data-seg="pdf">Upload PDF</button>
+    </div>
+
+    <div id="segManual">
+      <div class="fields">
+        <div class="field">
+          <label for="packDate">Production date</label>
+          <input type="date" id="packDate" />
+          <span class="hint" id="packDateHint">auto: today</span>
+        </div>
+        <div class="field">
+          <label for="packCount">Number of packs</label>
+          <input type="number" id="packCount" min="0" placeholder="0" />
+          <span class="hint" id="packDbStatus">DB: —</span>
+        </div>
+        <div class="field">
+          <label for="packNote">Note (optional)</label>
+          <input type="text" id="packNote" placeholder="" />
+        </div>
+      </div>
+    </div>
+
+    <div id="segPdf" class="hidden">
+      <label for="packPdfInput" class="dropzone" id="packDz">
+        <strong>Click or drop Daily Pack PDF(s)</strong>
+        <small>Production date and pack count are auto-extracted from each PDF's text.</small>
+        <input id="packPdfInput" type="file" accept="application/pdf" multiple hidden />
+      </label>
+      <ul id="packList" class="file-list"></ul>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="button button-primary" id="btnConfirmPack">Confirm &amp; Save →</button>
+      <button type="button" class="button button-muted" id="btnClearPack">Clear</button>
+    </div>
+    <div id="msgPack" class="message"></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- TAB 4 — Reports -->
+  <!-- ============================================================ -->
+  <section id="tab-reports" class="card panel">
+    <h2>Reports</h2>
+    <p class="lede">Report date defaults to the working-day date inside the most recently uploaded attendance PDF. If no PDF was uploaded in this session, it falls back to the most recent PDF date already saved in the database. You can override below.</p>
+
+    <div class="fields" style="grid-template-columns: 1fr 2fr;">
+      <div class="field">
+        <label for="reportDate">Report date</label>
+        <input type="date" id="reportDate" />
+        <span class="hint" id="reportDateSource">source: —</span>
+      </div>
+      <div class="field">
+        <label>Latest PDF date in DB</label>
+        <div style="padding: 0.55rem 0.65rem; border:1px solid var(--line); border-radius:9px; background: var(--surface-soft); font-family: 'IBM Plex Mono', monospace; font-size:0.9rem; color: var(--ink);" id="latestDbDate">loading…</div>
+      </div>
+    </div>
+
+    <div class="reports-grid">
+      <div class="report-card">
+        <span class="datebadge" id="badgeAttendance">—</span>
+        <h3>Attendance Report</h3>
+        <p>Per-employee Gantt chart grouped by department (製造１課 / 製造２課). A4 portrait print layout.</p>
+        <button type="button" class="button button-accent" id="btnReportAttendance">Open in new tab ↗</button>
+      </div>
+      <div class="report-card pending">
+        <span class="datebadge" id="badgeSummary">—</span>
+        <h3>Summarizing Report</h3>
+        <p>Per-department productivity, company-wide efficiency, target line. B4 portrait print. <em>Page is pending — backend tables are ready.</em></p>
+        <button type="button" class="button button-outline" id="btnReportSummary">Open in new tab ↗</button>
+      </div>
+    </div>
+
+    <div id="msgReports" class="message"></div>
+  </section>
+
+</main>
+
+<script>
+/* ================================================================
+   V3 Attendance Console — single-file GUI.
+   Wired to the existing FastAPI backend. Subpath-aware: works at
+   /console in dev and /attendance/console via nginx in production.
+   ================================================================ */
+
+/* Base path resolution: strip the trailing /console to get the API root. */
+const BASE = (() => {
+  const m = location.pathname.match(/^(\/.*)\/console\/?$/);
+  return (m && m[1]) ? m[1] : "";
+})();
+const api = (p) => BASE + (p.startsWith("/") ? p : "/" + p);
+
+/* ----------------- Date helpers ----------------- */
+function today() { return new Date(); }
+function toISO(d) { return d.toISOString().slice(0, 10); }
+function addDays(d, delta) { const n = new Date(d); n.setDate(n.getDate() + delta); return n; }
+
+// Shift/Prod date rule — single source of truth for both values.
+// The production cycle runs from 10:00 on day D to 08:30 on day D+1, so:
+//   - If the current hour is < 10, we're still inside yesterday's cycle,
+//     so shift = yesterday, prod = today.
+//   - If the current hour is >= 10, the new cycle has started,
+//     so shift = today, prod = tomorrow.
+// Prod is ALWAYS shift + 1 day (packs produced on the night shift are booked
+// to the calendar day after the cycle starts). Verified against 20 test times
+// including month/year rollovers and the 08:30–10:00 "gap" window.
+function shiftDateForNow() {
+  const now = today();
+  return now.getHours() < 10 ? toISO(addDays(now, -1)) : toISO(now);
+}
+function productionDateForNow() {
+  // Parse the shift date back as a local date so addDays() respects DST etc.
+  const [y, m, d] = shiftDateForNow().split('-').map(Number);
+  return toISO(addDays(new Date(y, m - 1, d), 1));
+}
+
+/* ----------------- Generic UI helpers ----------------- */
+function fmtBytes(n) {
+  if (!n) return "0 B";
+  const u = ["B","KB","MB","GB"]; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(n < 10 && i ? 1 : 0)} ${u[i]}`;
+}
+function showMsg(id, type, text) {
+  const el = document.getElementById(id);
+  el.className = `message show ${type}`;
+  el.textContent = text;
+}
+function clearMsg(id) {
+  const el = document.getElementById(id);
+  el.className = "message";
+  el.textContent = "";
+}
+function switchTab(name) {
+  document.querySelectorAll(".console-tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "tab-" + name));
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+document.querySelectorAll(".console-tab").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+
+/* ----------------- Top health pill ----------------- */
+fetch(api("/api/health")).then(r => r.json()).then(j => {
+  const p = document.getElementById("healthPill");
+  p.textContent = j.status === "healthy" ? "API healthy" : "API degraded";
+  p.classList.add(j.status === "healthy" ? "ok" : "warn");
+}).catch(() => {
+  const p = document.getElementById("healthPill");
+  p.textContent = "API offline"; p.classList.add("err");
+});
+
+/* ----------------- Live clock + computed Shift/Prod dates ----------------- */
+(function startClock() {
+  const $t = document.getElementById("clkTime");
+  const $d = document.getElementById("clkDate");
+  const $s = document.getElementById("clkShift");
+  const $p = document.getElementById("clkProd");
+  const pad = (n) => String(n).padStart(2, "0");
+  function tick() {
+    const now = new Date();
+    $t.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    $d.textContent = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())}`;
+    $s.textContent = shiftDateForNow();
+    $p.textContent = productionDateForNow();
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+
+/* ================================================================
+   TAB 1 — Attendance PDF upload + auto-preview + confirm
+   ================================================================ */
+const uploadState = {
+  files: [],
+  records: [],
+  filtered: [],
+  page: 1,
+  pageSize: 25,
+  previewed: false,
+  latestPdfDate: null,     // newest record_date seen in this batch
+  perFileDates: [],        // for the banner meta
+};
+
+const $upDz     = document.getElementById("uploadDz");
+const $upInput  = document.getElementById("uploadInput");
+const $upList   = document.getElementById("uploadList");
+const $upWork   = document.getElementById("uploadWorktable");
+const $upTbody  = document.getElementById("upTbody");
+const $upSearch = document.getElementById("upSearch");
+const $upPageSize = document.getElementById("upPageSize");
+const $upMissing  = document.getElementById("upMissing");
+const $upOver     = document.getElementById("upOvernight");
+const $upRowCnt   = document.getElementById("upRowCount");
+const $upPageInfo = document.getElementById("upPageInfo");
+const $upPrev = document.getElementById("upPrev");
+const $upNext = document.getElementById("upNext");
+const $btnConfirmUp = document.getElementById("btnConfirmUpload");
+const $pdfBanner = document.getElementById("pdfDateBanner");
+const $pdfDateValue = document.getElementById("pdfDateValue");
+const $pdfDateMeta  = document.getElementById("pdfDateMeta");
+
+function renderUploadFileList() {
+  $upList.innerHTML = "";
+  for (const f of uploadState.files) {
+    const li = document.createElement("li");
+    li.className = "file-item";
+    li.innerHTML = `
+      <span class="name">${f.name}</span>
+      <span class="size">${fmtBytes(f.size)}</span>
+      <span class="tag ${f.__savedDate ? "ok" : ""}">${f.__savedDate || "pdf"}</span>`;
+    $upList.appendChild(li);
+  }
+}
+
+function addUploadFiles(fileList) {
+  const incoming = [...fileList].filter(f => f.name.toLowerCase().endsWith(".pdf"));
+  const seen = new Set(uploadState.files.map(f => f.name + ":" + f.size));
+  let added = 0;
+  for (const f of incoming) {
+    const key = f.name + ":" + f.size;
+    if (!seen.has(key)) { uploadState.files.push(f); seen.add(key); added++; }
+  }
+  renderUploadFileList();
+  if (added > 0) runPreview();  // auto-preview whenever new files arrive
+}
+
+$upInput.addEventListener("change", e => addUploadFiles(e.target.files));
+$upDz.addEventListener("dragover",  e => { e.preventDefault(); $upDz.classList.add("dragover"); });
+$upDz.addEventListener("dragleave", () => $upDz.classList.remove("dragover"));
+$upDz.addEventListener("drop", e => {
+  e.preventDefault(); $upDz.classList.remove("dragover");
+  addUploadFiles(e.dataTransfer.files);
+});
+
+async function runPreview() {
+  if (uploadState.files.length === 0) return;
+  clearMsg("msgUpload");
+  showMsg("msgUpload", "info", "Previewing…");
+  const form = new FormData();
+  for (const f of uploadState.files) form.append("files", f);
+  try {
+    const res = await fetch(api("/api/preview-multiple"), { method: "POST", body: form });
+    if (!res.ok) throw new Error(await res.text());
+    const j = await res.json();
+    uploadState.records = j.records || [];
+    uploadState.perFileDates = (j.files || []).map(f => ({ filename: f.filename, date: f.record_date }));
+    // attach date to file entries for the list tag
+    for (const entry of uploadState.perFileDates) {
+      const f = uploadState.files.find(ff => ff.name === entry.filename);
+      if (f) f.__savedDate = entry.date || null;
+    }
+    renderUploadFileList();
+    const dates = uploadState.perFileDates.map(x => x.date).filter(Boolean).sort();
+    uploadState.latestPdfDate = dates.length ? dates[dates.length - 1] : j.record_date || null;
+    uploadState.previewed = true;
+    renderPdfDateBanner(j);
+    applyUploadFilters();
+    $upWork.classList.remove("hidden");
+    $btnConfirmUp.disabled = false;
+    syncReportDate({ source: "pdf-upload" });
+    showMsg("msgUpload", "success",
+      `Preview ready — ${j.records_with_data ?? uploadState.records.length} rows with data, ${j.file_count || uploadState.files.length} file(s). Latest PDF date: ${uploadState.latestPdfDate || "—"}`);
+  } catch (err) {
+    showMsg("msgUpload", "error", "Preview failed: " + (err.message || err));
+  }
+}
+
+function renderPdfDateBanner(j) {
+  if (!uploadState.latestPdfDate) {
+    $pdfBanner.classList.add("hidden");
+    return;
+  }
+  $pdfBanner.classList.remove("hidden");
+  $pdfDateValue.textContent = uploadState.latestPdfDate;
+  const distinctDates = [...new Set(uploadState.perFileDates.map(x => x.date).filter(Boolean))];
+  if (distinctDates.length === 1) {
+    $pdfDateMeta.textContent = `one date across ${uploadState.files.length} file(s)`;
+  } else {
+    $pdfDateMeta.textContent = `dates seen: ${distinctDates.join(", ")} — using latest`;
+  }
+}
+
+/* Filtering + pagination (mirrors index.html behavior) */
+function isMissingLeave(r) {
+  return (r.commute_time || "").trim() !== "" && (r.leave_time || "").trim() === "";
+}
+function isOvernight(r) {
+  const match = (r.leave_time || "").match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return false;
+  return parseInt(match[1], 10) >= 24;
+}
+function applyUploadFilters() {
+  let rows = [...uploadState.records];
+  const q = ($upSearch.value || "").trim().toLowerCase();
+  if (q) rows = rows.filter(r =>
+    (r.employee_code || "").toLowerCase().includes(q) ||
+    (r.name || "").toLowerCase().includes(q));
+  if ($upMissing.checked)  rows = rows.filter(isMissingLeave);
+  if ($upOver.checked)     rows = rows.filter(isOvernight);
+  uploadState.filtered = rows;
+  uploadState.page = 1;
+  renderUploadTable();
+}
+function renderUploadTable() {
+  const total = uploadState.filtered.length;
+  const ps = parseInt($upPageSize.value, 10) || 25;
+  uploadState.pageSize = ps;
+  const pages = Math.max(1, Math.ceil(total / ps));
+  if (uploadState.page > pages) uploadState.page = pages;
+  const start = (uploadState.page - 1) * ps;
+  const rows = uploadState.filtered.slice(start, start + ps);
+  $upTbody.innerHTML = "";
+  if (rows.length === 0) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="5" class="no-data">No rows match the current filters.</td>`;
+    $upTbody.appendChild(tr);
+  } else {
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      if (isMissingLeave(r) || isOvernight(r)) tr.className = "issue";
+      tr.innerHTML = `
+        <td class="mono">${r.employee_code || ""}</td>
+        <td>${r.name || ""}</td>
+        <td class="mono">${r.commute_time || ""}</td>
+        <td class="mono">${r.leave_time || ""}</td>
+        <td class="mono">${r.working_hours || ""}</td>`;
+      $upTbody.appendChild(tr);
+    }
+  }
+  $upRowCnt.textContent = `${total} rows after filters`;
+  $upPageInfo.textContent = total === 0 ? "—" : `Page ${uploadState.page} / ${pages} · rows ${start + 1}–${Math.min(start + ps, total)}`;
+  $upPrev.disabled = uploadState.page <= 1;
+  $upNext.disabled = uploadState.page >= pages;
+}
+$upSearch.addEventListener("input", applyUploadFilters);
+$upPageSize.addEventListener("change", applyUploadFilters);
+$upMissing.addEventListener("change", applyUploadFilters);
+$upOver.addEventListener("change", applyUploadFilters);
+$upPrev.addEventListener("click", () => { if (uploadState.page > 1) { uploadState.page--; renderUploadTable(); } });
+$upNext.addEventListener("click", () => {
+  const pages = Math.max(1, Math.ceil(uploadState.filtered.length / uploadState.pageSize));
+  if (uploadState.page < pages) { uploadState.page++; renderUploadTable(); }
+});
+
+/* Confirm & Save — for v1 we reuse /api/convert-multiple which saves to DB
+   AND creates Excel server-side. The Excel download is not surfaced in the UI.
+   If the preview came from the watched folder (auto-upload), route through the
+   server-side save endpoint instead so no re-upload is needed.
+   TODO: swap to /api/attendance/save once that backend endpoint exists (see main.py). */
+document.getElementById("btnConfirmUpload").addEventListener("click", async () => {
+  if (!uploadState.previewed) return;
+  $btnConfirmUp.disabled = true;
+  showMsg("msgUpload", "info", "Saving to database…");
+  try {
+    let j;
+    if (uploadState.autoSource) {
+      const res = await fetch(api("/api/attendance/auto-upload?save=true"), { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      j = await res.json();
+    } else {
+      const form = new FormData();
+      for (const f of uploadState.files) form.append("files", f);
+      const res = await fetch(api("/api/convert-multiple"), { method: "POST", body: form });
+      if (!res.ok) throw new Error(await res.text());
+      j = await res.json();
+    }
+    const dates = (j.files || []).map(f => f.record_date).filter(Boolean).sort();
+    if (dates.length) uploadState.latestPdfDate = dates[dates.length - 1];
+    else if (j.record_date) uploadState.latestPdfDate = j.record_date;
+    syncReportDate({ source: "pdf-upload" });
+    showMsg("msgUpload", "success",
+      `Saved ${j.records_processed || 0} records from ${j.file_count || 1} file(s). Shift date: ${uploadState.latestPdfDate || "—"}. Opening Tab 2…`);
+    setTimeout(() => switchTab("fullcast"), 600);
+  } catch (err) {
+    $btnConfirmUp.disabled = false;
+    showMsg("msgUpload", "error", "Save failed: " + (err.message || err));
+  }
+});
+
+document.getElementById("btnClearUpload").addEventListener("click", () => {
+  uploadState.files = []; uploadState.records = []; uploadState.filtered = [];
+  uploadState.previewed = false; uploadState.latestPdfDate = null;
+  uploadState.perFileDates = []; uploadState.page = 1;
+  uploadState.autoSource = null;
+  $upInput.value = "";
+  $upWork.classList.add("hidden");
+  $pdfBanner.classList.add("hidden");
+  $btnConfirmUp.disabled = true;
+  renderUploadFileList();
+  clearMsg("msgUpload");
+});
+
+/* ----------------- Auto-upload (watched folder) — backend-only for now.
+   The UI button was removed because the Windows desktop folder isn't
+   reachable from the Pi. Endpoints /api/attendance/auto-upload[/info]
+   remain live and will become usable once a folder on the Pi is wired
+   (e.g. a Samba mount of the Windows share, or a local sync inbox).
+   ---------------------------------------------------------------- */
+
+
+/* ================================================================
+   TAB 2 — フルキャスト manual entry (DB-synced)
+   ================================================================ */
+const $fcDate = document.getElementById("fcDate");
+const $fcRows = document.getElementById("fcRows");
+const $fcHint = document.getElementById("fcDateHint");
+const $fcDbStatus = document.getElementById("fcDbStatus");
+
+$fcDate.value = shiftDateForNow();
+// Hint reflects the 10:00 cycle rule — if current wall-clock hour is before
+// 10:00 we're still inside yesterday's shift cycle (which started 10:00 prior).
+$fcHint.textContent = `auto: ${$fcDate.value}${$fcDate.value === toISO(today()) ? " (today — after 10:00)" : " (yesterday — before 10:00, still inside prior cycle)"}`;
+
+function buildFcRow(row = {}) {
+  const div = document.createElement("div");
+  div.className = "fc-row";
+  div.innerHTML = `
+    <input class="company" type="text" value="${row.company || "フルキャスト"}" readonly />
+    <input class="count" type="number" min="1" value="${row.headcount || 1}" />
+    <input class="start" type="time" value="${row.start_time || "19:00"}" step="60" />
+    <input class="leave" type="time" value="${row.leave_time || ""}" step="60" />
+    <button type="button" class="del" title="Remove row">✕</button>`;
+  div.querySelector(".del").addEventListener("click", () => { div.remove(); updateFcTotals(); });
+  div.querySelectorAll("input").forEach(i => i.addEventListener("input", updateFcTotals));
+  return div;
+}
+function addFcRow(data) { $fcRows.appendChild(buildFcRow(data)); updateFcTotals(); }
+function clearFcRows() { $fcRows.innerHTML = ""; }
+
+function computeRowHours(startHHMM, leaveHHMM) {
+  if (!startHHMM || !leaveHHMM) return 0;
+  const [sh, sm] = startHHMM.split(":").map(Number);
+  let [lh, lm] = leaveHHMM.split(":").map(Number);
+  if (lh <= 6) lh += 24;
+  const sMin = sh * 60 + sm;
+  const lMin = lh * 60 + lm;
+  return lMin <= sMin ? 0 : (lMin - sMin) / 60;
+}
+function updateFcTotals() {
+  let people = 0, hours = 0;
+  for (const row of $fcRows.querySelectorAll(".fc-row")) {
+    const n = parseInt(row.querySelector(".count").value || "0", 10) || 0;
+    const s = row.querySelector(".start").value;
+    const l = row.querySelector(".leave").value;
+    const h = computeRowHours(s, l);
+    people += n; hours += n * h;
+  }
+  document.getElementById("fcTotalPeople").innerHTML = `${people} <small>名</small>`;
+  document.getElementById("fcTotalHours").innerHTML = `${hours.toFixed(1)} <small>hr</small>`;
+}
+
+async function loadFcFromDb(date) {
+  if (!date) return;
+  $fcDbStatus.textContent = "loading…";
+  try {
+    const res = await fetch(api("/api/temp-staff/" + date));
+    if (!res.ok) throw new Error(await res.text());
+    const j = await res.json();
+    clearFcRows();
+    if ((j.rows || []).length === 0) {
+      addFcRow();  // seed one blank row
+      $fcDbStatus.textContent = "no rows yet";
+      $fcDbStatus.style.color = "var(--muted)";
+    } else {
+      for (const r of j.rows) addFcRow(r);
+      $fcDbStatus.textContent = `${j.rows.length} rows saved`;
+      $fcDbStatus.style.color = "var(--brand-strong)";
+    }
+    updateFcTotals();
+  } catch (err) {
+    $fcDbStatus.textContent = "db error";
+    $fcDbStatus.style.color = "var(--danger)";
+    clearFcRows(); addFcRow();
+    console.warn("temp-staff load failed:", err);
+  }
+}
+
+$fcDate.addEventListener("change", () => {
+  clearMsg("msgFc");
+  const iso = $fcDate.value;
+  $fcHint.textContent = iso === toISO(today()) ? "manual: today" : `manual: ${iso}`;
+  loadFcFromDb(iso);
+});
+
+document.getElementById("btnAddRow").addEventListener("click", () => addFcRow());
+
+document.getElementById("btnClearFc").addEventListener("click", () => {
+  $fcDate.value = shiftDateForNow();
+  $fcHint.textContent = `auto: ${$fcDate.value}`;
+  clearFcRows(); addFcRow(); clearMsg("msgFc");
+});
+
+document.getElementById("btnConfirmFc").addEventListener("click", async () => {
+  clearMsg("msgFc");
+  const rows = [...$fcRows.querySelectorAll(".fc-row")].map(r => ({
+    company: "フルキャスト",
+    headcount: parseInt(r.querySelector(".count").value || "0", 10),
+    start_time: r.querySelector(".start").value,
+    leave_time: r.querySelector(".leave").value,
+  })).filter(r => r.headcount > 0 && r.start_time && r.leave_time);
+  if (rows.length === 0) {
+    showMsg("msgFc", "error", "Add at least one row with a valid count, start, and leave time.");
+    return;
+  }
+  const payload = { record_date: $fcDate.value, rows };
+  try {
+    const res = await fetch(api("/api/temp-staff"), {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const j = await res.json();
+    $fcDbStatus.textContent = `${j.saved_rows} rows saved`;
+    $fcDbStatus.style.color = "var(--brand-strong)";
+    showMsg("msgFc", "success",
+      `Saved ${j.saved_rows} row(s) for ${j.record_date} — ${j.total_people}名 / ${j.total_hours}hr. Opening Tab 3…`);
+    setTimeout(() => switchTab("packs"), 600);
+  } catch (err) {
+    showMsg("msgFc", "error", "Save failed: " + (err.message || err));
+  }
+});
+
+// Initial load — populate from DB
+loadFcFromDb($fcDate.value);
+
+
+/* ================================================================
+   TAB 3 — Daily Packs (DB-synced)
+   ================================================================ */
+const $packDate  = document.getElementById("packDate");
+const $packCount = document.getElementById("packCount");
+const $packNote  = document.getElementById("packNote");
+const $packHint  = document.getElementById("packDateHint");
+const $packDbStatus = document.getElementById("packDbStatus");
+
+$packDate.value = productionDateForNow();
+// Prod date = shift + 1. If we're currently AFTER 10:00, that's "tomorrow's"
+// calendar date; otherwise (we're in the overnight portion of the prior cycle)
+// it's "today". Hint shows both the date and which side of 10:00 we're on.
+$packHint.textContent = `auto: ${$packDate.value}${$packDate.value === toISO(today()) ? " (today — cycle from 10:00 yesterday)" : " (tomorrow — new cycle started at 10:00)"}`;
+
+async function loadPackFromDb(date) {
+  // Pull the saved value for this date whenever the date input changes. If the
+  // row exists the form is pre-filled so the user can edit it and re-Confirm
+  // to update (POST /api/daily-packs is an upsert, so re-submitting writes
+  // the new value back to the same row). If not, the form is blank for entry.
+  // Bust any cache so a fresh value always wins.
+  if (!date) return;
+  $packDbStatus.textContent = "DB: loading…";
+  try {
+    const res = await fetch(api("/api/daily-packs/" + date + "?_=" + Date.now()), { cache: "no-store" });
+    if (!res.ok) throw new Error(await res.text());
+    const j = await res.json();
+    // Backend returns {exists:true, number_of_packs, note, updated_at} when
+    // a row is present. Treat exists=true + any non-null pack count as "saved".
+    const saved = !!(j && j.exists);
+    if (saved) {
+      $packCount.value = (j.number_of_packs ?? 0);
+      $packNote.value = j.note || "";
+      const when = j.updated_at ? ` · updated ${j.updated_at.slice(0, 16).replace("T", " ")}` : "";
+      $packDbStatus.textContent = `DB: ${Number(j.number_of_packs).toLocaleString()} packs saved${when}`;
+      $packDbStatus.style.color = "var(--brand-strong)";
+    } else {
+      $packCount.value = "";
+      $packNote.value = "";
+      $packDbStatus.textContent = "DB: no value yet — enter and Confirm";
+      $packDbStatus.style.color = "var(--muted)";
+    }
+  } catch (err) {
+    $packDbStatus.textContent = "DB: error";
+    $packDbStatus.style.color = "var(--danger)";
+    console.warn("daily-packs load failed:", err);
+  }
+}
+
+$packDate.addEventListener("change", () => {
+  clearMsg("msgPack");
+  $packHint.textContent = $packDate.value === toISO(today()) ? "manual: today" : `manual: ${$packDate.value}`;
+  loadPackFromDb($packDate.value);
+});
+
+document.querySelectorAll("#packSeg button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#packSeg button").forEach(x => x.classList.toggle("active", x === b));
+  document.getElementById("segManual").classList.toggle("hidden", b.dataset.seg !== "manual");
+  document.getElementById("segPdf").classList.toggle("hidden", b.dataset.seg !== "pdf");
+}));
+
+const packState = { files: [], extracted: [] };
+const $packDz = document.getElementById("packDz");
+const $packInput = document.getElementById("packPdfInput");
+const $packList = document.getElementById("packList");
+function renderPackList() {
+  $packList.innerHTML = "";
+  for (const f of packState.files) {
+    const meta = packState.extracted.find(x => x.filename === f.name);
+    const li = document.createElement("li");
+    li.className = "file-item";
+    const tag = meta?.record_date ? `${meta.record_date} · ${meta.number_of_packs ?? "?"} packs` : "pdf";
+    li.innerHTML = `
+      <span class="name">${f.name}</span>
+      <span class="size">${fmtBytes(f.size)}</span>
+      <span class="tag ${meta?.record_date ? "ok" : ""}">${tag}</span>`;
+    $packList.appendChild(li);
+  }
+}
+$packInput.addEventListener("change", async e => {
+  packState.files = [...e.target.files];
+  renderPackList();
+  if (packState.files.length === 0) return;
+  showMsg("msgPack", "info", "Extracting date + pack count from PDF(s)…");
+  const form = new FormData();
+  for (const f of packState.files) form.append("files", f);
+  try {
+    const res = await fetch(api("/api/daily-packs/extract-pdf-multi"), { method: "POST", body: form });
+    if (!res.ok) throw new Error(await res.text());
+    const j = await res.json();
+    packState.extracted = j.results || [];
+    renderPackList();
+    showMsg("msgPack", "success", `Extracted ${packState.extracted.length} entries. Click Confirm to save.`);
+  } catch (err) {
+    showMsg("msgPack", "error", "Extraction failed: " + (err.message || err));
+  }
+});
+$packDz.addEventListener("dragover",  e => { e.preventDefault(); $packDz.classList.add("dragover"); });
+$packDz.addEventListener("dragleave", () => $packDz.classList.remove("dragover"));
+$packDz.addEventListener("drop", e => {
+  e.preventDefault(); $packDz.classList.remove("dragover");
+  $packInput.files = e.dataTransfer.files;
+  $packInput.dispatchEvent(new Event("change"));
+});
+
+document.getElementById("btnClearPack").addEventListener("click", () => {
+  packState.files = []; packState.extracted = [];
+  $packInput.value = "";
+  $packDate.value = productionDateForNow();
+  $packHint.textContent = `auto: ${$packDate.value}`;
+  $packCount.value = ""; $packNote.value = "";
+  renderPackList(); clearMsg("msgPack");
+  loadPackFromDb($packDate.value);
+});
+
+document.getElementById("btnConfirmPack").addEventListener("click", async () => {
+  clearMsg("msgPack");
+  const activeSeg = document.querySelector("#packSeg button.active")?.dataset.seg || "manual";
+  try {
+    if (activeSeg === "manual") {
+      const payload = {
+        record_date: $packDate.value,
+        number_of_packs: parseInt($packCount.value || "0", 10),
+        note: $packNote.value || null,
+      };
+      if (!payload.record_date) throw new Error("Pick a production date.");
+      const res = await fetch(api("/api/daily-packs"), {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await res.json();
+      // Re-read from DB so the saved-at timestamp and confirmed value both
+      // appear in the status pill (POST is an upsert, so re-Confirming the
+      // same date simply overwrites the previous value — by design).
+      await loadPackFromDb(payload.record_date);
+      showMsg("msgPack", "success",
+        `Saved ${payload.number_of_packs.toLocaleString()} packs for ${payload.record_date}. Opening Tab 4…`);
+    } else {
+      if (packState.extracted.length === 0) throw new Error("Upload PDF(s) first.");
+      const entries = packState.extracted
+        .filter(x => x.record_date && x.number_of_packs != null)
+        .map(x => ({ record_date: x.record_date, number_of_packs: x.number_of_packs, note: `auto from ${x.filename}` }));
+      if (entries.length === 0) throw new Error("No valid entries found in PDFs.");
+      const res = await fetch(api("/api/daily-packs/bulk"), {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ entries }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const j = await res.json();
+      showMsg("msgPack", "success",
+        `Saved ${j.saved}/${j.total} entries. Failed: ${j.failed}. Opening Tab 4…`);
+    }
+    setTimeout(() => switchTab("reports"), 600);
+  } catch (err) {
+    showMsg("msgPack", "error", err.message || String(err));
+  }
+});
+
+// Initial load
+loadPackFromDb($packDate.value);
+
+
+/* ================================================================
+   TAB 4 — Reports
+   ================================================================ */
+const $reportDate = document.getElementById("reportDate");
+const $reportDateSource = document.getElementById("reportDateSource");
+const $latestDbDate = document.getElementById("latestDbDate");
+const $badgeA = document.getElementById("badgeAttendance");
+const $badgeS = document.getElementById("badgeSummary");
+
+function syncReportDate({ source } = {}) {
+  const chosen = uploadState.latestPdfDate || $reportDate.value;
+  if (chosen && !$reportDate.value) $reportDate.value = chosen;
+  if (uploadState.latestPdfDate) {
+    $reportDate.value = uploadState.latestPdfDate;
+    $reportDateSource.textContent = "source: latest uploaded PDF (this session)";
+  }
+  $badgeA.textContent = $reportDate.value || "—";
+  $badgeS.textContent = $reportDate.value || "—";
+}
+
+async function loadLatestDbDate() {
+  try {
+    const res = await fetch(api("/api/gantt/latest-date"));
+    if (!res.ok) throw new Error(await res.text());
+    const j = await res.json();
+    $latestDbDate.textContent = j.date || "no data yet";
+    if (!uploadState.latestPdfDate && !$reportDate.value && j.date) {
+      $reportDate.value = j.date;
+      $reportDateSource.textContent = "source: latest PDF date saved in DB";
+      $badgeA.textContent = j.date;
+      $badgeS.textContent = j.date;
+    }
+  } catch (err) {
+    $latestDbDate.textContent = "error";
+    console.warn("latest-date load failed:", err);
+  }
+}
+
+$reportDate.addEventListener("input", () => {
+  $badgeA.textContent = $reportDate.value || "—";
+  $badgeS.textContent = $reportDate.value || "—";
+  $reportDateSource.textContent = "source: manually selected";
+});
+
+document.getElementById("btnReportAttendance").addEventListener("click", () => {
+  const d = $reportDate.value;
+  if (!d) { showMsg("msgReports", "error", "Pick a report date."); return; }
+  window.open(api("/gantt") + `?date=${d}`, "_blank");
+});
+document.getElementById("btnReportSummary").addEventListener("click", () => {
+  const d = $reportDate.value;
+  if (!d) { showMsg("msgReports", "error", "Pick a report date."); return; }
+  // Open the planned route in a new tab — will show a 404 until /summary page is built.
+  window.open(api("/summary") + `?date=${d}`, "_blank");
+  showMsg("msgReports", "info",
+    `Summarizing Report opened in a new tab at ${api("/summary")}?date=${d} — note: the page itself is still pending implementation (see TODO in main.py).`);
+});
+
+loadLatestDbDate();
+syncReportDate();
+</script>
+</body>
+</html>
