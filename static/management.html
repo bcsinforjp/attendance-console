@@ -186,6 +186,44 @@
     display: grid;
     gap: 0.9rem;
   }
+  .board-tools {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .search-box {
+    flex: 1 1 320px;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  .search-box label {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.76rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .search-box input {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    color: var(--ink);
+  }
+  .search-box input:focus { outline: none; }
+  .search-meta {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
   .board {
     display: grid;
     grid-template-columns: repeat(2, minmax(260px, 1fr));
@@ -199,7 +237,19 @@
     border: 1px solid var(--line);
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.78);
+    overflow: hidden;
+    position: relative;
   }
+  .dept::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 4px;
+    background: var(--dept-accent, var(--brand));
+  }
+  .dept[data-section="1"] { --dept-accent: #0d8f71; }
+  .dept[data-section="2"] { --dept-accent: #125e91; }
   .dept.drag-over {
     border-color: var(--brand);
     background: #ecfaf4;
@@ -224,9 +274,11 @@
   }
   .employee-list {
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.55rem;
     min-height: 250px;
   }
+  @media (max-width: 980px) { .employee-list { grid-template-columns: 1fr; } }
   .employee {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -267,6 +319,17 @@
     cursor: pointer;
   }
   .remove:hover { color: var(--danger); border-color: #f0c8c4; background: #fff2f1; }
+  .no-data {
+    grid-column: 1 / -1;
+    min-height: 88px;
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 0.84rem;
+    background: rgba(255, 255, 255, 0.5);
+  }
 
   .add-panel { padding: 0.9rem; }
   .add-panel h2 { font-size: 1.02rem; margin-bottom: 0.7rem; }
@@ -350,6 +413,14 @@
       <div id="message" class="message"></div>
     </section>
 
+    <div class="board-tools">
+      <div class="search-box" role="search" aria-label="Search employees">
+        <label for="searchInput">Search</label>
+        <input id="searchInput" type="search" placeholder="code / name / section" />
+      </div>
+      <div id="searchMeta" class="search-meta">0 matches</div>
+    </div>
+
     <div id="board" class="board" aria-live="polite"></div>
   </section>
 </main>
@@ -367,6 +438,7 @@
   let unlocked = false;
   let draggingCode = null;
   let dataLoaded = false;
+  let searchQuery = "";
 
   const $ = (id) => document.getElementById(id);
   const board = $("board");
@@ -378,6 +450,8 @@
   const lockBtn = $("lockBtn");
   const statusPill = $("statusPill");
   const message = $("message");
+  const searchInput = $("searchInput");
+  const searchMeta = $("searchMeta");
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -422,8 +496,22 @@
   }
 
   function renderBoard() {
+    const filteredEmployees = employees.filter((emp) => {
+      if (!searchQuery) return true;
+      const haystack = [
+        emp.code,
+        emp.name,
+        sectionLabel(emp.section_id),
+      ].join(" ").toLowerCase();
+      return haystack.includes(searchQuery);
+    });
+
+    searchMeta.textContent = searchQuery
+      ? `${filteredEmployees.length} match${filteredEmployees.length === 1 ? "" : "es"}`
+      : `${employees.length} total`;
+
     board.innerHTML = sections.map((dept) => {
-      const members = employees.filter((emp) => Number(emp.section_id) === Number(dept.id));
+      const members = filteredEmployees.filter((emp) => Number(emp.section_id) === Number(dept.id));
       return `
         <section class="dept" data-section="${dept.id}">
           <div class="dept-head">
@@ -491,6 +579,11 @@
       </article>
     `;
   }
+
+  searchInput.addEventListener("input", () => {
+    searchQuery = searchInput.value.trim().toLowerCase();
+    renderBoard();
+  });
 
   async function loadData() {
     try {
