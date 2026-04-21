@@ -88,6 +88,55 @@ EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 uploaded_files = []
 parsed_data = []
 
+def write_json_atomic(path: Path, payload: object) -> None:
+    """Write JSON through a temp file so roster saves never leave half-written data."""
+    temp_path = path.with_suffix(f"{path.suffix}.tmp")
+    temp_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temp_path, path)
+
+def refresh_management_data(roster: list[dict], sections_payload: list[dict]) -> None:
+    """Refresh global roster/section caches after management saves."""
+    global EMPLOYEE_ROSTER, EMPLOYEE_ROSTER_BY_ID, EMPLOYEE_CODES
+    global SECTIONS, SECTION_OF_CODE, SECTION_LABEL_BY_ID
+
+    EMPLOYEE_ROSTER = roster
+    EMPLOYEE_ROSTER_BY_ID = {
+        employee["employee_code"]: employee["name"]
+        for employee in EMPLOYEE_ROSTER
+    }
+    EMPLOYEE_CODES = set(EMPLOYEE_ROSTER_BY_ID)
+    SECTIONS = sections_payload
+    SECTION_OF_CODE = {code: section["id"] for section in SECTIONS for code in section["codes"]}
+    SECTION_LABEL_BY_ID = {section["id"]: section["label"] for section in SECTIONS}
+
+def management_payload_from_files() -> dict:
+    """Build the management UI payload from the current roster and section maps."""
+    section_lookup = {section["id"]: section["label"] for section in SECTIONS}
+    employees = [
+        {
+            "code": employee["employee_code"],
+            "name": employee["name"],
+            "section_id": SECTION_OF_CODE.get(employee["employee_code"]),
+            "section_label": section_lookup.get(SECTION_OF_CODE.get(employee["employee_code"])),
+        }
+        for employee in EMPLOYEE_ROSTER
+    ]
+    sections = [
+        {
+            "id": section["id"],
+            "label": section["label"],
+            "codes": list(section["codes"]),
+        }
+        for section in SECTIONS
+    ]
+    return {
+        "sections": sections,
+        "employees": employees,
+    }
+
 # Batch job infrastructure (multi-file upload with progress tracking).
 BATCH_UPLOAD_DIR = Path("/tmp/attendance_batch_uploads")
 BATCH_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -987,29 +1036,64 @@ async def management_page():
 
 @app.get("/api/management/bootstrap")
 async def management_bootstrap():
-    """Return roster and section metadata for the management mockup UI."""
-    section_lookup = {section["id"]: section["label"] for section in SECTIONS}
-    employees = [
+    """Return roster and section metadata for the management UI."""
+    return management_payload_from_files()
+
+@app.put("/api/management/roster")
+async def management_save_roster(payload: dict = Body(...)):
+    """Persist the management board into employee_roster.json and sections.json."""
+    raw_employees = payload.get("employees")
+    if not isinstance(raw_employees, list):
+        raise HTTPException(status_code=400, detail="employees must be a list.")
+
+    section_by_id = {int(section["id"]): section for section in SECTIONS}
+    next_codes_by_section = {section_id: [] for section_id in section_by_id}
+    next_roster: list[dict[str, str]] = []
+    seen_codes: set[str] = set()
+
+    for index, raw_employee in enumerate(raw_employees, start=1):
+        if not isinstance(raw_employee, dict):
+            raise HTTPException(status_code=400, detail=f"Employee row {index} is invalid.")
+
+        code = str(raw_employee.get("code") or raw_employee.get("employee_code") or "").strip()
+        name = str(raw_employee.get("name") or "").strip()
+        try:
+            section_id = int(raw_employee.get("section_id"))
+        except (TypeError, ValueError):
+            section_id = 0
+
+        if not is_employee_code(code):
+            raise HTTPException(status_code=400, detail=f"Employee row {index} has an invalid code.")
+        if not name:
+            raise HTTPException(status_code=400, detail=f"Employee {code} is missing a name.")
+        if code in seen_codes:
+            raise HTTPException(status_code=400, detail=f"Employee code {code} is duplicated.")
+        if section_id not in section_by_id:
+            raise HTTPException(status_code=400, detail=f"Employee {code} has an invalid section.")
+
+        seen_codes.add(code)
+        next_roster.append({"employee_code": code, "name": name})
+        next_codes_by_section[section_id].append(code)
+
+    next_sections = [
         {
-            "code": employee["employee_code"],
-            "name": employee["name"],
-            "section_id": SECTION_OF_CODE.get(employee["employee_code"]),
-            "section_label": section_lookup.get(SECTION_OF_CODE.get(employee["employee_code"])),
-        }
-        for employee in EMPLOYEE_ROSTER
-    ]
-    sections = [
-        {
-            "id": section["id"],
+            "id": int(section["id"]),
             "label": section["label"],
-            "codes": list(section["codes"]),
+            "codes": next_codes_by_section[int(section["id"])],
         }
         for section in SECTIONS
     ]
-    return {
-        "sections": sections,
-        "employees": employees,
-    }
+
+    try:
+        write_json_atomic(EMPLOYEE_ROSTER_PATH, next_roster)
+        write_json_atomic(SECTIONS_PATH, {"sections": next_sections})
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Unable to save roster files: {exc}") from exc
+
+    refresh_management_data(next_roster, next_sections)
+    response = management_payload_from_files()
+    response["saved_at"] = datetime.now().isoformat()
+    return response
 
 @app.post("/api/management/import-pdf")
 async def management_import_pdf(file: UploadFile = File(...)):

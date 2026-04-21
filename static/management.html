@@ -118,7 +118,22 @@
   .button.soft-danger:hover { background: #ffe5e2; border-color: #e7a7a0; }
   .button.warn { background: #fff8ea; border-color: #f0dbb8; color: var(--warn); }
   .button.danger { background: #fff2f1; border-color: #f0c8c4; color: var(--danger); }
-  .button:disabled { opacity: 0.55; cursor: not-allowed; }
+  .button:not(:disabled):active { transform: translateY(1px); }
+  .button:disabled {
+    cursor: not-allowed;
+    color: #8a9aa2;
+    border-color: #d8e3e8;
+    background: #edf3f6;
+    box-shadow: none;
+  }
+  .button.primary:disabled,
+  .button.action:disabled,
+  .button.secondary:disabled,
+  .button.soft-danger:disabled {
+    color: #8a9aa2;
+    border-color: #d8e3e8;
+    background: #edf3f6;
+  }
   .pill {
     display: inline-flex;
     align-items: center;
@@ -136,6 +151,7 @@
   .pill.ok { color: var(--brand-strong); background: #ecfaf4; border-color: #b8e4d8; }
   .pill.danger { color: #fff; background: var(--danger); border-color: var(--danger); }
   .pill.saved { color: var(--brand-strong); background: #ecfaf4; border-color: #b8e4d8; }
+  .pill.saving { color: var(--warn); background: #fff8ea; border-color: #f0dbb8; }
 
   .lock-screen {
     padding: 1.2rem;
@@ -563,6 +579,7 @@
     <a href="https://rnd.asiakawaii.com/attendance/console" target="_blank" rel="noopener">Console ↗</a>
   </nav>
   <div class="toolbar">
+    <span id="statusPill" class="pill">Locked</span>
     <span id="dirtyPill" class="pill saved">Saved</span>
     <button id="saveBtn" class="button primary" type="button" disabled>Save</button>
     <button id="resetBtn" class="button" type="button" disabled>Reset</button>
@@ -588,7 +605,7 @@
       <h3>Mockup behavior</h3>
       <ul>
         <li>Password check runs in the browser and is hard-coded for review.</li>
-        <li>Save copies the edited board into memory only; it does not write files yet.</li>
+        <li>Save writes employee_roster.json and sections.json through the backend.</li>
         <li>Initial data comes from employee_roster.json and sections.json.</li>
         <li>The real build can replace this with login, roster GET/PUT, employee POST/DELETE, hashed admin storage, and a 30-minute session cookie.</li>
       </ul>
@@ -669,6 +686,7 @@
   let importRows = [];
   let importSelected = new Set();
   let showExisting = false;
+  let saving = false;
 
   const $ = (id) => document.getElementById(id);
   const board = $("board");
@@ -755,13 +773,44 @@
     message.className = `message ${type}`.trim();
   }
 
+  function rosterPayload() {
+    return {
+      employees: employees.map((emp) => ({
+        code: emp.code,
+        name: emp.name,
+        section_id: Number(emp.section_id),
+      })),
+    };
+  }
+
+  async function responseErrorMessage(response) {
+    try {
+      const data = await response.json();
+      return data.detail || `HTTP ${response.status}`;
+    } catch (error) {
+      return `HTTP ${response.status}`;
+    }
+  }
+
+  function applyManagementPayload(data) {
+    sections = Array.isArray(data.sections) && data.sections.length ? data.sections : fallbackSections;
+    employees = Array.isArray(data.employees)
+      ? data.employees.map((record) => normalizeEmployee({ ...record, pending: false }))
+      : [];
+    savedEmployees = clone(employees);
+    dataLoaded = true;
+    renderDeptOptions();
+    setActiveSection(selectedSectionId);
+  }
+
   function updateState() {
     const dirty = isDirty();
     dirtyPill.hidden = false;
-    dirtyPill.textContent = dirty ? "Unsaved changes" : "Saved";
-    dirtyPill.className = dirty ? "pill danger" : "pill saved";
-    saveBtn.disabled = !unlocked || !dirty;
-    resetBtn.disabled = !unlocked || !dirty;
+    dirtyPill.textContent = saving ? "Saving..." : dirty ? "Unsaved changes" : "Saved";
+    dirtyPill.className = saving ? "pill saving" : dirty ? "pill danger" : "pill saved";
+    saveBtn.textContent = saving ? "Saving..." : "Save";
+    saveBtn.disabled = saving || !unlocked || !dirty;
+    resetBtn.disabled = saving || !unlocked || !dirty;
     lockBtn.hidden = !unlocked;
     statusPill.textContent = unlocked ? "Unlocked" : "Locked";
     statusPill.className = unlocked ? "pill ok" : "pill";
@@ -982,10 +1031,7 @@
       const response = await fetch("./api/management/bootstrap", { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      sections = Array.isArray(data.sections) && data.sections.length ? data.sections : fallbackSections;
-      employees = Array.isArray(data.employees) ? data.employees.map(normalizeEmployee) : [];
-      savedEmployees = clone(employees);
-      dataLoaded = true;
+      applyManagementPayload(data);
     } catch (error) {
       sections = fallbackSections;
       employees = [];
@@ -993,8 +1039,10 @@
       dataLoaded = false;
       setMessage("Using fallback empty management data. Backend bootstrap was not available.", "error");
     }
-    renderDeptOptions();
-    setActiveSection(selectedSectionId);
+    if (!dataLoaded) {
+      renderDeptOptions();
+      setActiveSection(selectedSectionId);
+    }
     if (employees.length) {
       setMessage("Management board loaded from employee_roster.json and sections.json.", "ok");
     }
@@ -1046,12 +1094,30 @@
     renderBoard();
   });
 
-  saveBtn.addEventListener("click", () => {
-    employees = employees.map((emp) => ({ ...emp, pending: false }));
-    savedEmployees = clone(employees);
-    setMessage("Saved in this browser session. Backend persistence is not wired yet.", "ok");
+  saveBtn.addEventListener("click", async () => {
+    if (saving || !isDirty()) return;
+    saving = true;
+    setMessage("Saving roster...", "");
     updateState();
-    renderBoard();
+
+    try {
+      const response = await fetch("./api/management/roster", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(rosterPayload()),
+      });
+      if (!response.ok) throw new Error(await responseErrorMessage(response));
+      const data = await response.json();
+      applyManagementPayload(data);
+      setMessage("Saved to employee_roster.json and sections.json.", "ok");
+      renderBoard();
+      renderImportList();
+    } catch (error) {
+      setMessage(`Save failed: ${error.message || error}`, "error");
+    } finally {
+      saving = false;
+      updateState();
+    }
   });
 
   resetBtn.addEventListener("click", () => {
