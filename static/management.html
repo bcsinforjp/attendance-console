@@ -435,13 +435,64 @@
   }
   .import-dropzone input { width: 100%; }
   .import-list {
-    list-style: none;
     margin-top: 0.75rem;
     display: grid;
-    gap: 0.45rem;
-    max-height: 260px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    max-height: 420px;
     overflow: auto;
   }
+  @media (max-width: 900px) { .import-list { grid-template-columns: 1fr; } }
+  .import-column {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .import-column-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-soft);
+  }
+  .import-column-head strong {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+  }
+  .import-column-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 999px;
+    color: #fff;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .import-column[data-section="1"] .import-column-number { background: #0d8f71; }
+  .import-column[data-section="2"] .import-column-number { background: #125e91; }
+  .import-column[data-section="manual"] .import-column-number { background: var(--warn); }
+  .import-column-count {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--muted);
+    font-size: 0.72rem;
+  }
+  .import-column-list {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    padding: 0.65rem;
+  }
+  @media (max-width: 760px) { .import-column-list { grid-template-columns: 1fr; } }
   .import-item {
     display: grid;
     grid-template-columns: auto 1fr auto;
@@ -452,10 +503,7 @@
     border-radius: 8px;
     background: #fff;
   }
-  .import-item.existing {
-    background: #f4f7f9;
-    color: var(--muted);
-  }
+  .import-item.existing { background: #f4f7f9; color: var(--muted); }
   .import-item .import-code {
     font-family: "IBM Plex Mono", monospace;
     font-size: 0.72rem;
@@ -575,7 +623,7 @@
           Show already on board
         </label>
         <div id="importHint" class="message"></div>
-        <ul id="importList" class="import-list"></ul>
+        <div id="importList" class="import-list" role="list"></div>
       </section>
     </section>
 
@@ -824,30 +872,60 @@
 
   function renderImportList() {
     const known = existingCodes();
-    const rows = importRows.filter((row) => showExisting || !known.has(row.code));
+    const visibleRows = importRows.filter((row) => showExisting || !known.has(row.code));
     importSummary.textContent = importRows.length
-      ? `${rows.length} shown / ${importRows.length} loaded`
+      ? `${visibleRows.length} shown / ${importRows.length} loaded`
       : "No PDF loaded";
     importHint.className = "message";
-    importSelectAll.disabled = rows.length === 0;
+    importSelectAll.disabled = visibleRows.length === 0;
     importClear.disabled = importRows.length === 0;
     importAdd.disabled = importSelected.size === 0;
 
-    importList.innerHTML = rows.map((row) => {
-      const isExisting = known.has(row.code);
-      const checked = importSelected.has(row.code);
-      const disabled = isExisting ? "disabled" : "";
+    const grouped = new Map([
+      [1, []],
+      [2, []],
+      ["manual", []],
+    ]);
+    for (const row of visibleRows) {
+      const sectionKey = row.section_id === 1 || row.section_id === 2 ? row.section_id : "manual";
+      grouped.get(sectionKey).push(row);
+    }
+
+    importList.innerHTML = [
+      [1, sectionLabel(1)],
+      [2, sectionLabel(2)],
+      ["manual", "Manual / Unassigned"],
+    ].map(([sectionId, label]) => {
+      const rows = grouped.get(sectionId) || [];
       return `
-        <li class="import-item${isExisting ? " existing" : ""}">
-          <input type="checkbox" data-code="${row.code}" ${checked ? "checked" : ""} ${disabled} />
-          <div>
-            <div class="import-code">${row.code}</div>
-            <div class="import-name">${row.name}</div>
+        <section class="import-column" data-section="${sectionId}">
+          <div class="import-column-head">
+            <strong>
+              <span class="import-column-number">${sectionId === "manual" ? "?" : sectionId}</span>
+              <span>${label}</span>
+            </strong>
+            <span class="import-column-count">${rows.length}</span>
           </div>
-          <span class="import-note ${isExisting ? "danger" : ""}">${row.section_id ? `${row.section_id} · ${row.section_label}` : "manual"}</span>
-        </li>
+          <div class="import-column-list">
+            ${rows.map((row) => {
+              const isExisting = known.has(row.code);
+              const checked = importSelected.has(row.code);
+              const badge = row.section_id ? `${row.section_id} · ${row.section_label}` : "manual";
+              return `
+                <label class="import-item${isExisting ? " existing" : ""}">
+                  <input type="checkbox" data-code="${row.code}" ${checked ? "checked" : ""} ${isExisting ? "disabled" : ""} />
+                  <div>
+                    <div class="import-code">${row.code}</div>
+                    <div class="import-name">${row.name}</div>
+                  </div>
+                  <span class="import-note ${isExisting ? "danger" : ""}">${badge}</span>
+                </label>
+              `;
+            }).join("") || `<div class="no-data">No rows</div>`}
+          </div>
+        </section>
       `;
-    }).join("") || `<li class="no-data">No importable rows yet</li>`;
+    }).join("");
 
     importList.querySelectorAll('input[type="checkbox"]').forEach((box) => {
       box.addEventListener("change", () => {
@@ -859,7 +937,7 @@
     });
 
     importHint.textContent = importRows.length
-      ? "Rows already in the board stay hidden unless you show them again."
+      ? "Rows already in the board stay hidden unless you show them again. Section number comes from the roster mapping."
       : "Upload a PDF to load import candidates.";
   }
 
