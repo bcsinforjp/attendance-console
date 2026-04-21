@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>V3 Attendance Console · User Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #eef3f5;
+    --ink: #132026;
+    --muted: #5a6b73;
+    --surface: #ffffff;
+    --surface-soft: #f7fbfc;
+    --brand: #0d8f71;
+    --brand-strong: #0b6f58;
+    --accent: #125e91;
+    --warn: #b86912;
+    --danger: #b42318;
+    --line: #d4e2e8;
+    --shadow: 0 10px 32px rgba(11, 35, 46, 0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 12% 15%, rgba(18, 94, 145, 0.09), transparent 34%),
+      radial-gradient(circle at 88% 18%, rgba(13, 143, 113, 0.11), transparent 38%),
+      var(--bg);
+    line-height: 1.5;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.9rem;
+    align-items: center;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(8px);
+  }
+  .brand { font-weight: 700; letter-spacing: 0.03em; color: var(--brand-strong); font-size: 0.95rem; }
+  .topnav { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+  .topnav a {
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: 1px solid transparent;
+    padding: 0.35rem 0.55rem;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+  }
+  .topnav a:hover { color: var(--brand-strong); border-color: var(--line); background: var(--surface-soft); }
+  .topnav a.active { color: var(--brand-strong); border-color: #b8e4d8; background: #ecfaf4; }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  @media (max-width: 900px) {
+    .topbar {
+      grid-template-columns: 1fr auto;
+      grid-template-areas: "brand toolbar" "nav nav";
+      gap: 0.5rem;
+    }
+    .brand { grid-area: brand; }
+    .topnav { grid-area: nav; }
+    .toolbar { grid-area: toolbar; }
+  }
+
+  .page {
+    width: min(1440px, 100%);
+    margin: 1.15rem auto 2.5rem;
+    padding: 0 0.9rem;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 34px;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .button:hover { border-color: #b8d2dc; background: var(--surface-soft); }
+  .button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .button.warn { background: #fff8ea; border-color: #f0dbb8; color: var(--warn); }
+  .button.danger { background: #fff2f1; border-color: #f0c8c4; color: var(--danger); }
+  .button:disabled { opacity: 0.55; cursor: not-allowed; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.74rem;
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .pill.warn { color: var(--warn); background: #fff8ea; border-color: #f0dbb8; }
+  .pill.ok { color: var(--brand-strong); background: #ecfaf4; border-color: #b8e4d8; }
+
+  .intro {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.1rem;
+    margin-bottom: 0.9rem;
+  }
+  .intro h1 { font-size: clamp(1.25rem, 2.4vw, 1.9rem); line-height: 1.2; }
+  .intro p { color: var(--muted); font-size: 0.9rem; margin-top: 0.25rem; max-width: 72ch; }
+  .intro-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+  @media (max-width: 760px) {
+    .intro { align-items: flex-start; flex-direction: column; }
+    .intro-actions { justify-content: flex-start; }
+  }
+
+  .lock-screen {
+    padding: 1.2rem;
+    display: grid;
+    grid-template-columns: minmax(240px, 420px) 1fr;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  .lock-panel {
+    padding: 1.2rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-soft);
+  }
+  .lock-panel h2 { font-size: 1.15rem; margin-bottom: 0.35rem; }
+  .lock-panel p { color: var(--muted); font-size: 0.88rem; margin-bottom: 0.85rem; }
+  .field { display: grid; gap: 0.3rem; margin-bottom: 0.7rem; }
+  .field label { color: var(--muted); font-size: 0.78rem; font-weight: 600; }
+  .field input, .field select {
+    width: 100%;
+    min-height: 36px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.48rem 0.6rem;
+    font: inherit;
+    background: #fff;
+    color: var(--ink);
+  }
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(18, 94, 145, 0.13);
+  }
+  .prompt {
+    margin-top: 0.7rem;
+    padding: 0.7rem 0.75rem;
+    border: 1px dashed #f0dbb8;
+    background: #fff8ea;
+    border-radius: 8px;
+    color: #74430a;
+    font-size: 0.84rem;
+  }
+  .lock-notes {
+    padding: 1.2rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+  }
+  .lock-notes h3 { font-size: 1rem; margin-bottom: 0.55rem; }
+  .lock-notes ul { padding-left: 1.15rem; color: var(--muted); font-size: 0.88rem; }
+  .lock-notes li + li { margin-top: 0.35rem; }
+  @media (max-width: 860px) { .lock-screen { grid-template-columns: 1fr; } }
+
+  .management { display: none; }
+  .management.unlocked { display: block; }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(210px, 1fr));
+    gap: 0.75rem;
+    align-items: start;
+  }
+  @media (max-width: 1200px) { .board { grid-template-columns: repeat(3, minmax(220px, 1fr)); } }
+  @media (max-width: 760px) { .board { grid-template-columns: 1fr; } }
+  .dept {
+    min-height: 340px;
+    padding: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.78);
+  }
+  .dept.drag-over {
+    border-color: var(--brand);
+    background: #ecfaf4;
+    box-shadow: inset 0 0 0 2px rgba(13, 143, 113, 0.15);
+  }
+  .dept-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.65rem;
+  }
+  .dept h2 { font-size: 0.98rem; }
+  .count {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--muted);
+    font-size: 0.72rem;
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    border-radius: 999px;
+    padding: 0.18rem 0.48rem;
+  }
+  .employee-list {
+    display: grid;
+    gap: 0.55rem;
+    min-height: 250px;
+  }
+  .employee {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.45rem;
+    align-items: start;
+    padding: 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    cursor: grab;
+  }
+  .employee:active { cursor: grabbing; }
+  .employee.dragging { opacity: 0.45; }
+  .emp-code {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.73rem;
+    color: var(--accent);
+  }
+  .emp-name {
+    font-weight: 700;
+    margin-top: 0.12rem;
+    word-break: break-word;
+  }
+  .emp-dept {
+    color: var(--muted);
+    font-size: 0.76rem;
+    margin-top: 0.12rem;
+  }
+  .remove {
+    width: 28px;
+    height: 28px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .remove:hover { color: var(--danger); border-color: #f0c8c4; background: #fff2f1; }
+
+  .add-panel {
+    margin-top: 0.9rem;
+    padding: 0.9rem;
+  }
+  .add-panel h2 { font-size: 1.02rem; margin-bottom: 0.7rem; }
+  .add-grid {
+    display: grid;
+    grid-template-columns: 150px 1fr 180px auto;
+    gap: 0.7rem;
+    align-items: end;
+  }
+  @media (max-width: 760px) { .add-grid { grid-template-columns: 1fr; } }
+  .message {
+    min-height: 1.2em;
+    margin-top: 0.65rem;
+    color: var(--muted);
+    font-size: 0.84rem;
+  }
+  .message.error { color: var(--danger); }
+  .message.ok { color: var(--brand-strong); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">V3 Attendance Console</div>
+  <nav class="topnav" aria-label="Main navigation">
+    <a href="./console">Upload</a>
+    <a href="./management" class="active">Management</a>
+    <a href="/grafana/" target="_blank" rel="noopener">Dashboard ↗</a>
+    <a href="https://rnd.asiakawaii.com/attendance/console" target="_blank" rel="noopener">Console ↗</a>
+  </nav>
+  <div class="toolbar">
+    <span id="dirtyPill" class="pill warn" hidden>Unsaved changes</span>
+    <button id="saveBtn" class="button primary" type="button" disabled>Save</button>
+    <button id="resetBtn" class="button" type="button" disabled>Reset</button>
+    <button id="lockBtn" class="button warn" type="button" hidden>Lock</button>
+  </div>
+</header>
+
+<main class="page">
+  <section class="intro card">
+    <div>
+      <h1>User Management</h1>
+      <p>Drag employees between departments, add new employees, remove cards, and review the unsaved state before saving. This is a browser-only mockup until the backend management API is approved.</p>
+    </div>
+    <div class="intro-actions">
+      <span id="statusPill" class="pill">Locked</span>
+      <span class="pill">Demo password: admin2026</span>
+    </div>
+  </section>
+
+  <section id="lockScreen" class="lock-screen card">
+    <div class="lock-panel">
+      <h2>Password required</h2>
+      <p>Unlock the management board to edit department assignments.</p>
+      <form id="unlockForm">
+        <div class="field">
+          <label for="passwordInput">Password</label>
+          <input id="passwordInput" type="password" autocomplete="current-password" placeholder="admin2026" />
+        </div>
+        <button class="button primary" type="submit">Unlock</button>
+      </form>
+      <div id="lockMessage" class="prompt">Demo password is <strong>admin2026</strong>.</div>
+    </div>
+    <div class="lock-notes">
+      <h3>Mockup behavior</h3>
+      <ul>
+        <li>Password check runs in the browser and is hard-coded for review.</li>
+        <li>Save copies the edited board into memory only; it does not write files yet.</li>
+        <li>Initial data is twelve sample employees across five departments.</li>
+        <li>The real build can replace this with login, roster GET/PUT, employee POST/DELETE, hashed admin storage, and a 30-minute session cookie.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="management" class="management">
+    <div id="board" class="board" aria-live="polite"></div>
+
+    <section class="add-panel card">
+      <h2>+ Add employee</h2>
+      <form id="addForm" class="add-grid">
+        <div class="field">
+          <label for="codeInput">Code</label>
+          <input id="codeInput" placeholder="00001001" />
+        </div>
+        <div class="field">
+          <label for="nameInput">氏名</label>
+          <input id="nameInput" placeholder="山田 太郎" />
+        </div>
+        <div class="field">
+          <label for="deptInput">Department</label>
+          <select id="deptInput"></select>
+        </div>
+        <button class="button primary" type="submit">Add employee</button>
+      </form>
+      <div id="message" class="message"></div>
+    </section>
+  </section>
+</main>
+
+<script>
+(() => {
+  const PASSWORD = "admin2026";
+  const departments = [
+    { id: "sales", label: "営業部" },
+    { id: "dev", label: "開発部" },
+    { id: "admin", label: "管理部" },
+    { id: "manufacturing", label: "製造部" },
+    { id: "unassigned", label: "未配属" },
+  ];
+  const sampleEmployees = [
+    { code: "00001001", name: "佐藤 明", dept: "sales" },
+    { code: "00001002", name: "鈴木 花子", dept: "sales" },
+    { code: "00001003", name: "田中 健", dept: "dev" },
+    { code: "00001004", name: "高橋 美咲", dept: "dev" },
+    { code: "00001005", name: "伊藤 翔", dept: "dev" },
+    { code: "00001006", name: "渡辺 優子", dept: "admin" },
+    { code: "00001007", name: "山本 直樹", dept: "admin" },
+    { code: "00001008", name: "中村 大輔", dept: "manufacturing" },
+    { code: "00001009", name: "小林 彩", dept: "manufacturing" },
+    { code: "00001010", name: "加藤 真", dept: "manufacturing" },
+    { code: "00001011", name: "吉田 莉子", dept: "manufacturing" },
+    { code: "00001012", name: "井上 拓也", dept: "unassigned" },
+  ];
+
+  let savedEmployees = clone(sampleEmployees);
+  let employees = clone(savedEmployees);
+  let unlocked = false;
+  let draggingCode = null;
+
+  const $ = (id) => document.getElementById(id);
+  const board = $("board");
+  const management = $("management");
+  const lockScreen = $("lockScreen");
+  const dirtyPill = $("dirtyPill");
+  const saveBtn = $("saveBtn");
+  const resetBtn = $("resetBtn");
+  const lockBtn = $("lockBtn");
+  const statusPill = $("statusPill");
+  const message = $("message");
+
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function departmentLabel(id) {
+    return departments.find((d) => d.id === id)?.label || "未配属";
+  }
+
+  function isDirty() {
+    return JSON.stringify(employees) !== JSON.stringify(savedEmployees);
+  }
+
+  function setMessage(text, type = "") {
+    message.textContent = text;
+    message.className = `message ${type}`.trim();
+  }
+
+  function updateState() {
+    const dirty = isDirty();
+    dirtyPill.hidden = !dirty;
+    saveBtn.disabled = !unlocked || !dirty;
+    resetBtn.disabled = !unlocked || !dirty;
+    lockBtn.hidden = !unlocked;
+    statusPill.textContent = unlocked ? "Unlocked" : "Locked";
+    statusPill.className = unlocked ? "pill ok" : "pill";
+  }
+
+  function renderDeptOptions() {
+    $("deptInput").innerHTML = departments
+      .map((dept) => `<option value="${dept.id}">${dept.label}</option>`)
+      .join("");
+  }
+
+  function renderBoard() {
+    board.innerHTML = departments.map((dept) => {
+      const members = employees.filter((emp) => emp.dept === dept.id);
+      return `
+        <section class="dept" data-dept="${dept.id}">
+          <div class="dept-head">
+            <h2>${dept.label}</h2>
+            <span class="count">${members.length}</span>
+          </div>
+          <div class="employee-list">
+            ${members.map(renderEmployee).join("") || `<div class="no-data">Drop employee here</div>`}
+          </div>
+        </section>
+      `;
+    }).join("");
+
+    board.querySelectorAll(".employee").forEach((card) => {
+      card.addEventListener("dragstart", () => {
+        draggingCode = card.dataset.code;
+        card.classList.add("dragging");
+      });
+      card.addEventListener("dragend", () => {
+        draggingCode = null;
+        card.classList.remove("dragging");
+      });
+    });
+
+    board.querySelectorAll(".remove").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        employees = employees.filter((emp) => emp.code !== btn.dataset.code);
+        setMessage("Employee removed. Save to commit or Reset to discard.", "");
+        renderBoard();
+      });
+    });
+
+    board.querySelectorAll(".dept").forEach((deptEl) => {
+      deptEl.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        deptEl.classList.add("drag-over");
+      });
+      deptEl.addEventListener("dragleave", () => deptEl.classList.remove("drag-over"));
+      deptEl.addEventListener("drop", (event) => {
+        event.preventDefault();
+        deptEl.classList.remove("drag-over");
+        const targetDept = deptEl.dataset.dept;
+        const emp = employees.find((item) => item.code === draggingCode);
+        if (emp && emp.dept !== targetDept) {
+          emp.dept = targetDept;
+          setMessage(`${emp.name} moved to ${departmentLabel(targetDept)}.`, "");
+          renderBoard();
+        }
+      });
+    });
+
+    updateState();
+  }
+
+  function renderEmployee(emp) {
+    return `
+      <article class="employee" draggable="true" data-code="${emp.code}">
+        <div>
+          <div class="emp-code">${emp.code}</div>
+          <div class="emp-name">${emp.name}</div>
+          <div class="emp-dept">${departmentLabel(emp.dept)}</div>
+        </div>
+        <button class="remove" type="button" data-code="${emp.code}" aria-label="Remove ${emp.name}">×</button>
+      </article>
+    `;
+  }
+
+  $("unlockForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const password = $("passwordInput").value;
+    if (password !== PASSWORD) {
+      $("lockMessage").textContent = "Password did not match. Demo password is admin2026.";
+      return;
+    }
+    unlocked = true;
+    lockScreen.style.display = "none";
+    management.classList.add("unlocked");
+    setMessage("Management board unlocked.", "ok");
+    renderBoard();
+  });
+
+  $("addForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const code = $("codeInput").value.trim();
+    const name = $("nameInput").value.trim();
+    const dept = $("deptInput").value;
+    if (!code || !name) {
+      setMessage("Code and 氏名 are required.", "error");
+      return;
+    }
+    if (employees.some((emp) => emp.code === code)) {
+      setMessage(`Employee code ${code} already exists.`, "error");
+      return;
+    }
+    employees.push({ code, name, dept });
+    $("codeInput").value = "";
+    $("nameInput").value = "";
+    setMessage(`${name} added to ${departmentLabel(dept)}.`, "ok");
+    renderBoard();
+  });
+
+  saveBtn.addEventListener("click", () => {
+    savedEmployees = clone(employees);
+    setMessage("Saved in this browser session. Backend persistence is not wired yet.", "ok");
+    updateState();
+  });
+
+  resetBtn.addEventListener("click", () => {
+    employees = clone(savedEmployees);
+    setMessage("Reset complete. Unsaved edits discarded.", "");
+    renderBoard();
+  });
+
+  lockBtn.addEventListener("click", () => {
+    unlocked = false;
+    $("passwordInput").value = "";
+    management.classList.remove("unlocked");
+    lockScreen.style.display = "grid";
+    setMessage("", "");
+    updateState();
+  });
+
+  renderDeptOptions();
+  renderBoard();
+})();
+</script>
+</body>
+</html>

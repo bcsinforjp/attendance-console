@@ -7,6 +7,11 @@ Format: `YYYY-MM-DD — [area] what changed (why) → files`
 
 ---
 
+## 2026-04-21 — Management GUI mockup on dev branch
+- **[ui]** Added `/management` as a locked User Management mockup with demo password `admin2026`, five department columns, drag-to-reassign employee cards, `+ Add employee`, remove buttons, unsaved-change indicator, Save/Reset controls, and Lock. Save is intentionally browser-only until backend approval. → `static/management.html`, `main.py`
+- **[ui]** Replaced the old top nav in the console with clean links: Upload, Management, Dashboard ↗ (`/grafana/`), and Console ↗ (`rnd.asiakawaii.com`). → `static/console.html`
+- **[docs]** Documented the new management mockup entry point. → `README.md`
+
 ## 2026-04-21 — V3 attendance console naming refresh
 - **[docs]** Renamed the project-facing title from Attendance Operations Console to **V3 Attendance Console** and documented the `/attendance/console`, `/attendance/gantt`, and `/attendance/summary` entry points. → `README.md`, `CHANGELOG.md`
 - **[ui/api]** Updated visible page titles, brand labels, footer copy, and FastAPI metadata to match the V3 console name. → `index.html`, `static/console.html`, `main.py`

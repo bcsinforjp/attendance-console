@@ -946,6 +946,14 @@ async def console_page():
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
+@app.get("/management")
+async def management_page():
+    """Mockup user-management GUI for roster reassignment approval."""
+    return FileResponse(
+        STATIC_DIR / "management.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
 @app.get("/summary")
 async def summary_page():
     """Attendance Summary dashboard — productivity KPIs with target lines,
