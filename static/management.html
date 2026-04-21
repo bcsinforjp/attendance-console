@@ -361,13 +361,13 @@
     cursor: grab;
   }
   .employee.pending {
-    border-color: #f0dbb8;
-    background: #fff8ea;
-    box-shadow: inset 0 0 0 1px rgba(184, 100, 18, 0.08);
+    border-color: #f0c8c4;
+    background: #fff2f1;
+    box-shadow: inset 0 0 0 1px rgba(180, 35, 24, 0.08);
   }
   .employee.pending .emp-code,
-  .employee.pending .emp-name { color: #8b5a08; }
-  .employee.pending .emp-dept { color: #a36b12; }
+  .employee.pending .emp-name { color: var(--danger); }
+  .employee.pending .emp-dept { color: #9f2c24; }
   .employee:active { cursor: grabbing; }
   .employee.dragging { opacity: 0.45; }
   .employee.drop-before { box-shadow: inset 0 3px 0 var(--brand); }
@@ -890,6 +890,7 @@
           draggedItem.section_id = targetSection;
           draggedItem.section_label = sectionLabel(targetSection);
         }
+        draggedItem.pending = true;
         let insertAt = employees.findIndex((item) => item.code === card.dataset.code);
         if (!before) insertAt += 1;
         employees.splice(Math.max(insertAt, 0), 0, draggedItem);
@@ -923,6 +924,7 @@
             const draggedItem = employees.splice(draggedIndex, 1)[0];
             draggedItem.section_id = targetDept;
             draggedItem.section_label = sectionLabel(targetDept);
+            draggedItem.pending = true;
             employees.push(draggedItem);
             setMessage(`${draggedItem.name} moved to ${sectionLabel(targetDept)}.`, "");
             renderBoard();
