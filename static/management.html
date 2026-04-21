@@ -186,6 +186,31 @@
     display: grid;
     gap: 0.9rem;
   }
+  .section-strip {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+  }
+  .section-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-soft);
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.78rem;
+    padding: 0.35rem 0.7rem;
+    cursor: pointer;
+  }
+  .section-chip.active {
+    color: #fff;
+    border-color: transparent;
+  }
+  .section-chip[data-section="1"].active { background: #0d8f71; }
+  .section-chip[data-section="2"].active { background: #125e91; }
   .board-tools {
     display: flex;
     align-items: center;
@@ -290,6 +315,14 @@
     background: #fff;
     cursor: grab;
   }
+  .employee.pending {
+    border-color: #f0dbb8;
+    background: #fff8ea;
+    box-shadow: inset 0 0 0 1px rgba(184, 100, 18, 0.08);
+  }
+  .employee.pending .emp-code,
+  .employee.pending .emp-name { color: #8b5a08; }
+  .employee.pending .emp-dept { color: #a36b12; }
   .employee:active { cursor: grabbing; }
   .employee.dragging { opacity: 0.45; }
   .emp-code {
@@ -319,6 +352,19 @@
     cursor: pointer;
   }
   .remove:hover { color: var(--danger); border-color: #f0c8c4; background: #fff2f1; }
+  .saved-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.35rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.68rem;
+    color: #a36b12;
+    border: 1px solid #f0dbb8;
+    background: #fff8ea;
+    border-radius: 999px;
+    padding: 0.15rem 0.45rem;
+  }
   .no-data {
     grid-column: 1 / -1;
     min-height: 88px;
@@ -340,6 +386,74 @@
     align-items: end;
   }
   @media (max-width: 760px) { .add-grid { grid-template-columns: 1fr; } }
+  .import-panel {
+    margin-top: 0.9rem;
+    padding: 0.9rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-soft);
+  }
+  .import-panel h3 { font-size: 0.98rem; margin-bottom: 0.45rem; }
+  .import-panel p { color: var(--muted); font-size: 0.84rem; }
+  .import-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    align-items: center;
+  }
+  .import-dropzone {
+    margin-top: 0.75rem;
+    padding: 0.8rem 0.9rem;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    background: #fff;
+  }
+  .import-dropzone input { width: 100%; }
+  .import-list {
+    list-style: none;
+    margin-top: 0.75rem;
+    display: grid;
+    gap: 0.45rem;
+    max-height: 260px;
+    overflow: auto;
+  }
+  .import-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.55rem;
+    align-items: center;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+  }
+  .import-item.existing {
+    background: #f4f7f9;
+    color: var(--muted);
+  }
+  .import-item .import-code {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    color: var(--accent);
+  }
+  .import-item.existing .import-code { color: var(--muted); }
+  .import-item .import-name { font-weight: 700; }
+  .import-item .import-note {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.7rem;
+    color: var(--warn);
+    border: 1px solid #f0dbb8;
+    background: #fff8ea;
+    border-radius: 999px;
+    padding: 0.15rem 0.45rem;
+    white-space: nowrap;
+  }
+  .import-item.existing .import-note {
+    color: var(--muted);
+    border-color: var(--line);
+    background: var(--surface-soft);
+  }
   .message {
     min-height: 1.2em;
     margin-top: 0.65rem;
@@ -395,6 +509,10 @@
   <section id="management" class="management">
     <section class="add-panel card">
       <h2>+ Add employee</h2>
+      <div class="section-strip" role="tablist" aria-label="Target department">
+        <button class="section-chip active" type="button" data-section="1">製造１課</button>
+        <button class="section-chip" type="button" data-section="2">製造２課</button>
+      </div>
       <form id="addForm" class="add-grid">
         <div class="field">
           <label for="codeInput">Code</label>
@@ -411,6 +529,25 @@
         <button class="button primary" type="submit">Add employee</button>
       </form>
       <div id="message" class="message"></div>
+
+      <section class="import-panel">
+        <h3>Import from attendance PDF</h3>
+        <p>Upload an attendance PDF to pull names and employee codes, hide already-managed people, and stage selected rows for the chosen department.</p>
+        <div class="import-actions">
+          <label class="button" for="importInput">Choose PDF</label>
+          <input id="importInput" type="file" accept="application/pdf,.pdf" hidden />
+          <button id="importSelectAll" class="button" type="button" disabled>Select all</button>
+          <button id="importClear" class="button" type="button" disabled>Clear</button>
+          <button id="importAdd" class="button primary" type="button" disabled>Add selected</button>
+          <span id="importSummary" class="pill">No PDF loaded</span>
+        </div>
+        <label class="pill" style="margin-top:0.75rem; display:inline-flex; gap:0.4rem; align-items:center;">
+          <input id="showExistingToggle" type="checkbox" />
+          Show already on board
+        </label>
+        <div id="importHint" class="message"></div>
+        <ul id="importList" class="import-list"></ul>
+      </section>
     </section>
 
     <div class="board-tools">
@@ -439,6 +576,10 @@
   let draggingCode = null;
   let dataLoaded = false;
   let searchQuery = "";
+  let selectedSectionId = 1;
+  let importRows = [];
+  let importSelected = new Set();
+  let showExisting = false;
 
   const $ = (id) => document.getElementById(id);
   const board = $("board");
@@ -452,9 +593,36 @@
   const message = $("message");
   const searchInput = $("searchInput");
   const searchMeta = $("searchMeta");
+  const importInput = $("importInput");
+  const importSelectAll = $("importSelectAll");
+  const importClear = $("importClear");
+  const importAdd = $("importAdd");
+  const importSummary = $("importSummary");
+  const importHint = $("importHint");
+  const importList = $("importList");
+  const showExistingToggle = $("showExistingToggle");
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function normalizeImportRecord(record) {
+    return {
+      code: (record.employee_code || record.code || "").trim(),
+      name: (record.name || "").trim(),
+    };
+  }
+
+  function existingCodes() {
+    return new Set(employees.map((emp) => emp.code));
+  }
+
+  function setActiveSection(sectionId) {
+    selectedSectionId = Number(sectionId) || 1;
+    $("deptInput").value = String(selectedSectionId);
+    document.querySelectorAll(".section-chip").forEach((chip) => {
+      chip.classList.toggle("active", Number(chip.dataset.section) === selectedSectionId);
+    });
   }
 
   function sectionLabel(id) {
@@ -467,6 +635,7 @@
       name: record.name,
       section_id: Number(record.section_id) || 1,
       section_label: record.section_label || sectionLabel(record.section_id),
+      pending: Boolean(record.pending),
     };
   }
 
@@ -493,6 +662,7 @@
     $("deptInput").innerHTML = sections
       .map((dept) => `<option value="${dept.id}">${dept.label}</option>`)
       .join("");
+    $("deptInput").value = String(selectedSectionId);
   }
 
   function renderBoard() {
@@ -511,7 +681,9 @@
       : `${employees.length} total`;
 
     board.innerHTML = sections.map((dept) => {
-      const members = filteredEmployees.filter((emp) => Number(emp.section_id) === Number(dept.id));
+      const members = filteredEmployees
+        .filter((emp) => Number(emp.section_id) === Number(dept.id))
+        .sort((a, b) => Number(!!a.pending) - Number(!!b.pending) || a.code.localeCompare(b.code));
       return `
         <section class="dept" data-section="${dept.id}">
           <div class="dept-head">
@@ -569,15 +741,57 @@
 
   function renderEmployee(emp) {
     return `
-      <article class="employee" draggable="true" data-code="${emp.code}">
+      <article class="employee${emp.pending ? " pending" : ""}" draggable="true" data-code="${emp.code}">
         <div>
           <div class="emp-code">${emp.code}</div>
           <div class="emp-name">${emp.name}</div>
           <div class="emp-dept">${sectionLabel(emp.section_id)}</div>
+          ${emp.pending ? '<div class="saved-pill">not saved</div>' : ""}
         </div>
         <button class="remove" type="button" data-code="${emp.code}" aria-label="Remove ${emp.name}">×</button>
       </article>
     `;
+  }
+
+  function renderImportList() {
+    const known = existingCodes();
+    const rows = importRows.filter((row) => showExisting || !known.has(row.code));
+    importSummary.textContent = importRows.length
+      ? `${rows.length} shown / ${importRows.length} loaded`
+      : "No PDF loaded";
+    importHint.className = "message";
+    importSelectAll.disabled = rows.length === 0;
+    importClear.disabled = importRows.length === 0;
+    importAdd.disabled = importSelected.size === 0;
+
+    importList.innerHTML = rows.map((row) => {
+      const isExisting = known.has(row.code);
+      const checked = importSelected.has(row.code);
+      const disabled = isExisting ? "disabled" : "";
+      return `
+        <li class="import-item${isExisting ? " existing" : ""}">
+          <input type="checkbox" data-code="${row.code}" ${checked ? "checked" : ""} ${disabled} />
+          <div>
+            <div class="import-code">${row.code}</div>
+            <div class="import-name">${row.name}</div>
+          </div>
+          <span class="import-note">${isExisting ? "already on board" : "ready to add"}</span>
+        </li>
+      `;
+    }).join("") || `<li class="no-data">No importable rows yet</li>`;
+
+    importList.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+      box.addEventListener("change", () => {
+        const code = box.dataset.code;
+        if (box.checked) importSelected.add(code);
+        else importSelected.delete(code);
+        renderImportList();
+      });
+    });
+
+    importHint.textContent = importRows.length
+      ? "Rows already in the board stay hidden unless you show them again."
+      : "Upload a PDF to load import candidates.";
   }
 
   searchInput.addEventListener("input", () => {
@@ -602,10 +816,12 @@
       setMessage("Using fallback empty management data. Backend bootstrap was not available.", "error");
     }
     renderDeptOptions();
+    setActiveSection(selectedSectionId);
     if (employees.length) {
       setMessage("Management board loaded from employee_roster.json and sections.json.", "ok");
     }
     renderBoard();
+    renderImportList();
   }
 
   $("unlockForm").addEventListener("submit", async (event) => {
@@ -644,6 +860,7 @@
       name,
       section_id: sectionId,
       section_label: sectionLabel(sectionId),
+      pending: true,
     });
     $("codeInput").value = "";
     $("nameInput").value = "";
@@ -652,15 +869,18 @@
   });
 
   saveBtn.addEventListener("click", () => {
+    employees = employees.map((emp) => ({ ...emp, pending: false }));
     savedEmployees = clone(employees);
     setMessage("Saved in this browser session. Backend persistence is not wired yet.", "ok");
     updateState();
+    renderBoard();
   });
 
   resetBtn.addEventListener("click", () => {
     employees = clone(savedEmployees);
     setMessage("Reset complete. Unsaved edits discarded.", "");
     renderBoard();
+    renderImportList();
   });
 
   lockBtn.addEventListener("click", () => {
@@ -672,7 +892,103 @@
     updateState();
   });
 
+  document.querySelectorAll(".section-chip").forEach((chip) => {
+    chip.addEventListener("click", () => setActiveSection(chip.dataset.section));
+  });
+
+  $("deptInput").addEventListener("change", () => {
+    selectedSectionId = Number($("deptInput").value) || 1;
+    setActiveSection(selectedSectionId);
+  });
+
+  showExistingToggle.addEventListener("change", () => {
+    showExisting = showExistingToggle.checked;
+    renderImportList();
+  });
+
+  importClear.addEventListener("click", () => {
+    importRows = [];
+    importSelected = new Set();
+    importInput.value = "";
+    renderImportList();
+  });
+
+  importSelectAll.addEventListener("click", () => {
+    const known = existingCodes();
+    importSelected = new Set(
+      importRows
+        .filter((row) => showExisting || !known.has(row.code))
+        .filter((row) => !known.has(row.code))
+        .map((row) => row.code),
+    );
+    renderImportList();
+  });
+
+  importAdd.addEventListener("click", () => {
+    const known = existingCodes();
+    const toAdd = importRows.filter((row) => importSelected.has(row.code) && !known.has(row.code));
+    if (toAdd.length === 0) {
+      setMessage("Select at least one new employee to add.", "error");
+      return;
+    }
+    toAdd.forEach((row) => {
+      employees.push({
+        code: row.code,
+        name: row.name,
+        section_id: selectedSectionId,
+        section_label: sectionLabel(selectedSectionId),
+        pending: true,
+      });
+    });
+    importSelected = new Set();
+    setMessage(`${toAdd.length} employee${toAdd.length === 1 ? "" : "s"} added to ${sectionLabel(selectedSectionId)}.`, "ok");
+    renderBoard();
+    renderImportList();
+  });
+
+  importInput.addEventListener("change", async () => {
+    const files = Array.from(importInput.files || []);
+    if (files.length === 0) return;
+    importRows = [];
+    importSelected = new Set();
+    importSummary.textContent = "Loading...";
+    importHint.textContent = "";
+    try {
+      const response = await fetch("./api/management/import-pdf", {
+        method: "POST",
+        body: (() => {
+          const single = new FormData();
+          single.append("file", files[0]);
+          return single;
+        })(),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      importRows = rows
+        .map(normalizeImportRecord)
+        .filter((row) => row.code && row.name);
+      importHint.textContent = data.message
+        ? data.message
+        : `${importRows.length} rows loaded from PDF.`;
+      if (!importRows.length && !data.message) {
+        importHint.textContent = "No importable rows found in the PDF.";
+      }
+      renderImportList();
+    } catch (error) {
+      importHint.textContent = `Import failed: ${error.message || error}`;
+      importHint.className = "message error";
+    }
+  });
+
   loadData();
+
+  window.addEventListener("beforeunload", (event) => {
+    if (!isDirty()) return;
+    event.preventDefault();
+    event.returnValue = "";
+    return "";
+  });
 })();
 </script>
 </body>

@@ -980,6 +980,39 @@ async def management_bootstrap():
         "employees": employees,
     }
 
+@app.post("/api/management/import-pdf")
+async def management_import_pdf(file: UploadFile = File(...)):
+    """Parse an attendance PDF and return raw employee rows for import selection."""
+    original_name, file_path, _content = await save_uploaded_pdf(file)
+    try:
+        raw_records = parse_pdf_data(file_path)
+    except ValueError as exc:
+        return {
+            "filename": original_name,
+          "record_count": 0,
+          "rows": [],
+          "message": str(exc),
+      }
+    seen_codes: set[str] = set()
+    rows: list[dict[str, str]] = []
+
+    for record in raw_records:
+        code = (record.get("employee_code") or "").strip()
+        name = (record.get("name") or "").strip()
+        if not is_employee_code(code) or not name or code in seen_codes:
+            continue
+        seen_codes.add(code)
+        rows.append({
+            "employee_code": code,
+            "name": name,
+        })
+
+    return {
+        "filename": original_name,
+        "record_count": len(rows),
+        "rows": rows,
+    }
+
 @app.get("/summary")
 async def summary_page():
     """Attendance Summary dashboard — productivity KPIs with target lines,
