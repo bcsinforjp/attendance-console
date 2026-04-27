@@ -99,6 +99,38 @@
     .clockbox .now .tm { font-size: 0.85rem; }
   }
 
+  /* ===== Beta / test-mode banner ===== */
+  .beta-banner {
+    display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap;
+    padding: 0.55rem 1rem;
+    background: linear-gradient(90deg, #fff7e6 0%, #fff2d1 100%);
+    border-bottom: 1px solid #f0c67a;
+    color: #6a4a12;
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+  .beta-banner__badge {
+    flex: 0 0 auto;
+    padding: 0.18rem 0.5rem;
+    background: #c6830f;
+    color: #fff;
+    border-radius: 4px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .beta-banner__text b { color: #4a3209; }
+  .beta-banner__ja {
+    color: #6a4a12;
+    font-family: "Noto Sans JP", "Hiragino Sans", sans-serif;
+    margin-left: 0.25rem;
+    margin-right: 0.35rem;
+  }
+  @media (max-width: 680px) {
+    .beta-banner { font-size: 0.75rem; padding: 0.5rem 0.75rem; }
+  }
+
   .page { width: min(1200px, 100%); margin: 1.2rem auto 2.5rem; padding: 0 0.9rem; }
 
   .card {
@@ -215,6 +247,53 @@
     color: var(--muted);
   }
   .file-item .tag.ok { color: var(--brand-strong); border-color: #b8e4d8; background: #ecfaf4; }
+
+  /* ===== Tab 3 PDF preview (pack count + フルキャスト rows) ===== */
+  .pack-preview { display: block; padding: 0.75rem 0.9rem; }
+  .pack-preview__header { display: flex; align-items: center; gap: 0.6rem; }
+  .pack-preview__header .name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pack-preview__error {
+    margin-top: 0.4rem;
+    padding: 0.4rem 0.55rem;
+    background: #fff4f3; border: 1px solid #f0c8c4;
+    border-radius: 4px; color: #8a2a20; font-size: 0.78rem;
+  }
+  .pack-preview__section {
+    margin-top: 0.55rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: #fbfcfd;
+  }
+  .pack-preview__title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--brand-strong);
+    margin-bottom: 0.35rem;
+  }
+  .pack-preview__body { font-size: 0.82rem; }
+  .pack-preview__body .muted { color: var(--muted); font-size: 0.76rem; margin-top: 0.2rem; }
+  .pack-preview__choice {
+    display: flex; gap: 0.8rem; margin-top: 0.4rem;
+    font-size: 0.78rem; color: #444;
+  }
+  .pack-preview__choice label { display: flex; align-items: center; gap: 0.25rem; cursor: pointer; }
+  .pack-preview__table {
+    width: 100%; border-collapse: collapse; margin-top: 0.3rem;
+    font-size: 0.76rem; font-family: "IBM Plex Mono", monospace;
+  }
+  .pack-preview__table th, .pack-preview__table td {
+    border-bottom: 1px solid #eee;
+    padding: 0.25rem 0.35rem;
+    text-align: left;
+  }
+  .pack-preview__table th { color: var(--muted); font-weight: 600; }
+  .pack-preview__table .next-day-badge {
+    display: inline-block; margin-left: 0.3rem;
+    padding: 0 0.3rem; border-radius: 3px;
+    background: #c6e1f4; color: #1e4a70;
+    font-size: 0.65rem; letter-spacing: 0.04em;
+  }
 
   /* ===== PDF date banner (Tab 1 — highlights the working-day date found inside PDF) ===== */
   .pdf-date-banner {
@@ -372,6 +451,32 @@
     border: 1px solid var(--line); border-radius: 8px; background: #fff;
     width: 100%;
   }
+  .fc-row .leave-wrap { position: relative; }
+  .fc-row .leave-wrap .next-day-badge {
+    position: absolute;
+    right: 6px; top: 50%; transform: translateY(-50%);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.68rem; font-weight: 600;
+    color: #fff; background: var(--accent);
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    pointer-events: none;
+    letter-spacing: 0.04em;
+  }
+  .fc-row .leave-wrap .next-day-badge.hidden { display: none; }
+  .fc-row.overnight { border-color: #c6e1f4; background: #f4faff; }
+  .fc-row.invalid { border-color: #f0c8c4; background: #fff4f3; }
+  .fc-row.invalid input.start, .fc-row.invalid input.leave {
+    border-color: var(--danger); background: #fff;
+  }
+  .fc-row-error {
+    grid-column: 1 / -1;
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--danger);
+    font-family: "IBM Plex Mono", monospace;
+  }
+  .fc-row-error.hidden { display: none; }
   .fc-row .company {
     font-weight: 600; color: var(--ink);
     background: #fff; text-align: center;
@@ -493,6 +598,18 @@
   </div>
 </header>
 
+<div class="beta-banner" role="status" aria-live="polite">
+  <span class="beta-banner__badge">BETA</span>
+  <span class="beta-banner__text">
+    <b>This app is currently under test and data verification.</b>
+    <span class="beta-banner__ja">本アプリは現在テスト・データ検証中です。</span>
+    Please double-check results before relying on them.
+    <span class="beta-banner__ja">ご利用の際は結果をご確認ください。</span>
+    <b>Test period ends 2026-04-30.</b>
+    <span class="beta-banner__ja">テスト期間は 2026年4月30日 までです。</span>
+  </span>
+</div>
+
 <main class="page">
 
   <nav class="console-tabs card" role="tablist">
@@ -570,7 +687,7 @@
   <!-- ============================================================ -->
   <section id="tab-fullcast" class="card panel">
     <h2>フルキャスト 手動入力</h2>
-    <p class="lede">Manual entry for temp-staff buckets. Company is always <strong>フルキャスト</strong>. Start defaults to 19:00 per row. Leave times at or before 06:00 are treated as the next morning. <span class="mono" style="color:var(--accent);">Shift date</span> auto-selects today; if it's after midnight (before noon) it auto-shifts to yesterday. Selecting a date reloads its saved rows from the database.</p>
+    <p class="lede">Manual entry for temp-staff buckets. Company is always <strong>フルキャスト</strong>. <strong>Shift window: 18:00 → next-day 10:00</strong> — start must be 18:00–22:00, leave up to 10:00 next morning. Leave ≤ start auto-marks as <span class="mono" style="color:var(--accent);">翌日</span>. Rows outside the window are highlighted in red and blocked from saving. <span class="mono" style="color:var(--accent);">Shift date</span> auto-selects today; after midnight (before noon) it auto-shifts to yesterday. Selecting a date reloads saved rows from the database.</p>
 
     <div class="fields" style="grid-template-columns: 1fr 2fr;">
       <div class="field">
@@ -711,9 +828,19 @@ const BASE = (() => {
 })();
 const api = (p) => BASE + (p.startsWith("/") ? p : "/" + p);
 
+const esc = (value) => String(value ?? "").replace(/[&<>"'`=\/]/g, (c) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;",
+  "'": "&#39;", "`": "&#96;", "=": "&#61;", "/": "&#47;",
+}[c]));
+
 /* ----------------- Date helpers ----------------- */
 function today() { return new Date(); }
-function toISO(d) { return d.toISOString().slice(0, 10); }
+function toISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function addDays(d, delta) { const n = new Date(d); n.setDate(n.getDate() + delta); return n; }
 
 // Shift/Prod date rule — single source of truth for both values.
@@ -1031,27 +1158,109 @@ $fcDate.value = shiftDateForNow();
 // 10:00 we're still inside yesterday's shift cycle (which started 10:00 prior).
 $fcHint.textContent = `auto: ${$fcDate.value}${$fcDate.value === toISO(today()) ? " (today — after 10:00)" : " (yesterday — before 10:00, still inside prior cycle)"}`;
 
+// Factory shift window — one source of truth, used by the time inputs AND validators.
+const SHIFT_START_MIN = "18:00";              // earliest allowed start
+const SHIFT_START_MAX = "22:00";              // latest allowed start
+const SHIFT_LEAVE_NEXT_DAY_MAX = "10:00";     // latest leave time when overnight
+const SHIFT_MAX_HOURS = 16;                   // absolute duration cap
+
 function buildFcRow(row = {}) {
   const div = document.createElement("div");
   div.className = "fc-row";
+  const company = String(row.company || "フルキャスト").replace(/"/g, "&quot;");
+  const headcount = Number.isFinite(+row.headcount) && +row.headcount > 0 ? +row.headcount : 1;
+  const startVal = /^\d{2}:\d{2}$/.test(row.start_time || "") ? row.start_time : "19:00";
+  const leaveVal = /^\d{2}:\d{2}$/.test(row.leave_time || "") ? row.leave_time : "";
   div.innerHTML = `
-    <input class="company" type="text" value="${row.company || "フルキャスト"}" readonly />
-    <input class="count" type="number" min="1" value="${row.headcount || 1}" />
-    <input class="start" type="time" value="${row.start_time || "19:00"}" step="60" />
-    <input class="leave" type="time" value="${row.leave_time || ""}" step="60" />
-    <button type="button" class="del" title="Remove row">✕</button>`;
+    <input class="company" type="text" value="${company}" readonly />
+    <input class="count" type="number" min="1" value="${headcount}" />
+    <input class="start" type="time" value="${startVal}" step="60"
+           min="${SHIFT_START_MIN}" max="${SHIFT_START_MAX}"
+           title="Shift start: ${SHIFT_START_MIN}–${SHIFT_START_MAX}" />
+    <div class="leave-wrap">
+      <input class="leave" type="time" value="${leaveVal}" step="60"
+             title="Leave: up to ${SHIFT_LEAVE_NEXT_DAY_MAX} next morning" />
+      <span class="next-day-badge hidden">翌日</span>
+    </div>
+    <button type="button" class="del" title="Remove row">✕</button>
+    <div class="fc-row-error hidden"></div>`;
+  const initFlag = typeof row.leave_next_day === "boolean"
+    ? row.leave_next_day
+    : detectOvernight(startVal, leaveVal);
+  div.dataset.nextDay = initFlag ? "1" : "0";
+  applyOvernightVisual(div);
+  validateShiftRow(div);
   div.querySelector(".del").addEventListener("click", () => { div.remove(); updateFcTotals(); });
-  div.querySelectorAll("input").forEach(i => i.addEventListener("input", updateFcTotals));
+  // Clamp headcount to ≥ 1 on every keystroke — HTML `min="1"` alone is only
+  // checked on form submit, but the row isn't inside a form so the attribute
+  // wouldn't block negatives. Rewriting the value here prevents -5 from ever
+  // reaching the totals calc or the POST payload.
+  const countInput = div.querySelector(".count");
+  countInput.addEventListener("input", () => {
+    const raw = countInput.value;
+    if (raw === "") return;   // let the user clear mid-edit
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 1) countInput.value = "1";
+    else if (n > 999)              countInput.value = "999";
+  });
+  div.querySelectorAll("input").forEach(i => i.addEventListener("input", () => {
+    // Auto-detect overnight: when leave ≤ start, the shift must cross midnight.
+    const s = div.querySelector(".start").value;
+    const l = div.querySelector(".leave").value;
+    div.dataset.nextDay = detectOvernight(s, l) ? "1" : "0";
+    applyOvernightVisual(div);
+    validateShiftRow(div);
+    updateFcTotals();
+  }));
   return div;
+}
+
+function detectOvernight(startHHMM, leaveHHMM) {
+  if (!/^\d{1,2}:\d{2}$/.test(startHHMM) || !/^\d{1,2}:\d{2}$/.test(leaveHHMM)) return false;
+  const [sh, sm] = startHHMM.split(":").map(Number);
+  const [lh, lm] = leaveHHMM.split(":").map(Number);
+  return (lh * 60 + lm) <= (sh * 60 + sm);
+}
+
+function applyOvernightVisual(div) {
+  const badge = div.querySelector(".next-day-badge");
+  const on = div.dataset.nextDay === "1";
+  if (badge) badge.classList.toggle("hidden", !on);
+  div.classList.toggle("overnight", on);
+}
+
+// Returns {ok: bool, reason: string}. Also applies the .invalid class + error text.
+function validateShiftRow(div) {
+  const s = div.querySelector(".start").value;
+  const l = div.querySelector(".leave").value;
+  const nd = div.dataset.nextDay === "1";
+  const errEl = div.querySelector(".fc-row-error");
+  let reason = "";
+  if (s && l) {
+    if (s < SHIFT_START_MIN || s > SHIFT_START_MAX) {
+      reason = `Start must be between ${SHIFT_START_MIN} and ${SHIFT_START_MAX} (shift window).`;
+    } else if (nd && l > SHIFT_LEAVE_NEXT_DAY_MAX) {
+      reason = `Next-day leave must be ${SHIFT_LEAVE_NEXT_DAY_MAX} or earlier (shift ends by 10:00).`;
+    } else {
+      const hours = computeRowHours(s, l, nd);
+      if (hours <= 0) reason = "Leave must be after start (or mark as next day).";
+      else if (hours > SHIFT_MAX_HOURS) reason = `Shift cannot exceed ${SHIFT_MAX_HOURS} hours (got ${hours.toFixed(2)}).`;
+    }
+  }
+  const ok = !reason;
+  div.classList.toggle("invalid", !!reason);
+  errEl.textContent = reason;
+  errEl.classList.toggle("hidden", ok);
+  return { ok, reason };
 }
 function addFcRow(data) { $fcRows.appendChild(buildFcRow(data)); updateFcTotals(); }
 function clearFcRows() { $fcRows.innerHTML = ""; }
 
-function computeRowHours(startHHMM, leaveHHMM) {
+function computeRowHours(startHHMM, leaveHHMM, nextDay) {
   if (!startHHMM || !leaveHHMM) return 0;
   const [sh, sm] = startHHMM.split(":").map(Number);
   let [lh, lm] = leaveHHMM.split(":").map(Number);
-  if (lh <= 6) lh += 24;
+  if (nextDay) lh += 24;
   const sMin = sh * 60 + sm;
   const lMin = lh * 60 + lm;
   return lMin <= sMin ? 0 : (lMin - sMin) / 60;
@@ -1062,7 +1271,8 @@ function updateFcTotals() {
     const n = parseInt(row.querySelector(".count").value || "0", 10) || 0;
     const s = row.querySelector(".start").value;
     const l = row.querySelector(".leave").value;
-    const h = computeRowHours(s, l);
+    const nd = row.dataset.nextDay === "1";
+    const h = computeRowHours(s, l, nd);
     people += n; hours += n * h;
   }
   document.getElementById("fcTotalPeople").innerHTML = `${people} <small>名</small>`;
@@ -1112,12 +1322,34 @@ document.getElementById("btnClearFc").addEventListener("click", () => {
 
 document.getElementById("btnConfirmFc").addEventListener("click", async () => {
   clearMsg("msgFc");
-  const rows = [...$fcRows.querySelectorAll(".fc-row")].map(r => ({
-    company: "フルキャスト",
-    headcount: parseInt(r.querySelector(".count").value || "0", 10),
-    start_time: r.querySelector(".start").value,
-    leave_time: r.querySelector(".leave").value,
-  })).filter(r => r.headcount > 0 && r.start_time && r.leave_time);
+  const domRows = [...$fcRows.querySelectorAll(".fc-row")];
+  const badRows = [];
+  const rows = [];
+  domRows.forEach((r, idx) => {
+    const v = validateShiftRow(r);
+    const start_time = r.querySelector(".start").value;
+    const leave_time = r.querySelector(".leave").value;
+    const leave_next_day = r.dataset.nextDay === "1";
+    const headcount = parseInt(r.querySelector(".count").value || "0", 10);
+    if (!v.ok || !start_time || !leave_time || headcount <= 0) {
+      if (start_time || leave_time || headcount > 0) {
+        badRows.push(`row ${idx + 1}: ${v.reason || "missing fields"}`);
+      }
+      return;
+    }
+    rows.push({
+      company: "フルキャスト",
+      headcount,
+      start_time,
+      leave_time,
+      leave_next_day,
+      hours_per_person: computeRowHours(start_time, leave_time, leave_next_day),
+    });
+  });
+  if (badRows.length) {
+    showMsg("msgFc", "error", `Fix these before saving: ${badRows.join(" | ")}`);
+    return;
+  }
   if (rows.length === 0) {
     showMsg("msgFc", "error", "Add at least one row with a valid count, start, and leave time.");
     return;
@@ -1150,6 +1382,16 @@ loadFcFromDb($fcDate.value);
    ================================================================ */
 const $packDate  = document.getElementById("packDate");
 const $packCount = document.getElementById("packCount");
+// Clamp pack count to [0, 100000] on input so -9999 or garbage never makes it
+// to the POST. The server also rejects negatives, but clamping client-side
+// gives immediate feedback instead of a round-trip 400.
+$packCount.addEventListener("input", () => {
+  const raw = $packCount.value;
+  if (raw === "") return;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0) $packCount.value = "0";
+  else if (n > 100000)              $packCount.value = "100000";
+});
 const $packNote  = document.getElementById("packNote");
 const $packHint  = document.getElementById("packDateHint");
 const $packDbStatus = document.getElementById("packDbStatus");
@@ -1206,40 +1448,161 @@ document.querySelectorAll("#packSeg button").forEach(b => b.addEventListener("cl
   document.getElementById("segPdf").classList.toggle("hidden", b.dataset.seg !== "pdf");
 }));
 
-const packState = { files: [], extracted: [] };
+const packState = { files: [], extracted: [], choices: {}, extracting: false };
 const $packDz = document.getElementById("packDz");
 const $packInput = document.getElementById("packPdfInput");
 const $packList = document.getElementById("packList");
+
+// Default intent per (date, section). section ∈ {"pack","fullcast"}.
+// Value is "skip" | "overwrite". If no existing row, "overwrite" means "insert fresh".
+function choiceKey(date, section) { return `${date}::${section}`; }
+function getChoice(date, section, fallback) {
+  return packState.choices[choiceKey(date, section)] || fallback;
+}
+function setChoice(date, section, value) {
+  packState.choices[choiceKey(date, section)] = value;
+}
+
 function renderPackList() {
   $packList.innerHTML = "";
   for (const f of packState.files) {
-    const meta = packState.extracted.find(x => x.filename === f.name);
+    const meta = packState.extracted.find(x => x.source_filename === f.name || x.filename === f.name);
     const li = document.createElement("li");
-    li.className = "file-item";
-    const tag = meta?.record_date ? `${meta.record_date} · ${meta.number_of_packs ?? "?"} packs` : "pdf";
-    li.innerHTML = `
-      <span class="name">${f.name}</span>
-      <span class="size">${fmtBytes(f.size)}</span>
-      <span class="tag ${meta?.record_date ? "ok" : ""}">${tag}</span>`;
+    li.className = "file-item pack-preview";
+
+    const date = meta?.record_date || null;
+    const shiftDate = meta?.shift_date || null;
+    const packs = meta?.number_of_packs ?? null;
+    const fullcastRows = meta?.fullcast_rows || [];
+    const existingPack = meta?.existing_pack || null;
+    const existingFc = meta?.existing_fullcast || [];
+
+    const tag = date ? `${date} · ${packs ?? "?"} packs` : "pdf";
+    const dateNote = (shiftDate && date && shiftDate !== date)
+      ? `PDF shift date ${shiftDate} → saving under prod date <b>${esc(date)}</b> (+1 day)`
+      : "";
+    const parseError = meta?.parse_error || meta?.error || "";
+
+    const header = `
+      <div class="pack-preview__header">
+        <span class="name">${esc(f.name)}</span>
+        <span class="size">${fmtBytes(f.size)}</span>
+        <span class="tag ${date ? "ok" : ""}">${esc(tag)}</span>
+      </div>
+      ${parseError ? `<div class="pack-preview__error">${esc(parseError)}</div>` : ""}
+    `;
+
+    let packBlock = "";
+    if (date && packs != null) {
+      const choice = getChoice(date, "pack", existingPack ? "overwrite" : "overwrite");
+      const dbNote = existingPack
+        ? `DB has <b>${Number(existingPack.number_of_packs).toLocaleString()}</b> packs already`
+        : "No DB entry for this date yet";
+      packBlock = `
+        <div class="pack-preview__section">
+          <div class="pack-preview__title">Daily packs</div>
+          <div class="pack-preview__body">
+            <div>PDF: <b>${Number(packs).toLocaleString()}</b> packs for ${esc(date)}</div>
+            ${dateNote ? `<div class="muted">${dateNote}</div>` : ""}
+            <div class="muted">${dbNote}</div>
+            ${existingPack ? `
+              <div class="pack-preview__choice" data-date="${esc(date)}" data-section="pack">
+                <label><input type="radio" name="ch-pack-${esc(date)}" value="overwrite" ${choice === "overwrite" ? "checked" : ""}/> Overwrite</label>
+                <label><input type="radio" name="ch-pack-${esc(date)}" value="skip" ${choice === "skip" ? "checked" : ""}/> Skip</label>
+              </div>` : ""}
+          </div>
+        </div>`;
+    }
+
+    let fcBlock = "";
+    if (date && fullcastRows.length > 0) {
+      const choice = getChoice(date, "fullcast", existingFc.length ? "overwrite" : "overwrite");
+      const dbNote = existingFc.length
+        ? `DB has <b>${existingFc.length}</b> フルキャスト row(s) for this date`
+        : "No フルキャスト rows in DB for this date";
+      const rowsHtml = fullcastRows.map(r => `
+        <tr>
+          <td>${esc(r.company || "フルキャスト")}</td>
+          <td>${esc(r.headcount)}名</td>
+          <td>${esc(r.start_time)}</td>
+          <td>${esc(r.leave_time)}${r.leave_next_day ? ' <span class="next-day-badge">翌日</span>' : ""}</td>
+          <td>${esc(r.hours_per_person)}h</td>
+          <td>${esc(r.total_hours)}h</td>
+        </tr>`).join("");
+      fcBlock = `
+        <div class="pack-preview__section">
+          <div class="pack-preview__title">フルキャスト rows (${fullcastRows.length})</div>
+          <div class="pack-preview__body">
+            <table class="pack-preview__table">
+              <thead><tr><th>Company</th><th>Head</th><th>Start</th><th>Leave</th><th>Hrs/p</th><th>Total</th></tr></thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+            <div class="muted">${dbNote}</div>
+            ${existingFc.length ? `
+              <div class="pack-preview__choice" data-date="${esc(date)}" data-section="fullcast">
+                <label><input type="radio" name="ch-fc-${esc(date)}" value="overwrite" ${choice === "overwrite" ? "checked" : ""}/> Overwrite (replace all rows for this date)</label>
+                <label><input type="radio" name="ch-fc-${esc(date)}" value="skip" ${choice === "skip" ? "checked" : ""}/> Skip</label>
+              </div>` : ""}
+          </div>
+        </div>`;
+    }
+
+    li.innerHTML = header + packBlock + fcBlock;
     $packList.appendChild(li);
   }
+
+  // Wire up choice radios after insertion.
+  $packList.querySelectorAll(".pack-preview__choice").forEach(div => {
+    const date = div.dataset.date;
+    const section = div.dataset.section;
+    div.querySelectorAll("input[type=radio]").forEach(inp => {
+      inp.addEventListener("change", () => setChoice(date, section, inp.value));
+    });
+  });
 }
+const $btnConfirmPack = document.getElementById("btnConfirmPack");
+function setPackExtracting(on) {
+  packState.extracting = on;
+  $btnConfirmPack.disabled = on;
+  $btnConfirmPack.textContent = on ? "Extracting…" : "Confirm & Save →";
+}
+
+const PACK_BATCH_SIZE = 8;  // keep each request well under CF's 100s gateway timeout
+
 $packInput.addEventListener("change", async e => {
   packState.files = [...e.target.files];
+  packState.choices = {};
+  packState.extracted = [];
   renderPackList();
   if (packState.files.length === 0) return;
-  showMsg("msgPack", "info", "Extracting date + pack count from PDF(s)…");
-  const form = new FormData();
-  for (const f of packState.files) form.append("files", f);
+  setPackExtracting(true);
+  const total = packState.files.length;
+  showMsg("msgPack", "info", `Extracting ${total} PDF(s)…`);
+
   try {
-    const res = await fetch(api("/api/daily-packs/extract-pdf-multi"), { method: "POST", body: form });
-    if (!res.ok) throw new Error(await res.text());
-    const j = await res.json();
-    packState.extracted = j.results || [];
-    renderPackList();
-    showMsg("msgPack", "success", `Extracted ${packState.extracted.length} entries. Click Confirm to save.`);
+    for (let i = 0; i < total; i += PACK_BATCH_SIZE) {
+      const chunk = packState.files.slice(i, i + PACK_BATCH_SIZE);
+      showMsg("msgPack", "info",
+        `Extracting ${Math.min(i + PACK_BATCH_SIZE, total)}/${total} PDF(s)…`);
+      const form = new FormData();
+      for (const f of chunk) form.append("files", f);
+      const res = await fetch(api("/api/daily-packs/extract-pdf-multi"), { method: "POST", body: form });
+      if (!res.ok) {
+        const text = await res.text();
+        const snippet = text.length > 200 ? text.slice(0, 200) + "…" : text;
+        throw new Error(`Batch ${Math.floor(i / PACK_BATCH_SIZE) + 1}: ${snippet}`);
+      }
+      const j = await res.json();
+      packState.extracted.push(...(j.results || []));
+      renderPackList();
+    }
+    const fcCount = packState.extracted.reduce((n, x) => n + ((x.fullcast_rows || []).length), 0);
+    showMsg("msgPack", "success",
+      `Extracted ${packState.extracted.length} file(s), ${fcCount} フルキャスト row(s). Review and Confirm to save.`);
   } catch (err) {
     showMsg("msgPack", "error", "Extraction failed: " + (err.message || err));
+  } finally {
+    setPackExtracting(false);
   }
 });
 $packDz.addEventListener("dragover",  e => { e.preventDefault(); $packDz.classList.add("dragover"); });
@@ -1251,7 +1614,7 @@ $packDz.addEventListener("drop", e => {
 });
 
 document.getElementById("btnClearPack").addEventListener("click", () => {
-  packState.files = []; packState.extracted = [];
+  packState.files = []; packState.extracted = []; packState.choices = {};
   $packInput.value = "";
   $packDate.value = productionDateForNow();
   $packHint.textContent = `auto: ${$packDate.value}`;
@@ -1265,9 +1628,16 @@ document.getElementById("btnConfirmPack").addEventListener("click", async () => 
   const activeSeg = document.querySelector("#packSeg button.active")?.dataset.seg || "manual";
   try {
     if (activeSeg === "manual") {
+      const packsNum = parseInt($packCount.value || "0", 10);
+      if (!Number.isFinite(packsNum) || packsNum < 0) {
+        throw new Error("Number of packs must be a non-negative integer.");
+      }
+      if (packsNum > 100000) {
+        throw new Error("Number of packs exceeds the 100,000 sanity cap.");
+      }
       const payload = {
         record_date: $packDate.value,
-        number_of_packs: parseInt($packCount.value || "0", 10),
+        number_of_packs: packsNum,
         note: $packNote.value || null,
       };
       if (!payload.record_date) throw new Error("Pick a production date.");
@@ -1284,19 +1654,57 @@ document.getElementById("btnConfirmPack").addEventListener("click", async () => 
       showMsg("msgPack", "success",
         `Saved ${payload.number_of_packs.toLocaleString()} packs for ${payload.record_date}. Opening Tab 4…`);
     } else {
-      if (packState.extracted.length === 0) throw new Error("Upload PDF(s) first.");
-      const entries = packState.extracted
+      if (packState.extracting) throw new Error("Still extracting — please wait a moment.");
+      if (packState.files.length === 0) throw new Error("Drop or pick PDF(s) first.");
+      if (packState.extracted.length === 0) throw new Error("Extraction did not return any data — check the PDF and try again.");
+
+      // Pack entries — skip any date the user marked "skip".
+      const packEntries = packState.extracted
         .filter(x => x.record_date && x.number_of_packs != null)
-        .map(x => ({ record_date: x.record_date, number_of_packs: x.number_of_packs, note: `auto from ${x.filename}` }));
-      if (entries.length === 0) throw new Error("No valid entries found in PDFs.");
-      const res = await fetch(api("/api/daily-packs/bulk"), {
-        method: "POST", headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ entries }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const j = await res.json();
-      showMsg("msgPack", "success",
-        `Saved ${j.saved}/${j.total} entries. Failed: ${j.failed}. Opening Tab 4…`);
+        .filter(x => getChoice(x.record_date, "pack", "overwrite") !== "skip")
+        .map(x => ({
+          record_date: x.record_date,
+          number_of_packs: x.number_of_packs,
+          note: `auto from ${x.source_filename || x.filename || "pdf"}`,
+        }));
+
+      let packMsg = "";
+      if (packEntries.length > 0) {
+        const res = await fetch(api("/api/daily-packs/bulk"), {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ entries: packEntries }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const j = await res.json();
+        packMsg = `Packs: saved ${j.saved}/${j.total} (failed ${j.failed}).`;
+      } else {
+        packMsg = "Packs: nothing to save (all skipped).";
+      }
+
+      // フルキャスト — POST /api/temp-staff per date with its rows. Existing
+      // endpoint replaces all rows for the date, so "overwrite" = send rows,
+      // "skip" = do not send.
+      let fcSaved = 0, fcSkipped = 0, fcFailed = 0, fcRowCount = 0;
+      for (const extracted of packState.extracted) {
+        const date = extracted.record_date;
+        const rows = extracted.fullcast_rows || [];
+        if (!date || rows.length === 0) continue;
+        const choice = getChoice(date, "fullcast", "overwrite");
+        if (choice === "skip") { fcSkipped += 1; continue; }
+        try {
+          const r = await fetch(api("/api/temp-staff"), {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ record_date: date, rows }),
+          });
+          if (!r.ok) throw new Error(await r.text());
+          fcSaved += 1; fcRowCount += rows.length;
+        } catch (err) {
+          fcFailed += 1;
+          console.warn(`temp-staff save failed for ${date}:`, err);
+        }
+      }
+      const fcMsg = `フルキャスト: ${fcSaved} date(s)/${fcRowCount} row(s) saved, skipped ${fcSkipped}, failed ${fcFailed}.`;
+      showMsg("msgPack", fcFailed > 0 ? "error" : "success", `${packMsg} ${fcMsg} Opening Tab 4…`);
     }
     setTimeout(() => switchTab("reports"), 600);
   } catch (err) {

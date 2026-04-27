@@ -85,6 +85,38 @@
     margin: 1.15rem auto 2.5rem;
     padding: 0 0.9rem;
   }
+
+  /* ===== Beta / test-mode banner ===== */
+  .beta-banner {
+    display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap;
+    padding: 0.55rem 1rem;
+    background: linear-gradient(90deg, #fff7e6 0%, #fff2d1 100%);
+    border-bottom: 1px solid #f0c67a;
+    color: #6a4a12;
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+  .beta-banner__badge {
+    flex: 0 0 auto;
+    padding: 0.18rem 0.5rem;
+    background: #c6830f;
+    color: #fff;
+    border-radius: 4px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .beta-banner__text b { color: #4a3209; }
+  .beta-banner__ja {
+    color: #6a4a12;
+    font-family: "Noto Sans JP", "Hiragino Sans", sans-serif;
+    margin-left: 0.25rem;
+    margin-right: 0.35rem;
+  }
+  @media (max-width: 680px) {
+    .beta-banner { font-size: 0.75rem; padding: 0.5rem 0.75rem; }
+  }
   .card {
     background: var(--surface);
     border: 1px solid var(--line);
@@ -200,9 +232,78 @@
     border-radius: 8px;
     background: #fff;
   }
-  .lock-notes h3 { font-size: 1rem; margin-bottom: 0.55rem; }
-  .lock-notes ul { padding-left: 1.15rem; color: var(--muted); font-size: 0.88rem; }
-  .lock-notes li + li { margin-top: 0.35rem; }
+  .lock-notes__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    margin-bottom: 0.55rem;
+  }
+  .lock-notes h3 { font-size: 1rem; }
+  .lock-intro {
+    color: var(--muted);
+    font-size: 0.88rem;
+    margin-bottom: 0.75rem;
+  }
+  .lock-notes .feature-list {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 0.55rem;
+  }
+  .lock-notes .feature-list li {
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-soft);
+  }
+  .lock-notes .feature-list strong {
+    display: block;
+    font-size: 0.9rem;
+    color: var(--ink);
+    margin-bottom: 0.2rem;
+  }
+  .lock-notes .feature-list span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
+  .lock-footnote {
+    margin-top: 0.85rem;
+    padding: 0.55rem 0.65rem;
+    border: 1px dashed #b8e4d8;
+    background: #ecfaf4;
+    border-radius: 8px;
+    color: #0b6f58;
+    font-size: 0.82rem;
+  }
+  .lang-toggle {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-soft);
+    padding: 2px;
+    overflow: hidden;
+  }
+  .lang-btn {
+    border: 0;
+    background: transparent;
+    padding: 0.3rem 0.7rem;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--muted);
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: "IBM Plex Mono", "Space Grotesk", sans-serif;
+  }
+  .lang-btn.active {
+    background: var(--brand);
+    color: #fff;
+  }
+  .lang-btn:not(.active):hover { color: var(--brand-strong); }
+  .lock-notes[data-lang="ja"] { font-family: "Noto Sans JP", "Hiragino Sans", "Space Grotesk", sans-serif; }
   @media (max-width: 860px) { .lock-screen { grid-template-columns: 1fr; } }
 
   .management { display: none; }
@@ -372,6 +473,28 @@
   .employee.dragging { opacity: 0.45; }
   .employee.drop-before { box-shadow: inset 0 3px 0 var(--brand); }
   .employee.drop-after { box-shadow: inset 0 -3px 0 var(--brand); }
+  .employee.selected {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 32%, transparent);
+    background: color-mix(in srgb, var(--brand) 6%, #fff);
+  }
+  .employee.selected .emp-code { color: var(--brand-strong, var(--brand)); }
+  .selection-pill {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.74rem;
+    color: var(--ink);
+    white-space: nowrap;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--brand) 14%, #fff);
+    border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line));
+  }
+  .selection-pill.idle {
+    color: var(--muted);
+    background: var(--surface-soft);
+    border-color: var(--line);
+  }
+  #clearSelBtn:disabled { opacity: 0.45; cursor: not-allowed; }
   .emp-code {
     font-family: "IBM Plex Mono", monospace;
     font-size: 0.73rem;
@@ -455,12 +578,73 @@
   }
   .import-dropzone {
     margin-top: 0.75rem;
-    padding: 0.8rem 0.9rem;
-    border: 1px dashed var(--line);
-    border-radius: 8px;
-    background: #fff;
+    padding: 1rem 1.1rem;
+    border: 2px dashed color-mix(in srgb, var(--brand) 45%, var(--line));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--brand) 4%, #fff);
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
   }
-  .import-dropzone input { width: 100%; }
+  .import-dropzone:hover { background: color-mix(in srgb, var(--brand) 8%, #fff); }
+  .import-dropzone.drag-over {
+    border-color: var(--brand);
+    background: color-mix(in srgb, var(--brand) 14%, #fff);
+    transform: translateY(-1px);
+  }
+  .import-dropzone .dz-icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--brand);
+    background: color-mix(in srgb, var(--brand) 12%, #fff);
+    border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);
+  }
+  .import-dropzone .dz-text { flex: 1; min-width: 0; }
+  .import-dropzone .dz-title { font-size: 0.92rem; font-weight: 600; color: var(--ink); }
+  .import-dropzone .dz-sub { font-size: 0.78rem; color: var(--muted); margin-top: 0.1rem; }
+  .import-dropzone .dz-pill {
+    flex-shrink: 0;
+    font-size: 0.78rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    background: var(--brand);
+    color: #fff;
+    font-weight: 600;
+  }
+  .import-files {
+    margin-top: 0.55rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .import-files .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    font-size: 0.76rem;
+    color: var(--ink);
+  }
+  .import-files .chip.ok { border-color: color-mix(in srgb, var(--brand) 40%, var(--line)); }
+  .import-files .chip.err { border-color: #d99; background: #fef2f2; color: #7a1f1f; }
+  .import-files .chip .x {
+    cursor: pointer;
+    color: var(--muted);
+    font-weight: 700;
+    line-height: 1;
+  }
+  .import-files .chip .x:hover { color: #b00; }
   .import-list {
     margin-top: 0.75rem;
     display: grid;
@@ -587,6 +771,18 @@
   </div>
 </header>
 
+<div class="beta-banner" role="status" aria-live="polite">
+  <span class="beta-banner__badge">BETA</span>
+  <span class="beta-banner__text">
+    <b>This app is currently under test and data verification.</b>
+    <span class="beta-banner__ja">本アプリは現在テスト・データ検証中です。</span>
+    Please double-check results before relying on them.
+    <span class="beta-banner__ja">ご利用の際は結果をご確認ください。</span>
+    <b>Test period ends 2026-04-30.</b>
+    <span class="beta-banner__ja">テスト期間は 2026年4月30日 までです。</span>
+  </span>
+</div>
+
 <main class="page">
   <section id="lockScreen" class="lock-screen card">
     <div class="lock-panel">
@@ -602,13 +798,61 @@
       <div id="lockMessage" class="prompt">Demo password is <strong>admin2026</strong>.</div>
     </div>
     <div class="lock-notes">
-      <h3>Mockup behavior</h3>
-      <ul>
-        <li>Password check runs in the browser and is hard-coded for review.</li>
-        <li>Save writes employee_roster.json and sections.json through the backend.</li>
-        <li>Initial data comes from employee_roster.json and sections.json.</li>
-        <li>The real build can replace this with login, roster GET/PUT, employee POST/DELETE, hashed admin storage, and a 30-minute session cookie.</li>
+      <div class="lock-notes__head">
+        <h3 data-i18n-en="What you can do here" data-i18n-ja="この画面でできること"></h3>
+        <div class="lang-toggle" role="group" aria-label="Language">
+          <button type="button" class="lang-btn active" data-lang="en">EN</button>
+          <button type="button" class="lang-btn" data-lang="ja">日本語</button>
+        </div>
+      </div>
+      <p class="lock-intro"
+         data-i18n-en="A simple board to manage who belongs to which manufacturing section. Changes here flow through to the attendance report and the PDF export."
+         data-i18n-ja="各製造課に誰が所属しているかを管理するシンプルな画面です。ここでの変更は勤怠レポートと PDF 出力にそのまま反映されます。"></p>
+      <ul class="feature-list">
+        <li>
+          <strong data-i18n-en="Drag &amp; drop to move people" data-i18n-ja="ドラッグ＆ドロップで人を移動"></strong>
+          <span data-i18n-en="Drag an employee card between 製造１課 and 製造２課 to change section — no forms, no menus."
+                data-i18n-ja="社員カードを製造１課と製造２課の間でドラッグするだけで所属を変更できます。フォーム入力は不要です。"></span>
+        </li>
+        <li>
+          <strong data-i18n-en="Reorder within a section" data-i18n-ja="課内での並び替え"></strong>
+          <span data-i18n-en="Drag a card up or down inside a section to change display order. This same order is used in the daily Gantt PDF report."
+                data-i18n-ja="同じ課内でカードを上下にドラッグすると表示順を変えられます。この順番はそのまま日次ガントPDFレポートにも反映されます。"></span>
+        </li>
+        <li>
+          <strong data-i18n-en="Multi-select &amp; drag many at once" data-i18n-ja="複数選択してまとめて移動"></strong>
+          <span data-i18n-en="Ctrl/⌘-click to toggle individual cards, Shift-click for a range. Then drag any selected card and the whole group moves together — keeping their relative order."
+                data-i18n-ja="Ctrl／⌘＋クリックで個別選択、Shift＋クリックで範囲選択ができます。選択したカードのいずれかをドラッグすれば、選択したメンバー全員を相対順序を保ったまままとめて移動できます。"></span>
+        </li>
+        <li>
+          <strong data-i18n-en="Bulk upload from attendance PDF" data-i18n-ja="勤怠PDFから一括取り込み"></strong>
+          <span data-i18n-en="Drop an attendance PDF and the app reads every name + 8-digit code, auto-detects each person's section, and hides anyone already on the board. Pick only the new ones and add them in one click."
+                data-i18n-ja="勤怠PDFをアップロードすると、氏名と8桁の社員コードを自動読み取りし、課も自動判定します。既に登録済みの人は自動で非表示。新しい人だけを選んでワンクリックで追加できます。"></span>
+        </li>
+        <li>
+          <strong data-i18n-en="Safe save with undo" data-i18n-ja="安全な保存とやり直し"></strong>
+          <span data-i18n-en="Edits stay in draft until you press Save. Unsaved cards are tinted red with a 'not saved' tag. Press Reset any time to throw away the draft and start over."
+                data-i18n-ja="変更は「保存」を押すまで下書き状態のまま保持されます。未保存のカードは赤く強調され「not saved」タグが付きます。「Reset」でいつでも下書きを破棄できます。"></span>
+        </li>
+        <li>
+          <strong data-i18n-en="Add one employee manually" data-i18n-ja="1名ずつの手動追加"></strong>
+          <span data-i18n-en="Type an 8-digit code and Japanese name, pick a section, press Add. Useful for new hires before they appear on a PDF."
+                data-i18n-ja="8桁の社員コードと氏名を入力し、課を選んで「Add」を押します。PDFに登場する前の新規入社の方を先に登録できます。"></span>
+        </li>
+        <li>
+          <strong data-i18n-en="Search across everyone" data-i18n-ja="全員を横断検索"></strong>
+          <span data-i18n-en="Type any part of a code, name or section into the search box to filter the board in real time."
+                data-i18n-ja="検索ボックスにコード・氏名・課名の一部を入れると、リアルタイムで絞り込めます。"></span>
+        </li>
+        <li>
+          <strong data-i18n-en="Order applies to the PDF report" data-i18n-ja="並び順はPDFレポートにも反映"></strong>
+          <span data-i18n-en="The order you set here is the order used in the daily Gantt PDF and in the Excel export. One place to manage everything."
+                data-i18n-ja="ここで決めた並び順は、日次ガントPDFとExcel出力でそのまま使われます。1箇所で全てを管理できます。"></span>
+        </li>
       </ul>
+      <p class="lock-footnote"
+         data-i18n-en="Test-period password: admin2026. During the test window, edits save to the server but are reviewed before going into production."
+         data-i18n-ja="テスト期間中のパスワードは admin2026 です。テスト期間中の変更はサーバーに保存されますが、本運用に反映する前に確認を行います。"></p>
     </div>
   </section>
 
@@ -638,10 +882,18 @@
 
       <section class="import-panel">
         <h3>Import from attendance PDF</h3>
-        <p>Upload an attendance PDF to pull names and employee codes, hide already-managed people, and stage selected rows for the chosen department.</p>
+        <p>Upload one or more attendance PDFs to pull names and employee codes, hide already-managed people, and stage selected rows for the chosen department.</p>
+        <label id="importDropzone" class="import-dropzone" for="importInput">
+          <div class="dz-icon">PDF</div>
+          <div class="dz-text">
+            <div class="dz-title" data-i18n-en="Drop PDF files here or click to browse" data-i18n-ja="PDFをここにドロップ、またはクリックして選択">Drop PDF files here or click to browse</div>
+            <div class="dz-sub" data-i18n-en="Multiple PDFs supported · rows are merged & deduped" data-i18n-ja="複数PDF対応・行は結合され重複除去されます">Multiple PDFs supported · rows are merged &amp; deduped</div>
+          </div>
+          <span class="dz-pill">Select PDFs</span>
+        </label>
+        <input id="importInput" type="file" accept="application/pdf,.pdf" multiple hidden />
+        <div id="importFiles" class="import-files" hidden></div>
         <div class="import-actions">
-          <label class="button action" for="importInput">Choose PDF</label>
-          <input id="importInput" type="file" accept="application/pdf,.pdf" hidden />
           <button id="importSelectAll" class="button secondary" type="button" disabled>Select all</button>
           <button id="importClear" class="button soft-danger" type="button" disabled>Clear</button>
           <button id="importAdd" class="button primary" type="button" disabled>Add selected</button>
@@ -661,6 +913,10 @@
         <label for="searchInput">Search</label>
         <input id="searchInput" type="search" placeholder="code / name / section" />
       </div>
+      <span id="selectionPill" class="selection-pill idle"
+            data-i18n-en="No selection" data-i18n-ja="未選択">No selection</span>
+      <button id="clearSelBtn" class="button soft-danger" type="button" disabled
+              data-i18n-en="Clear selection" data-i18n-ja="選択解除">Clear selection</button>
       <div id="searchMeta" class="search-meta">0 matches</div>
     </div>
 
@@ -687,8 +943,20 @@
   let importSelected = new Set();
   let showExisting = false;
   let saving = false;
+  let selectedCodes = new Set();
+  let lastClickedCode = null;
+  let dragGroup = [];
 
   const $ = (id) => document.getElementById(id);
+
+  // Escape untrusted strings before inserting via innerHTML. Applies to every
+  // value coming from employee_roster.json, PDF imports, or user form input —
+  // blocks stored-XSS from names/codes like <img src=x onerror=...>.
+  const esc = (value) => String(value ?? "").replace(/[&<>"'`=\/]/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;",
+    "'": "&#39;", "`": "&#96;", "=": "&#61;", "/": "&#47;",
+  }[c]));
+
   const board = $("board");
   const management = $("management");
   const lockScreen = $("lockScreen");
@@ -818,7 +1086,7 @@
 
   function renderDeptOptions() {
     $("deptInput").innerHTML = sections
-      .map((dept) => `<option value="${dept.id}">${dept.label}</option>`)
+      .map((dept) => `<option value="${esc(dept.id)}">${esc(dept.label)}</option>`)
       .join("");
     $("deptInput").value = String(selectedSectionId);
   }
@@ -841,11 +1109,11 @@
     board.innerHTML = sections.map((dept) => {
       const members = filteredEmployees.filter((emp) => Number(emp.section_id) === Number(dept.id));
       return `
-        <section class="dept" data-section="${dept.id}">
+        <section class="dept" data-section="${esc(dept.id)}">
           <div class="dept-head">
             <div class="dept-head-left">
-              <span class="dept-number">${dept.id}</span>
-              <h2>${dept.label}</h2>
+              <span class="dept-number">${esc(dept.id)}</span>
+              <h2>${esc(dept.label)}</h2>
             </div>
             <span class="count">${members.length}</span>
           </div>
@@ -857,44 +1125,124 @@
     }).join("");
 
     board.querySelectorAll(".employee").forEach((card) => {
-      card.addEventListener("dragstart", () => {
-        draggingCode = card.dataset.code;
-        card.classList.add("dragging");
+      card.addEventListener("click", (event) => {
+        if (event.target.closest(".remove")) return;
+        const code = card.dataset.code;
+        if (event.shiftKey && lastClickedCode) {
+          const codes = Array.from(board.querySelectorAll(".employee")).map((c) => c.dataset.code);
+          const a = codes.indexOf(lastClickedCode);
+          const b = codes.indexOf(code);
+          if (a >= 0 && b >= 0) {
+            const [from, to] = a < b ? [a, b] : [b, a];
+            for (let i = from; i <= to; i++) selectedCodes.add(codes[i]);
+          } else {
+            selectedCodes.add(code);
+          }
+        } else if (event.ctrlKey || event.metaKey) {
+          if (selectedCodes.has(code)) selectedCodes.delete(code);
+          else selectedCodes.add(code);
+          lastClickedCode = code;
+        } else {
+          if (selectedCodes.size === 1 && selectedCodes.has(code)) {
+            selectedCodes = new Set();
+            lastClickedCode = null;
+          } else {
+            selectedCodes = new Set([code]);
+            lastClickedCode = code;
+          }
+        }
+        applySelectionDisplay();
       });
+
+      card.addEventListener("dragstart", (event) => {
+        const code = card.dataset.code;
+        if (!selectedCodes.has(code)) {
+          selectedCodes = new Set([code]);
+          lastClickedCode = code;
+          applySelectionDisplay();
+        }
+        dragGroup = Array.from(board.querySelectorAll(".employee"))
+          .map((c) => c.dataset.code)
+          .filter((c) => selectedCodes.has(c));
+        draggingCode = code;
+        dragGroup.forEach((c) => {
+          const el = board.querySelector(`.employee[data-code="${CSS.escape(c)}"]`);
+          if (el) el.classList.add("dragging");
+        });
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = "move";
+          if (dragGroup.length > 1) {
+            const ghost = document.createElement("div");
+            ghost.textContent = `${dragGroup.length} employees`;
+            ghost.style.cssText =
+              "position:absolute;top:-1000px;left:-1000px;padding:.4rem .8rem;" +
+              "background:var(--brand);color:#fff;border-radius:999px;font-weight:700;" +
+              "font-family:inherit;font-size:.85rem;box-shadow:0 4px 14px rgba(0,0,0,.25);";
+            document.body.appendChild(ghost);
+            event.dataTransfer.setDragImage(ghost, 24, 14);
+            setTimeout(() => ghost.remove(), 0);
+          }
+        }
+      });
+
       card.addEventListener("dragend", () => {
         draggingCode = null;
-        card.classList.remove("dragging");
-        card.classList.remove("drop-before", "drop-after");
+        dragGroup = [];
+        board.querySelectorAll(".employee.dragging").forEach((c) => c.classList.remove("dragging"));
+        board.querySelectorAll(".employee.drop-before, .employee.drop-after")
+          .forEach((c) => c.classList.remove("drop-before", "drop-after"));
       });
+
       card.addEventListener("dragover", (event) => {
         event.preventDefault();
+        if (dragGroup.includes(card.dataset.code)) return;
         const targetBox = card.getBoundingClientRect();
         const before = event.clientY < targetBox.top + targetBox.height / 2;
         card.classList.toggle("drop-before", before);
         card.classList.toggle("drop-after", !before);
       });
+
       card.addEventListener("dragleave", () => {
         card.classList.remove("drop-before", "drop-after");
       });
+
       card.addEventListener("drop", (event) => {
         event.preventDefault();
+        event.stopPropagation();
         card.classList.remove("drop-before", "drop-after");
-        const draggedIndex = employees.findIndex((item) => item.code === draggingCode);
-        const targetIndex = employees.findIndex((item) => item.code === card.dataset.code);
-        if (draggedIndex < 0 || targetIndex < 0 || draggingCode === card.dataset.code) return;
+        if (!dragGroup.length) return;
+        const targetCode = card.dataset.code;
+        if (dragGroup.includes(targetCode)) return;
         const targetSection = Number(card.closest(".dept")?.dataset.section || 0);
         const targetBox = card.getBoundingClientRect();
         const before = event.clientY < targetBox.top + targetBox.height / 2;
-        const draggedItem = employees.splice(draggedIndex, 1)[0];
-        if (draggedItem.section_id !== targetSection) {
-          draggedItem.section_id = targetSection;
-          draggedItem.section_label = sectionLabel(targetSection);
+
+        const moving = [];
+        let sectionChanges = 0;
+        for (const code of dragGroup) {
+          const idx = employees.findIndex((item) => item.code === code);
+          if (idx < 0) continue;
+          const [item] = employees.splice(idx, 1);
+          if (Number(item.section_id) !== targetSection) {
+            item.section_id = targetSection;
+            item.section_label = sectionLabel(targetSection);
+            sectionChanges++;
+          }
+          item.pending = true;
+          moving.push(item);
         }
-        draggedItem.pending = true;
-        let insertAt = employees.findIndex((item) => item.code === card.dataset.code);
+        let insertAt = employees.findIndex((item) => item.code === targetCode);
+        if (insertAt < 0) insertAt = employees.length;
         if (!before) insertAt += 1;
-        employees.splice(Math.max(insertAt, 0), 0, draggedItem);
-        setMessage(`${draggedItem.name} repositioned in ${sectionLabel(targetSection)}.`, "");
+        employees.splice(insertAt, 0, ...moving);
+
+        const label = sectionLabel(targetSection);
+        setMessage(
+          moving.length === 1
+            ? `${moving[0].name} repositioned in ${label}.`
+            : `${moving.length} employees moved into ${label}${sectionChanges ? "" : " (reordered)"}.`,
+          "",
+        );
         renderBoard();
       });
     });
@@ -916,36 +1264,72 @@
       deptEl.addEventListener("drop", (event) => {
         event.preventDefault();
         deptEl.classList.remove("drag-over");
+        if (!dragGroup.length) return;
         const targetDept = Number(deptEl.dataset.section);
-        const emp = employees.find((item) => item.code === draggingCode);
-        if (emp && Number(emp.section_id) !== targetDept) {
-          const draggedIndex = employees.findIndex((item) => item.code === draggingCode);
-          if (draggedIndex >= 0) {
-            const draggedItem = employees.splice(draggedIndex, 1)[0];
-            draggedItem.section_id = targetDept;
-            draggedItem.section_label = sectionLabel(targetDept);
-            draggedItem.pending = true;
-            employees.push(draggedItem);
-            setMessage(`${draggedItem.name} moved to ${sectionLabel(targetDept)}.`, "");
-            renderBoard();
+        const moving = [];
+        let sectionChanges = 0;
+        for (const code of dragGroup) {
+          const idx = employees.findIndex((item) => item.code === code);
+          if (idx < 0) continue;
+          const [item] = employees.splice(idx, 1);
+          if (Number(item.section_id) !== targetDept) {
+            item.section_id = targetDept;
+            item.section_label = sectionLabel(targetDept);
+            item.pending = true;
+            sectionChanges++;
           }
+          moving.push(item);
         }
+        employees.push(...moving);
+        if (sectionChanges) {
+          const label = sectionLabel(targetDept);
+          setMessage(
+            moving.length === 1
+              ? `${moving[0].name} moved to ${label}.`
+              : `${moving.length} employees moved to ${label}.`,
+            "",
+          );
+        }
+        renderBoard();
       });
     });
 
+    applySelectionDisplay();
     updateState();
+  }
+
+  function applySelectionDisplay() {
+    selectedCodes = new Set(
+      Array.from(selectedCodes).filter((code) =>
+        employees.some((emp) => emp.code === code),
+      ),
+    );
+    board.querySelectorAll(".employee").forEach((card) => {
+      card.classList.toggle("selected", selectedCodes.has(card.dataset.code));
+    });
+    const pill = $("selectionPill");
+    const clearBtn = $("clearSelBtn");
+    if (selectedCodes.size === 0) {
+      pill.textContent = "No selection";
+      pill.classList.add("idle");
+      clearBtn.disabled = true;
+    } else {
+      pill.textContent = `${selectedCodes.size} selected`;
+      pill.classList.remove("idle");
+      clearBtn.disabled = false;
+    }
   }
 
   function renderEmployee(emp) {
     return `
-      <article class="employee${emp.pending ? " pending" : ""}" draggable="true" data-code="${emp.code}">
+      <article class="employee${emp.pending ? " pending" : ""}" draggable="true" data-code="${esc(emp.code)}">
         <div>
-          <div class="emp-code">${emp.code}</div>
-          <div class="emp-name">${emp.name}</div>
-          <div class="emp-dept">${sectionLabel(emp.section_id)}</div>
+          <div class="emp-code">${esc(emp.code)}</div>
+          <div class="emp-name">${esc(emp.name)}</div>
+          <div class="emp-dept">${esc(sectionLabel(emp.section_id))}</div>
           <div class="saved-pill ${emp.pending ? "pending" : "saved"}">${emp.pending ? "not saved" : "saved"}</div>
         </div>
-        <button class="remove" type="button" data-code="${emp.code}" aria-label="Remove ${emp.name}">×</button>
+        <button class="remove" type="button" data-code="${esc(emp.code)}" aria-label="Remove ${esc(emp.name)}">×</button>
       </article>
     `;
   }
@@ -979,11 +1363,11 @@
     importList.innerHTML = orderedBuckets.map(({ key, label }) => {
       const rows = grouped.get(key) || [];
       return `
-        <section class="import-column" data-section="${key}">
+        <section class="import-column" data-section="${esc(key)}">
           <div class="import-column-head">
             <strong>
-              <span class="import-column-number">${key === "unassigned" ? "?" : key}</span>
-              <span>${label}</span>
+              <span class="import-column-number">${esc(key === "unassigned" ? "?" : key)}</span>
+              <span>${esc(label)}</span>
             </strong>
             <span class="import-column-count">${rows.length}</span>
           </div>
@@ -995,12 +1379,12 @@
               const badge = sectionId ? `${sectionId} · ${sectionLabel(sectionId)}` : row.section_label || "unassigned";
               return `
                 <label class="import-item${isExisting ? " existing" : ""}">
-                  <input type="checkbox" data-code="${row.code}" ${checked ? "checked" : ""} ${isExisting ? "disabled" : ""} />
+                  <input type="checkbox" data-code="${esc(row.code)}" ${checked ? "checked" : ""} ${isExisting ? "disabled" : ""} />
                   <div>
-                    <div class="import-code">${row.code}</div>
-                    <div class="import-name">${row.name}</div>
+                    <div class="import-code">${esc(row.code)}</div>
+                    <div class="import-name">${esc(row.name)}</div>
                   </div>
-                  <span class="import-note ${isExisting ? "danger" : ""}">${badge}</span>
+                  <span class="import-note ${isExisting ? "danger" : ""}">${esc(badge)}</span>
                 </label>
               `;
             }).join("") || `<div class="no-data">No rows</div>`}
@@ -1026,6 +1410,28 @@
   searchInput.addEventListener("input", () => {
     searchQuery = searchInput.value.trim().toLowerCase();
     renderBoard();
+  });
+
+  $("clearSelBtn").addEventListener("click", () => {
+    selectedCodes = new Set();
+    lastClickedCode = null;
+    applySelectionDisplay();
+  });
+
+  board.addEventListener("click", (event) => {
+    if (event.target.closest(".employee")) return;
+    if (selectedCodes.size === 0) return;
+    selectedCodes = new Set();
+    lastClickedCode = null;
+    applySelectionDisplay();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && selectedCodes.size) {
+      selectedCodes = new Set();
+      lastClickedCode = null;
+      applySelectionDisplay();
+    }
   });
 
   async function loadData() {
@@ -1070,6 +1476,12 @@
     setMessage("Management board unlocked.", "ok");
   });
 
+  // Mirrors the backend /api/management/roster rule so bad names are rejected
+  // before the user even tries to save. Keeps employee_roster.json clean and
+  // closes the stored-XSS vector at the input surface too.
+  const NAME_BAD_CHARS = /[<>"'`;\\]/;
+  const CODE_PATTERN = /^\d{8}$/;
+
   $("addForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const code = $("codeInput").value.trim();
@@ -1077,6 +1489,18 @@
     const sectionId = Number($("deptInput").value);
     if (!code || !name) {
       setMessage("Code and 氏名 are required.", "error");
+      return;
+    }
+    if (!CODE_PATTERN.test(code)) {
+      setMessage("Code must be exactly 8 digits.", "error");
+      return;
+    }
+    if (name.length > 100) {
+      setMessage("氏名 is too long (max 100 characters).", "error");
+      return;
+    }
+    if (NAME_BAD_CHARS.test(name) || /[\x00-\x1f]/.test(name)) {
+      setMessage("氏名 contains disallowed characters (< > \" ' ` ; \\ or control chars).", "error");
       return;
     }
     if (employees.some((emp) => emp.code === code)) {
@@ -1156,6 +1580,10 @@
     importRows = [];
     importSelected = new Set();
     importInput.value = "";
+    importFilesEl.hidden = true;
+    importFilesEl.innerHTML = "";
+    importHint.textContent = "";
+    importHint.className = "message";
     renderImportList();
   });
 
@@ -1193,40 +1621,126 @@
     renderImportList();
   });
 
-  importInput.addEventListener("change", async () => {
-    const files = Array.from(importInput.files || []);
-    if (files.length === 0) return;
+  const importDropzone = $("importDropzone");
+  const importFilesEl = $("importFiles");
+
+  function renderImportFileChips(items) {
+    if (!items.length) { importFilesEl.hidden = true; importFilesEl.innerHTML = ""; return; }
+    importFilesEl.hidden = false;
+    importFilesEl.innerHTML = items
+      .map((it) => {
+        const cls = it.status === "error" ? "err" : it.status === "done" ? "ok" : "";
+        const label = it.status === "loading"
+          ? `${esc(it.name)} · loading…`
+          : it.status === "error"
+            ? `${esc(it.name)} · ${esc(it.message || "failed")}`
+            : `${esc(it.name)} · ${it.rows} rows`;
+        return `<span class="chip ${cls}">${label}</span>`;
+      })
+      .join("");
+  }
+
+  async function processPdfFiles(rawFiles) {
+    const pdfs = Array.from(rawFiles).filter((f) =>
+      f && (f.type === "application/pdf" || /\.pdf$/i.test(f.name)),
+    );
+    if (!pdfs.length) {
+      importHint.textContent = "Only PDF files are supported.";
+      importHint.className = "message error";
+      return;
+    }
+
     importRows = [];
     importSelected = new Set();
-    importSummary.textContent = "Loading...";
+    importSummary.textContent = `Loading 0 / ${pdfs.length}…`;
     importHint.textContent = "";
-    try {
-      const response = await fetch("./api/management/import-pdf", {
-        method: "POST",
-        body: (() => {
-          const single = new FormData();
-          single.append("file", files[0]);
-          return single;
-        })(),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      const rows = Array.isArray(data.rows) ? data.rows : [];
-      importRows = rows
-        .map(normalizeImportRecord)
-        .filter((row) => row.code && row.name);
-      importHint.textContent = data.message
-        ? data.message
-        : `${importRows.length} rows loaded from PDF.`;
-      if (!importRows.length && !data.message) {
-        importHint.textContent = "No importable rows found in the PDF.";
+    importHint.className = "message";
+    renderImportList();
+
+    const status = pdfs.map((f) => ({ name: f.name, status: "loading", rows: 0 }));
+    renderImportFileChips(status);
+
+    const seen = new Set();
+    const merged = [];
+
+    for (let i = 0; i < pdfs.length; i++) {
+      importSummary.textContent = `Loading ${i + 1} / ${pdfs.length}: ${pdfs[i].name}`;
+      try {
+        const fd = new FormData();
+        fd.append("file", pdfs[i]);
+        const response = await fetch("./api/management/import-pdf", { method: "POST", body: fd });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const rows = (Array.isArray(data.rows) ? data.rows : [])
+          .map(normalizeImportRecord)
+          .filter((row) => row.code && row.name);
+        let added = 0;
+        for (const row of rows) {
+          if (seen.has(row.code)) continue;
+          seen.add(row.code);
+          merged.push(row);
+          added++;
+        }
+        status[i].status = "done";
+        status[i].rows = added;
+        if (data.message && !rows.length) status[i].message = data.message;
+      } catch (error) {
+        status[i].status = "error";
+        status[i].message = error.message || String(error);
       }
-      renderImportList();
-    } catch (error) {
-      importHint.textContent = `Import failed: ${error.message || error}`;
-      importHint.className = "message error";
+      renderImportFileChips(status);
     }
+
+    importRows = merged;
+    const totalNew = merged.length;
+    const failed = status.filter((s) => s.status === "error").length;
+    importHint.textContent =
+      `${totalNew} unique rows loaded from ${pdfs.length} PDF${pdfs.length === 1 ? "" : "s"}` +
+      (failed ? ` · ${failed} failed` : "");
+    importHint.className = failed ? "message error" : "message";
+    renderImportList();
+  }
+
+  importInput.addEventListener("change", () => {
+    const files = Array.from(importInput.files || []);
+    if (files.length) processPdfFiles(files);
+    importInput.value = "";
   });
+
+  ["dragenter", "dragover"].forEach((ev) =>
+    importDropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      importDropzone.classList.add("drag-over");
+    }),
+  );
+  ["dragleave", "dragend", "drop"].forEach((ev) =>
+    importDropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      importDropzone.classList.remove("drag-over");
+    }),
+  );
+  importDropzone.addEventListener("drop", (e) => {
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) processPdfFiles(files);
+  });
+
+  const lockNotes = document.querySelector(".lock-notes");
+  function applyLang(lang) {
+    const key = lang === "ja" ? "data-i18n-ja" : "data-i18n-en";
+    lockNotes.setAttribute("data-lang", lang);
+    lockNotes.querySelectorAll("[data-i18n-en]").forEach((el) => {
+      el.textContent = el.getAttribute(key) || el.getAttribute("data-i18n-en") || "";
+    });
+    lockNotes.querySelectorAll(".lang-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.lang === lang);
+    });
+  }
+  lockNotes.querySelectorAll(".lang-btn").forEach((btn) => {
+    btn.addEventListener("click", () => applyLang(btn.dataset.lang));
+  });
+  applyLang("en");
 
   loadData();
 

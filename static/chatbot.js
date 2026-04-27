@@ -1,0 +1,211 @@
+/* V3 Attendance Console — local-LLM chatbot widget.
+   Self-contained: injects its own CSS and markup into any page it's loaded on.
+   Talks to POST /api/chat (Ollama-backed, read-only DB). */
+(function () {
+  if (window.__attendanceChatbotLoaded) return;
+  window.__attendanceChatbotLoaded = true;
+
+  // Chatbot widget disabled — set to false to re-enable.
+  const CHATBOT_ENABLED = false;
+  if (!CHATBOT_ENABLED) return;
+
+  // Derive the app base from this script's own URL so the widget works both
+  // at http://pi:8002/console (direct) and https://host/attendance/console
+  // (nginx reverse-proxy that strips the /attendance prefix).
+  const scriptEl = document.currentScript
+    || document.querySelector('script[src$="chatbot.js"]');
+  const scriptPath = scriptEl ? new URL(scriptEl.src, location.href).pathname : "";
+  const API_BASE = scriptPath.replace(/\/static\/chatbot\.js$/, "");
+
+  const CSS = `
+  .ab-fab {
+    position: fixed; right: 20px; bottom: 20px; z-index: 9999;
+    width: 56px; height: 56px; border-radius: 50%;
+    background: linear-gradient(135deg, #0d8f71, #125e91);
+    color: #fff; border: none; cursor: pointer;
+    box-shadow: 0 10px 28px rgba(11, 35, 46, 0.28);
+    font-size: 24px; display: flex; align-items: center; justify-content: center;
+    transition: transform .15s ease;
+  }
+  .ab-fab:hover { transform: translateY(-2px); }
+  .ab-panel {
+    position: fixed; right: 20px; bottom: 88px; z-index: 9999;
+    width: min(380px, calc(100vw - 40px));
+    height: min(560px, calc(100vh - 120px));
+    background: #ffffff; border: 1px solid #d4e2e8; border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(11, 35, 46, 0.22);
+    display: none; flex-direction: column; overflow: hidden;
+    font-family: "Space Grotesk", "Segoe UI", sans-serif; color: #132026;
+  }
+  .ab-panel.open { display: flex; }
+  .ab-head {
+    padding: 12px 14px; background: linear-gradient(135deg, #0d8f71, #125e91);
+    color: #fff; display: flex; align-items: center; justify-content: space-between;
+  }
+  .ab-head-title { font-weight: 600; font-size: 14px; letter-spacing: .02em; }
+  .ab-head-sub { font-size: 11px; opacity: .85; }
+  .ab-close {
+    background: transparent; color: #fff; border: none;
+    font-size: 20px; cursor: pointer; line-height: 1;
+  }
+  .ab-log {
+    flex: 1 1 auto; overflow-y: auto; padding: 12px 14px;
+    background: #f7fbfc; display: flex; flex-direction: column; gap: 8px;
+  }
+  .ab-msg {
+    max-width: 85%; padding: 8px 11px; border-radius: 10px;
+    font-size: 13px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word;
+  }
+  .ab-msg.user { align-self: flex-end; background: #125e91; color: #fff; border-bottom-right-radius: 3px; }
+  .ab-msg.bot  { align-self: flex-start; background: #ffffff; border: 1px solid #d4e2e8; border-bottom-left-radius: 3px; }
+  .ab-msg.sys  { align-self: center; background: transparent; color: #5a6b73; font-size: 11px; font-style: italic; }
+  .ab-sql {
+    margin-top: 6px; padding: 6px 8px; background: #0f1720; color: #9cffd0;
+    border-radius: 6px; font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px; overflow-x: auto; white-space: pre;
+  }
+  .ab-rowcount { margin-top: 4px; font-size: 11px; color: #5a6b73; }
+  .ab-form {
+    border-top: 1px solid #d4e2e8; padding: 10px; background: #fff;
+    display: flex; gap: 8px;
+  }
+  .ab-input {
+    flex: 1; border: 1px solid #d4e2e8; border-radius: 8px;
+    padding: 8px 10px; font-size: 13px; font-family: inherit; color: #132026;
+    outline: none;
+  }
+  .ab-input:focus { border-color: #0d8f71; }
+  .ab-send {
+    background: #0d8f71; color: #fff; border: none; border-radius: 8px;
+    padding: 0 14px; font-weight: 600; cursor: pointer; font-size: 13px;
+  }
+  .ab-send:disabled { background: #90a7ae; cursor: not-allowed; }
+  .ab-typing { display: inline-block; }
+  .ab-typing span {
+    display: inline-block; width: 5px; height: 5px; margin: 0 1px;
+    background: #5a6b73; border-radius: 50%;
+    animation: ab-bounce 1.2s infinite ease-in-out;
+  }
+  .ab-typing span:nth-child(2) { animation-delay: .15s; }
+  .ab-typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes ab-bounce {
+    0%, 80%, 100% { transform: scale(.6); opacity: .4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+  `;
+
+  const styleTag = document.createElement("style");
+  styleTag.textContent = CSS;
+  document.head.appendChild(styleTag);
+
+  const fab = document.createElement("button");
+  fab.className = "ab-fab";
+  fab.type = "button";
+  fab.title = "Hi! Got a question? I'm here to help";
+  fab.setAttribute("aria-label", "Open chat with your friendly data helper");
+  fab.textContent = "\u{1F4AC}";
+
+  const panel = document.createElement("div");
+  panel.className = "ab-panel";
+  panel.innerHTML = `
+    <div class="ab-head">
+      <div>
+        <div class="ab-head-title">Your Data Buddy</div>
+        <div class="ab-head-sub">Friendly helper · safe read-only access</div>
+      </div>
+      <button class="ab-close" type="button" aria-label="Close chat — come back anytime!">\u00D7</button>
+    </div>
+    <div class="ab-log" role="log" aria-live="polite"></div>
+    <form class="ab-form">
+      <input class="ab-input" type="text" placeholder="Ask me anything — attendance, packs, staff..." maxlength="1000" autocomplete="off" />
+      <button class="ab-send" type="submit">Ask</button>
+    </form>
+  `;
+
+  document.body.appendChild(fab);
+  document.body.appendChild(panel);
+
+  const log = panel.querySelector(".ab-log");
+  const form = panel.querySelector(".ab-form");
+  const input = panel.querySelector(".ab-input");
+  const sendBtn = panel.querySelector(".ab-send");
+  const closeBtn = panel.querySelector(".ab-close");
+
+  function addMsg(text, cls) {
+    const div = document.createElement("div");
+    div.className = "ab-msg " + cls;
+    div.textContent = text;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+    return div;
+  }
+
+  function addBotAnswer({ answer, sql, rows }) {
+    const div = document.createElement("div");
+    div.className = "ab-msg bot";
+    const p = document.createElement("div");
+    p.textContent = answer || "Hmm, I couldn't find anything for that one. Mind rephrasing it?";
+    div.appendChild(p);
+    if (sql) {
+      const pre = document.createElement("pre");
+      pre.className = "ab-sql";
+      pre.textContent = sql;
+      div.appendChild(pre);
+    }
+    if (rows && rows.length) {
+      const rc = document.createElement("div");
+      rc.className = "ab-rowcount";
+      rc.textContent = "Found " + rows.length + " matching record" + (rows.length === 1 ? "" : "s") + " for you";
+      div.appendChild(rc);
+    }
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function addTyping() {
+    const div = document.createElement("div");
+    div.className = "ab-msg bot";
+    div.innerHTML = '<span class="ab-typing"><span></span><span></span><span></span></span>';
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+    return div;
+  }
+
+  addMsg("Hi there! I'm your friendly data buddy. Feel free to ask me anything about attendance records, production packs, or temp staff — I'll take a quick peek (read-only, so nothing gets changed) and get right back to you. What would you like to know?", "sys");
+
+  fab.addEventListener("click", () => {
+    panel.classList.toggle("open");
+    if (panel.classList.contains("open")) input.focus();
+  });
+  closeBtn.addEventListener("click", () => panel.classList.remove("open"));
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = input.value.trim();
+    if (!message) return;
+    addMsg(message, "user");
+    input.value = "";
+    sendBtn.disabled = true;
+    const typing = addTyping();
+    try {
+      const response = await fetch(API_BASE + "/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      const data = await response.json().catch(() => ({}));
+      typing.remove();
+      if (!response.ok) {
+        addMsg("Oops, something went a bit sideways: " + (data.detail || response.statusText) + ". Could you try asking again?", "sys");
+      } else {
+        addBotAnswer(data);
+      }
+    } catch (err) {
+      typing.remove();
+      addMsg("Hmm, I couldn't reach the server (" + err.message + "). Mind checking your connection and trying again?", "sys");
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  });
+})();

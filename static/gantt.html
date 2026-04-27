@@ -364,7 +364,7 @@ function renderRow(emp){
     const shortOut=dual?opts.outLabel.split(' / ')[0]:opts.outLabel;
     const outShown=dual?(w>=18?opts.outLabel:shortOut):opts.outLabel;
     const hasIn=opts.inLabel&&w>5;
-    const hasOut=opts.outLabel&&w>=12;
+    const hasOut=opts.outLabel&&w>=8;
     if(hasIn&&hasOut){
       seg.innerHTML=`<span class="seg-lbl seg-l" style="color:${tcol};">${opts.inLabel}</span><span class="seg-lbl seg-r" style="color:${tcol};">${outShown}</span>`;
     }else if(hasIn){
@@ -375,6 +375,13 @@ function renderRow(emp){
       seg.innerHTML=`<span class="seg-lbl seg-r" style="color:${tcol};">${outShown}</span>`;
     }
     track.appendChild(seg);
+    if(opts.outLabel&&!hasOut&&!opts.opacity){
+      const out=document.createElement('span');
+      out.className='seg-lbl seg-out';
+      out.style.cssText=`position:absolute;left:${(l+w).toFixed(2)}%;top:50%;transform:translateY(-50%);margin-left:3px;color:${color};`;
+      out.textContent=shortOut;
+      tw.appendChild(out);
+    }
   };
 
   if(cls==='absent'){
@@ -417,9 +424,10 @@ function renderRow(emp){
       const s2s=MN_AX,s2e=Math.min(WIN_HOURS,toAxis(outH));
       paintSeg(s2s,s2e,color,tcol,{opacity:'.55'});
     }else{
-      paintSeg(axIn,axOut,color,tcol,{inLabel:emp.in,outLabel:isMorning?'':outShown});
+      paintSeg(axIn,axOut,color,tcol,{inLabel:emp.in,outLabel:outShown});
     }
-    tc.innerHTML=`<div class="total-hrs" style="color:${color};">${fmtH(wh)}</div>`;
+    const whShown=isTemp&&emp.total_hours?Number(emp.total_hours):wh;
+    tc.innerHTML=`<div class="total-hrs" style="color:${color};">${fmtH(whShown)}</div>`;
   }
 
   tw.appendChild(track);

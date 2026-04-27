@@ -297,12 +297,14 @@ def init_db() -> None:
                     headcount INTEGER NOT NULL,
                     start_time VARCHAR(5) NOT NULL,
                     leave_time VARCHAR(5) NOT NULL,
+                    leave_next_day BOOLEAN NOT NULL DEFAULT FALSE,
                     hours_per_person NUMERIC(6,2) NOT NULL,
                     total_hours NUMERIC(8,2) NOT NULL,
                     note TEXT,
                     created_at TIMESTAMP NOT NULL DEFAULT NOW()
                 )
             """)
+            cursor.execute("ALTER TABLE temp_staff ADD COLUMN IF NOT EXISTS leave_next_day BOOLEAN NOT NULL DEFAULT FALSE")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_temp_staff_date ON temp_staff(record_date)")
         connection.commit()
 
@@ -396,11 +398,14 @@ def calculate_working_hours(start_time: str, leave_time: str) -> str:
     minutes = diff_minutes % 60
     return f"{hours}:{minutes:02d} hr"
 
-def calculate_temp_staff_hours(start_time: str, leave_time: str) -> float:
+def calculate_temp_staff_hours(start_time: str, leave_time: str,
+                                leave_next_day: bool = False) -> float:
     """
-    Hours for one フルキャスト row. Handles overnight leave times: if the leave hour
-    is <= 6, it's treated as the following morning (e.g. start 19:00 leave 1:30 = 6.5h).
-    Returns 0.0 if inputs are unparseable.
+    Hours for one フルキャスト row. The shift slot is 19:00 → next-day 10:00.
+    When leave_next_day is True, 24h is added to the leave time so the
+    computation spans midnight correctly. When False, both times are on
+    the same calendar day. Returns 0.0 if inputs are unparseable or the
+    resulting duration is non-positive.
     """
     raw_start = (start_time or "").strip()
     raw_leave = (leave_time or "").strip()
@@ -408,14 +413,10 @@ def calculate_temp_staff_hours(start_time: str, leave_time: str) -> float:
     match_leave = re.match(r"^(\d{1,2}):(\d{2})$", raw_leave)
     if not match_start or not match_leave:
         return 0.0
-    start_h = int(match_start.group(1))
-    start_m = int(match_start.group(2))
-    leave_h = int(match_leave.group(1))
-    leave_m = int(match_leave.group(2))
-    if leave_h <= 6:
-        leave_h += 24
-    start_total = start_h * 60 + start_m
-    leave_total = leave_h * 60 + leave_m
+    start_total = int(match_start.group(1)) * 60 + int(match_start.group(2))
+    leave_total = int(match_leave.group(1)) * 60 + int(match_leave.group(2))
+    if leave_next_day:
+        leave_total += 24 * 60
     if leave_total <= start_total:
         return 0.0
     return round((leave_total - start_total) / 60, 2)
@@ -543,7 +544,74 @@ def extract_pdf_metadata(file_path: Path) -> dict[str, object]:
         except ValueError:
             pass
 
+    metadata["fullcast_rows"] = extract_fullcast_rows(full_text)
+
     return metadata
+
+
+def extract_fullcast_rows(full_text: str) -> list[dict[str, object]]:
+    """Find 'フルキャスト N 名 HH:MM HH:MM HH:MM' rows in PDF text.
+
+    The third time column (working_hours) is ignored because the source PDF
+    sometimes prints a visibly wrong sum (e.g. 47:15 for a 6h45m shift).
+    Hours are always recomputed from start+leave so the stored value is
+    authoritative.
+    """
+    rows: list[dict[str, object]] = []
+    # Full-width spaces come through as 　; some exports use ASCII spaces.
+    # Time column is optional break between start/leave/hours.
+    pattern = re.compile(
+        r"フルキャスト[\s　]*(\d+)[\s　]*名"
+        r"[\s　]+(\d{1,2}:\d{2})"
+        r"[\s　]+(\d{1,2}:\d{2})"
+        r"[\s　]+(\d{1,2}:\d{2})"
+    )
+    for match in pattern.finditer(full_text):
+        try:
+            headcount = int(match.group(1))
+        except ValueError:
+            continue
+        if headcount <= 0 or headcount > 999:
+            continue
+        start_raw = match.group(2)
+        leave_raw = match.group(3)
+        start_norm, start_next = normalize_plus24_time(start_raw)
+        leave_norm, leave_next = normalize_plus24_time(leave_raw)
+        if start_norm is None or leave_norm is None:
+            continue
+        # Explicit +24 on leave wins. Otherwise infer overnight by leave <= start.
+        leave_next_day = leave_next or (not start_next and leave_norm <= start_norm)
+        hours = calculate_temp_staff_hours(start_norm, leave_norm, leave_next_day)
+        if hours <= 0:
+            continue
+        rows.append({
+            "company": "フルキャスト",
+            "headcount": headcount,
+            "start_time": start_norm,
+            "leave_time": leave_norm,
+            "leave_next_day": leave_next_day,
+            "hours_per_person": round(hours, 2),
+            "total_hours": round(hours * headcount, 2),
+        })
+    return rows
+
+
+def normalize_plus24_time(raw: str) -> tuple[str | None, bool]:
+    """Convert '26:40' to ('02:40', True); leave '19:00' as ('19:00', False)."""
+    match = re.match(r"^(\d{1,2}):(\d{2})$", raw or "")
+    if not match:
+        return None, False
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    if minute >= 60:
+        return None, False
+    next_day = False
+    if hour >= 24:
+        hour -= 24
+        next_day = True
+    if hour >= 24 or hour < 0:
+        return None, False
+    return f"{hour:02d}:{minute:02d}", next_day
 
 def find_attendance_mismatches(
     record_date,
@@ -1034,6 +1102,231 @@ async def management_page():
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
+CHANGELOG_PATH = BASE_DIR / "CHANGELOG.md"
+
+# Map the raw area tags in CHANGELOG.md ("[ui]", "[api]"...) to plain-language
+# labels a non-technical reader can scan. Anything unmapped stays visible as
+# a lowercase tag so nothing is silently dropped.
+_LOG_AREA_LABELS = {
+    "ui": "What you see",
+    "api": "Behind the scenes",
+    "db": "Data storage",
+    "ops": "Operations",
+    "docs": "Documentation",
+    "feature": "New feature",
+    "bug": "Bug fix",
+    "fix": "Bug fix",
+    "security": "Security fix",
+    "print": "Printing",
+    "tooling": "Tooling",
+    "ui/logic": "What you see",
+    "ui/api": "What you see",
+    "db/api": "Data storage",
+}
+
+_LOG_AREA_LABELS_JA = {
+    "ui": "画面の表示",
+    "api": "裏側の処理",
+    "db": "データ保存",
+    "ops": "運用",
+    "docs": "ドキュメント",
+    "feature": "新機能",
+    "bug": "不具合修正",
+    "fix": "不具合修正",
+    "security": "セキュリティ対応",
+    "print": "印刷",
+    "tooling": "ツール",
+    "ui/logic": "画面の表示",
+    "ui/api": "画面の表示",
+    "db/api": "データ保存",
+}
+
+# Hand-written Japanese summaries for each CHANGELOG entry so non-technical JA
+# readers can scan the update log on /logs. Key is the stripped EN title exactly
+# as produced by _strip_markdown on the heading's right side. Unlisted titles
+# fall back to the EN title + "日本語訳は準備中です" so nothing disappears.
+_LOG_ENTRIES_JA: dict[str, dict[str, str]] = {
+    "BETA / test-mode banner + bilingual progress report": {
+        "title": "BETAバナーの追加と進捗報告書の作成（英日バイリンガル）",
+        "summary": "画面上部に「テスト中・データ検証中」のお知らせバーを追加しました。英語と日本語の両方で表示されます。あわせて、技術的な背景を知らない方でも分かる進捗・不具合の報告書を作成しました。",
+    },
+    "Daily Packs PDF: bulk upload speed-up + 504 timeout fix": {
+        "title": "Daily Packs PDF：一括アップロードの高速化・タイムアウト解消",
+        "summary": "タブ3のPDF一括アップロードをグループ分けして送信するように変更し、処理が速くなりました。100枚以上のPDFでもゲートウェイのタイムアウト（504エラー）が起きにくくなっています。",
+    },
+    "Daily Packs PDF: フルキャスト auto-extract + shift→prod date correction": {
+        "title": "Daily Packs PDF：フルキャスト行の自動抽出・製造日付のずれを修正",
+        "summary": "生産サマリーPDFをアップロードするだけで、パック数に加えてフルキャストの行（会社名・人数・出退勤時刻）も自動で読み取れるようになりました。PDFに印字された日付とシステム上の製造日付のずれも自動で修正します。",
+    },
+    "Database reset for clean verification": {
+        "title": "お客様検証に向けたデータベース初期化",
+        "summary": "お客様テストを始めるにあたり、勤怠データ・アップロード履歴・パック数・派遣スタッフ記録を初期化しました。社員名簿（employee_roster.json）は保持しています。",
+    },
+    "Security & data-integrity fixes (XSS + negative numbers + shift-window limits)": {
+        "title": "セキュリティとデータ整合性の強化",
+        "summary": "管理画面に氏名を通じた不正スクリプト挿入（XSS）が起きないように対策しました。フルキャスト人数やパック数にマイナス値を入れられない制限、シフトの開始・退勤時刻の範囲チェック、深夜勤務（翌日退勤）の正式対応も追加しています。",
+    },
+    "Management GUI mockup on dev branch": {
+        "title": "管理画面（Management）のモックアップを追加",
+        "summary": "パスワードでロックされた社員管理画面のモックアップを追加しました。ドラッグ＆ドロップで所属課を変更したり、並び替えたりできます。正式版ではログイン機能とサーバー側の権限管理に置き換えます。",
+    },
+    "V3 attendance console naming refresh": {
+        "title": "アプリ名を「V3 Attendance Console」に統一",
+        "summary": "アプリの表記を「V3 Attendance Console」に統一しました。ページタイトル・上部ブランド表示・ドキュメントのすべてで同じ名称に揃えています。",
+    },
+    "Summary PDF → B3 landscape · 3-month demo-data seeder": {
+        "title": "サマリーPDFをB3横向きに変更・3か月分のデモデータ生成ツール",
+        "summary": "サマリー画面のPDF出力をA4からB3横向きに変更し、グラフ・比較ブロック・14日間の表が1枚に収まるようにしました。あわせて、3か月分のリアルなデモデータを自動生成するツールを追加し、ダッシュボードの紹介がしやすくなりました。",
+    },
+    "Summary page (/attendance/summary) with target-line KPIs": {
+        "title": "サマリーダッシュボードを新規追加（目標値付きKPI表示）",
+        "summary": "全体と課別の人時生産性を一画面で見られる新しいサマリー画面を追加しました。日次・週次・月次・3か月の切替、前期間との比較、目標値（S1=85, S2=35, 合計=25 P/h）とのグラフ比較、14日間の詳細表を備えています。",
+    },
+    "Summary page ( /attendance/summary ) with target-line KPIs": {
+        "title": "サマリーダッシュボードを新規追加（目標値付きKPI表示）",
+        "summary": "全体と課別の人時生産性を一画面で見られる新しいサマリー画面を追加しました。日次・週次・月次・3か月の切替、前期間との比較、目標値（S1=85, S2=35, 合計=25 P/h）とのグラフ比較、14日間の詳細表を備えています。",
+    },
+    "Shift/Prod formula fix · Daily Packs DB sync · フルキャスト in Section 2": {
+        "title": "シフト/製造日付の計算式を修正・Daily Packsの表示を修正・フルキャストを第2課に表示",
+        "summary": "シフト日と製造日の判定式を「10時〜翌朝8時半」の実際のサイクルに合わせて書き直しました。Daily Packsの保存済みパック数が画面に表示されない不具合も修正しています。ガント画面では派遣スタッフ（フルキャスト）を第2課の末尾に表示します。",
+    },
+    "Dual time labels + responsive layout + previous-day delta arrows": {
+        "title": "時刻表示の二重併記・レスポンシブ対応・前日比の矢印追加",
+        "summary": "翌日の退勤時刻を「28:00 / 04:00」のように24時間連続軸と実時刻の両方で表示するようにしました。画面サイズに応じて自動で調整され、生産性パネルには前日比の増減矢印（▲/▼）が表示されます。",
+    },
+    "Gantt report works for every date (cache + graceful fallback)": {
+        "title": "ガントレポートがすべての日付で正常表示",
+        "summary": "ガントレポートが一部の日付でしか新デザインで表示されなかった問題を修正しました。キャッシュ制御を強化し、パック数が未保存の日付でもレイアウトが崩れないようにしました。",
+    },
+    "Attendance Report redesign (window, in-bar labels, productivity panel)": {
+        "title": "勤怠レポートの刷新（時間軸・バー内ラベル・生産性パネル）",
+        "summary": "ガントの時間軸を「10:00〜翌8:30」の22.5時間に変更し、開始・退勤時刻をバーの中に表示するデザインに刷新しました。上部にはパック数・第1課LP・第2課LP・合計LPを並べた生産性パネルを配置しています。",
+    },
+    "Attendance Gantt \"no data\" bugfix": {
+        "title": "ガント表示の「データ無し」不具合を修正",
+        "summary": "ある日付でデータが揃っているのに全員「出勤なし」と表示されていた不具合を修正しました。勤務時間の末尾に付く「 hr」の文字列で数値解釈に失敗していたのが原因です。",
+    },
+    "auto-upload button removed from UI": {
+        "title": "自動取込ボタンを画面から一旦削除",
+        "summary": "監視フォルダにPiからアクセスできないため「folder not found」のまま操作できない状態だった自動取込ボタンを画面から一旦外しました。APIは残しているため、フォルダ共有が整い次第復活できます。",
+    },
+    "console cleanup + auto-upload hardening": {
+        "title": "コンソール画面の整理・自動取込機能の安定化",
+        "summary": "コンソール画面のレイアウト不整合を整理し、時計ウィジェットを常に右上に表示するよう調整しました。自動取込の状態（準備中・N件・フォルダなし 等）を常に表示するようにしています。",
+    },
+    "v3.0 console hero/clock/auto-upload/date": {
+        "title": "v3.0コンソールに時計・自動取込・日付ルールを追加",
+        "summary": "コンソール画面にリアルタイム時計ウィジェットを追加し、現在時刻・シフト日・製造日を常に表示します。タブ1に自動取込ボタン、PDFからの日付（処理日）自動読み取りも追加しました。",
+    },
+    "Tab 2 backend + tab-sync rules": {
+        "title": "フルキャスト入力のバックエンド実装・タブ間連携ルールの整備",
+        "summary": "タブ2（フルキャスト）の保存先データベースと API を新設し、日付を変えると自動で保存済みデータを読み込むようにしました。タブ2・3・4の日付の連動ルールも整備しています。",
+    },
+    "v3.0 console first cut": {
+        "title": "v3.0コンソール画面の初版を公開",
+        "summary": "4つのタブ（勤怠PDF・フルキャスト・Daily Packs・レポート）で構成される新しいコンソール画面の初版を公開しました。既存のダッシュボードと同じデザインに揃えています。",
+    },
+}
+
+def _strip_markdown(text: str, is_heading: bool = False) -> str:
+    """Turn CHANGELOG line fragments into plain prose for the logs page.
+
+    Headings keep inline code and → arrows (they're part of the title, not
+    a file-reference pointer). Only body bullets get the full scrub.
+    """
+    if is_heading:
+        # Unwrap backticks so inline code still reads naturally in the title.
+        text = re.sub(r"`([^`]*)`", r"\1", text)
+    else:
+        # Body bullets: inline code is almost always a file path or flag the
+        # non-technical reader shouldn't see, so drop it entirely.
+        text = re.sub(r"`[^`]*`", "", text)
+        # Also drop the trailing "→ file references" pointer the CHANGELOG
+        # uses at the end of each bullet.
+        text = re.split(r"\s*→\s*", text, maxsplit=1)[0]
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"\*(.+?)\*", r"\1", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+def _parse_changelog(raw: str) -> list[dict]:
+    """Parse CHANGELOG.md into a list of {date, title, items[]} cards."""
+    entries: list[dict] = []
+    current: dict | None = None
+    date_heading_re = re.compile(r"^##\s+(\d{4}-\d{2}-\d{2})\s+—\s+(.+?)\s*$")
+    bullet_re = re.compile(r"^-\s+(?:\*\*\[([^\]]+)\]\*\*|\[([^\]]+)\])\s*(.*)$")
+    plain_bullet_re = re.compile(r"^-\s+(.*)$")
+
+    for raw_line in raw.splitlines():
+        line = raw_line.rstrip()
+        # Stop once we hit the trailing "Notes for future updates" section.
+        if line.startswith("_Notes for future updates"):
+            break
+        heading = date_heading_re.match(line)
+        if heading:
+            if current:
+                entries.append(current)
+            current = {
+                "date": heading.group(1),
+                "title": _strip_markdown(heading.group(2), is_heading=True),
+                "items": [],
+            }
+            continue
+        if not current:
+            continue
+        match = bullet_re.match(line)
+        if match:
+            tag = (match.group(1) or match.group(2) or "").lower().strip()
+            body = _strip_markdown(match.group(3) or "")
+            if body:
+                current["items"].append({
+                    "area": _LOG_AREA_LABELS.get(tag, tag or "Update"),
+                    "area_ja": _LOG_AREA_LABELS_JA.get(tag, tag or "更新"),
+                    "tag": tag,
+                    "text": body,
+                })
+            continue
+        plain = plain_bullet_re.match(line)
+        if plain and current["items"]:
+            # Continuation sub-bullet — attach to the previous item as context.
+            extra = _strip_markdown(plain.group(1))
+            if extra:
+                current["items"][-1]["text"] += " " + extra
+
+    if current:
+        entries.append(current)
+
+    for entry in entries:
+        # Prune empty items; keep entries that still have a title even if
+        # bullets were all sub-technical so the user sees something per date.
+        entry["items"] = [item for item in entry["items"] if item["text"]]
+        # Attach hand-written JA title + summary so the /logs page can render
+        # a genuinely non-technical Japanese view instead of raw EN prose.
+        ja_override = _LOG_ENTRIES_JA.get(entry["title"])
+        if ja_override:
+            entry["title_ja"] = ja_override["title"]
+            entry["summary_ja"] = ja_override["summary"]
+        else:
+            entry["title_ja"] = entry["title"]
+            entry["summary_ja"] = ""
+    return entries
+
+@app.get("/logs")
+async def logs_page():
+    """Stand-alone update-log page, not linked from the main nav."""
+    return FileResponse(
+        STATIC_DIR / "logs.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+@app.get("/api/logs")
+async def logs_api():
+    """Serve CHANGELOG.md parsed into non-technical timeline entries."""
+    try:
+        raw = CHANGELOG_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {"entries": []}
+    return {"entries": _parse_changelog(raw)}
+
 @app.get("/api/management/bootstrap")
 async def management_bootstrap():
     """Return roster and section metadata for the management UI."""
@@ -1066,6 +1359,17 @@ async def management_save_roster(payload: dict = Body(...)):
             raise HTTPException(status_code=400, detail=f"Employee row {index} has an invalid code.")
         if not name:
             raise HTTPException(status_code=400, detail=f"Employee {code} is missing a name.")
+        # Defence-in-depth: even though the frontend escapes on render, the roster
+        # JSON is consumed by other tools (Excel export, Gantt PDF, Grafana).
+        # Reject control chars and HTML/SQL metacharacters at the boundary so a
+        # poisoned name can never land in employee_roster.json in the first place.
+        if len(name) > 100:
+            raise HTTPException(status_code=400, detail=f"Employee {code}: name is too long (max 100 chars).")
+        if any(ch in name for ch in "<>\"'`;\\") or any(ord(ch) < 0x20 for ch in name):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Employee {code}: name contains disallowed characters.",
+            )
         if code in seen_codes:
             raise HTTPException(status_code=400, detail=f"Employee code {code} is duplicated.")
         if section_id not in section_by_id:
@@ -1233,7 +1537,7 @@ def _gantt_compute_for_date(cursor, record_date: str, roster_index: dict) -> tup
     # becomes one synthetic gantt row — the group worked one shift together.
     cursor.execute(
         """
-        SELECT id, company, headcount, start_time, leave_time,
+        SELECT id, company, headcount, start_time, leave_time, leave_next_day,
                hours_per_person, total_hours, note
         FROM temp_staff
         WHERE record_date = %s
@@ -1276,15 +1580,26 @@ def _gantt_compute_for_date(cursor, record_date: str, roster_index: dict) -> tup
         hours_per_person = float(t["hours_per_person"] or 0)
         group_total_hours = float(t["total_hours"] or (hours_per_person * headcount))
         company = (t["company"] or "フルキャスト").strip() or "フルキャスト"
+        leave_next_day = bool(t.get("leave_next_day"))
+        # When overnight, re-encode leave as +24 notation (e.g. "02:45" -> "26:45")
+        # to match the attendance_records.time_to_leave convention so the Gantt
+        # renderer can draw the bar crossing midnight with a single hour parser.
+        raw_leave = (t["leave_time"] or "").strip()
+        if leave_next_day and re.match(r"^\d{1,2}:\d{2}$", raw_leave):
+            lh, lm = raw_leave.split(":")
+            leave_out = f"{int(lh) + 24}:{lm}"
+        else:
+            leave_out = raw_leave or None
         synthetic = {
             "code": f"TEMP-{t['id']}",
             "name": f"{company} × {headcount}名",
             "in": (t["start_time"] or None),
-            "out": (t["leave_time"] or None),
+            "out": leave_out,
             # wh is per-person so the gantt bar length matches one person's shift
             # (the whole group shares identical start/leave).
             "wh": _gantt_hours_to_hhmm(hours_per_person),
             "is_temp": True,
+            "leave_next_day": leave_next_day,
             "headcount": headcount,
             "total_hours": round(group_total_hours, 4),
         }
@@ -2154,6 +2469,72 @@ async def get_daily_packs(record_date: str):
     }
 
 
+def fetch_existing_daily_pack(record_date) -> dict | None:
+    """Return the current daily_packs row for a date, or None if absent."""
+    if record_date is None:
+        return None
+    with get_db_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                "SELECT number_of_packs, note, updated_at FROM daily_packs WHERE record_date = %s",
+                (record_date,),
+            )
+            row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "number_of_packs": row["number_of_packs"],
+        "note": row["note"],
+        "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+    }
+
+
+def fetch_existing_temp_staff(record_date) -> list[dict]:
+    """Return saved temp_staff rows for a date (used to detect overwrite cases)."""
+    if record_date is None:
+        return []
+    with get_db_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT id, company, headcount, start_time, leave_time,
+                       leave_next_day, hours_per_person, total_hours
+                FROM temp_staff
+                WHERE record_date = %s
+                ORDER BY id
+                """,
+                (record_date,),
+            )
+            rows = cursor.fetchall()
+    out: list[dict] = []
+    for row in rows:
+        out.append({
+            "id": row["id"],
+            "company": row["company"],
+            "headcount": row["headcount"],
+            "start_time": str(row["start_time"])[:5] if row["start_time"] else None,
+            "leave_time": str(row["leave_time"])[:5] if row["leave_time"] else None,
+            "leave_next_day": bool(row["leave_next_day"]),
+            "hours_per_person": float(row["hours_per_person"]) if row["hours_per_person"] is not None else 0.0,
+            "total_hours": float(row["total_hours"]) if row["total_hours"] is not None else 0.0,
+        })
+    return out
+
+
+def shift_to_prod_date(shift_date):
+    """Daily Packs convention: the PDF prints the shift date (製造分 day),
+    but the pack count + フルキャスト hours belong to prod_date = shift + 1.
+
+    ### CONFIG: change the +1 offset here if the business rule ever changes.
+    # e.g. to save under the SAME date as the PDF, replace the return line with:
+    #     return shift_date
+    # e.g. to save two days later, use timedelta(days=2), etc.
+    """
+    if shift_date is None:
+        return None
+    return shift_date + timedelta(days=1)
+
+
 @app.post("/api/daily-packs/extract-pdf")
 async def extract_daily_packs_from_pdf(file: UploadFile = File(...)):
     """Extract date, pack count, AND time mismatches from an uploaded PDF without saving.
@@ -2164,33 +2545,30 @@ async def extract_daily_packs_from_pdf(file: UploadFile = File(...)):
     """
     _original_name, file_path, _content = await save_uploaded_pdf(file)
     metadata = extract_pdf_metadata(file_path)
-    record_date = metadata.get("record_date")
+    shift_date = metadata.get("record_date")
+    record_date = shift_to_prod_date(shift_date)
     pack_count = metadata.get("number_of_packs")
+    fullcast_rows = metadata.get("fullcast_rows") or []
 
-    # Attendance parsing is best-effort here — a production-summary PDF may only
-    # contain the pack count and no attendance table, so we must not fail the
-    # whole request if parse_pdf_data can't find rows.
-    records = []
-    parse_error = None
-    try:
-        records = apply_employee_roster(parse_pdf_data(file_path))
-    except ValueError as exc:
-        parse_error = str(exc)
-    except Exception as exc:  # noqa: BLE001
-        parse_error = f"parser error: {exc}"
-
-    mismatches = find_attendance_mismatches(record_date, records) if records else []
-    compared_count = sum(1 for r in records if record_has_data(r))
+    # Tab 3 only needs date + pack count + フルキャスト rows + existing-data check.
+    # Skip the expensive attendance table parse and mismatch scan to keep the
+    # request well under Cloudflare's 100s gateway timeout on bulk uploads.
+    existing_pack = fetch_existing_daily_pack(record_date)
+    existing_fullcast = fetch_existing_temp_staff(record_date)
 
     return {
         "record_date": record_date.isoformat() if record_date else None,
+        "shift_date": shift_date.isoformat() if shift_date else None,
         "number_of_packs": pack_count,
         "found_date": record_date is not None,
         "found_packs": pack_count is not None,
-        "compared_count": compared_count,
-        "mismatch_count": len(mismatches),
-        "mismatches": mismatches,
-        "parse_error": parse_error,
+        "compared_count": 0,
+        "mismatch_count": 0,
+        "mismatches": [],
+        "parse_error": None,
+        "fullcast_rows": fullcast_rows,
+        "existing_pack": existing_pack,
+        "existing_fullcast": existing_fullcast,
     }
 
 
@@ -2214,6 +2592,7 @@ async def extract_daily_packs_from_pdfs(files: list[UploadFile] = File(...)):
         entry: dict = {
             "source_filename": original_name,
             "record_date": None,
+            "shift_date": None,
             "number_of_packs": None,
             "found_date": False,
             "found_packs": False,
@@ -2222,36 +2601,35 @@ async def extract_daily_packs_from_pdfs(files: list[UploadFile] = File(...)):
             "mismatches": [],
             "parse_error": None,
             "error": None,
+            "fullcast_rows": [],
+            "existing_pack": None,
+            "existing_fullcast": [],
         }
         try:
             _original, file_path, _content = await save_uploaded_pdf(file)
             metadata = extract_pdf_metadata(file_path)
-            record_date = metadata.get("record_date")
+            shift_date = metadata.get("record_date")
+            record_date = shift_to_prod_date(shift_date)
             pack_count = metadata.get("number_of_packs")
+            fullcast_rows = metadata.get("fullcast_rows") or []
 
-            records = []
-            try:
-                records = apply_employee_roster(parse_pdf_data(file_path))
-            except ValueError as exc:
-                entry["parse_error"] = str(exc)
-            except Exception as exc:  # noqa: BLE001
-                entry["parse_error"] = f"parser error: {exc}"
-
-            mismatches = find_attendance_mismatches(record_date, records) if records else []
-            compared_count = sum(1 for r in records if record_has_data(r))
-
+            # Skip heavy attendance parse (not shown in Tab 3) to stay under the
+            # Cloudflare gateway timeout on bulk uploads.
             entry.update({
                 "record_date": record_date.isoformat() if record_date else None,
+                "shift_date": shift_date.isoformat() if shift_date else None,
                 "number_of_packs": pack_count,
                 "found_date": record_date is not None,
                 "found_packs": pack_count is not None,
-                "compared_count": compared_count,
-                "mismatch_count": len(mismatches),
-                "mismatches": mismatches,
+                "compared_count": 0,
+                "mismatch_count": 0,
+                "mismatches": [],
+                "fullcast_rows": fullcast_rows,
+                "existing_pack": fetch_existing_daily_pack(record_date),
+                "existing_fullcast": fetch_existing_temp_staff(record_date),
             })
             if entry["found_date"] and entry["found_packs"]:
                 found_count += 1
-            total_mismatch_count += len(mismatches)
         except HTTPException as exc:
             entry["error"] = exc.detail if isinstance(exc.detail, str) else "validation failed"
         except Exception as exc:  # noqa: BLE001
@@ -2529,7 +2907,7 @@ async def get_temp_staff(record_date: str):
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
                 """
-                SELECT id, company, headcount, start_time, leave_time,
+                SELECT id, company, headcount, start_time, leave_time, leave_next_day,
                        hours_per_person, total_hours, note, created_at
                 FROM temp_staff
                 WHERE record_date = %s
@@ -2544,6 +2922,7 @@ async def get_temp_staff(record_date: str):
                     "headcount": r["headcount"],
                     "start_time": r["start_time"],
                     "leave_time": r["leave_time"],
+                    "leave_next_day": bool(r["leave_next_day"]),
                     "hours_per_person": float(r["hours_per_person"]) if r["hours_per_person"] is not None else 0.0,
                     "total_hours": float(r["total_hours"]) if r["total_hours"] is not None else 0.0,
                     "note": r["note"],
@@ -2596,12 +2975,19 @@ async def save_temp_staff(payload: dict = Body(...)):
         leave_time = (raw.get("leave_time") or "").strip()
         if not re.match(r"^\d{1,2}:\d{2}$", start_time) or not re.match(r"^\d{1,2}:\d{2}$", leave_time):
             continue
-        hours_per_person = calculate_temp_staff_hours(start_time, leave_time)
+        leave_next_day = bool(raw.get("leave_next_day"))
+        start_minutes = int(start_time.split(":")[0]) * 60 + int(start_time.split(":")[1])
+        leave_minutes = int(leave_time.split(":")[0]) * 60 + int(leave_time.split(":")[1])
+        if leave_minutes <= start_minutes:
+            leave_next_day = True
+        hours_per_person = calculate_temp_staff_hours(start_time, leave_time, leave_next_day)
+        if hours_per_person <= 0:
+            continue
         total_hours = round(headcount * hours_per_person, 2)
         company = (raw.get("company") or "フルキャスト").strip() or "フルキャスト"
         note = raw.get("note")
         cleaned.append((parsed_date, company, headcount, start_time, leave_time,
-                        hours_per_person, total_hours, note))
+                        leave_next_day, hours_per_person, total_hours, note))
 
     with get_db_connection() as connection:
         with connection.cursor() as cursor:
@@ -2611,15 +2997,15 @@ async def save_temp_staff(payload: dict = Body(...)):
                     """
                     INSERT INTO temp_staff
                         (record_date, company, headcount, start_time, leave_time,
-                         hours_per_person, total_hours, note)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                         leave_next_day, hours_per_person, total_hours, note)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     cleaned,
                 )
         connection.commit()
 
     total_people = sum(row[2] for row in cleaned)
-    total_hours = round(sum(row[6] for row in cleaned), 2)
+    total_hours = round(sum(row[7] for row in cleaned), 2)
     return {
         "record_date": record_date,
         "saved_rows": len(cleaned),
@@ -2654,6 +3040,174 @@ async def dashboard_months():
         "available_months": months,
         "latest_month": months[0] if months else None,
     }
+
+# ---------------------------------------------------------------------------
+# Local-LLM chatbot (Ollama) — read-only DB Q&A over the attendance schema.
+# ---------------------------------------------------------------------------
+import urllib.request
+import urllib.error
+
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+CHAT_ROW_LIMIT = 200
+
+DB_SCHEMA_FOR_LLM = """\
+PostgreSQL schema (attendance_db). Read-only. Use ONLY these tables/columns.
+
+Table attendance_records — one row per employee per day (clock in/out).
+  id SERIAL, upload_date TIMESTAMP, file_name VARCHAR,
+  personal_code VARCHAR(20), full_name VARCHAR(100),
+  commute_time VARCHAR(10), time_to_leave VARCHAR(10), working_hours VARCHAR(10),
+  record_date DATE, month_year VARCHAR(7) -- 'YYYY-MM',
+  created_at TIMESTAMP
+
+Table upload_batches — PDF upload history.
+  id SERIAL, file_name VARCHAR, total_records INT, upload_date TIMESTAMP
+
+Table daily_packs — production output per date.
+  record_date DATE PK, number_of_packs INT, note TEXT,
+  created_at TIMESTAMP, updated_at TIMESTAMP
+
+Table temp_staff — dispatched temp workers (フルキャスト) buckets per date.
+  id SERIAL, record_date DATE, company VARCHAR,
+  headcount INT, start_time VARCHAR(5), leave_time VARCHAR(5),
+  hours_per_person NUMERIC, total_hours NUMERIC,
+  note TEXT, created_at TIMESTAMP
+"""
+
+# Block every write / DDL verb. The readonly transaction below is the real
+# wall; this regex is defense-in-depth against obvious mistakes.
+_SQL_FORBIDDEN = re.compile(
+    r"\b(insert|update|delete|drop|truncate|alter|create|grant|revoke|"
+    r"copy|call|execute|merge|comment|vacuum|reindex|cluster|set|"
+    r"lock|refresh|listen|notify|do)\b",
+    re.IGNORECASE,
+)
+
+def _ollama_generate(prompt: str, *, system: str = "", timeout: int = 45) -> str:
+    """Send a prompt to the local Ollama server and return the text reply."""
+    payload = json.dumps({
+        "model": OLLAMA_MODEL,
+        "prompt": prompt,
+        "system": system,
+        "stream": False,
+        "options": {"temperature": 0.1, "num_predict": 400},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        f"{OLLAMA_URL}/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        body = json.loads(response.read().decode("utf-8"))
+    return (body.get("response") or "").strip()
+
+def _extract_sql(text: str) -> str | None:
+    """Pull a SQL statement out of the LLM's reply (handles ```sql fences)."""
+    if not text:
+        return None
+    fenced = re.search(r"```(?:sql)?\s*(.+?)```", text, re.IGNORECASE | re.DOTALL)
+    candidate = (fenced.group(1) if fenced else text).strip()
+    # strip trailing semicolons; reject if any remain mid-statement (chaining)
+    candidate = candidate.rstrip().rstrip(";").strip()
+    if not candidate or ";" in candidate:
+        return None
+    first_word = candidate.split(None, 1)[0].lower() if candidate else ""
+    if first_word not in {"select", "with"}:
+        return None
+    if _SQL_FORBIDDEN.search(candidate):
+        return None
+    return candidate
+
+def _run_readonly_query(sql: str) -> list[dict]:
+    """Execute a validated SELECT inside a read-only transaction."""
+    with get_db_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SET LOCAL statement_timeout = 5000")
+            cursor.execute("SET LOCAL default_transaction_read_only = on")
+            cursor.execute("SET LOCAL transaction_read_only = on")
+            limited = sql if re.search(r"\blimit\b", sql, re.IGNORECASE) \
+                else f"{sql} LIMIT {CHAT_ROW_LIMIT}"
+            cursor.execute(limited)
+            rows = cursor.fetchall()
+        connection.rollback()  # readonly — never commit
+    # Make rows JSON-friendly
+    clean: list[dict] = []
+    for row in rows:
+        clean.append({k: (v.isoformat() if hasattr(v, "isoformat") else v)
+                      for k, v in row.items()})
+    return clean
+
+@app.post("/api/chat")
+async def chat(payload: dict = Body(...)):
+    """
+    Local-LLM chatbot with read-only access to the attendance database.
+    Body: { "message": "How many packs did we make yesterday?" }
+    """
+    message = (payload.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+    if len(message) > 1000:
+        raise HTTPException(status_code=400, detail="message too long")
+
+    # Step 1 — ask the model whether a SQL lookup is needed.
+    planner_system = (
+        "You write PostgreSQL SELECT queries for an attendance/production console. "
+        "Rules:\n"
+        "- If the question needs data, output ONE SELECT wrapped in ```sql fences. "
+        "Nothing else. No prose before or after.\n"
+        "- Never use INSERT, UPDATE, DELETE, or DDL.\n"
+        "- If the user mentions a number that looks like an employee code "
+        "(e.g. '0577', '12345678'), ALWAYS filter with "
+        "personal_code LIKE '%<number>%' — do NOT use = unless they give the "
+        "full 8-digit code.\n"
+        "- Always include ORDER BY record_date DESC for per-employee queries.\n"
+        "- If the user just greets you or asks something unrelated to data, "
+        "reply with a short plain sentence (no code fence)."
+    )
+    planner_prompt = f"{DB_SCHEMA_FOR_LLM}\nUser question: {message}"
+    try:
+        plan = _ollama_generate(planner_prompt, system=planner_system)
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise HTTPException(status_code=503, detail=f"LLM unreachable: {exc}")
+
+    sql = _extract_sql(plan)
+    if not sql:
+        # If the model produced a SQL-looking block, it was rejected by the
+        # read-only guard. Don't echo the forbidden statement back verbatim.
+        looks_like_sql = "```" in plan or _SQL_FORBIDDEN.search(plan or "")
+        if looks_like_sql:
+            return {"answer": "I can only read data — that request looked "
+                              "like a write/delete operation, so I blocked it.",
+                    "sql": None, "rows": []}
+        return {"answer": plan or "I couldn't produce a safe answer for that.",
+                "sql": None, "rows": []}
+
+    # Step 2 — run the SELECT and ask the model to explain the rows.
+    try:
+        rows = _run_readonly_query(sql)
+    except psycopg2.Error as exc:
+        return {"answer": f"SQL error: {exc.pgerror or exc}",
+                "sql": sql, "rows": []}
+
+    preview_rows = rows[:25]
+    explain_system = (
+        "You summarize SQL result rows in one short paragraph for a manager. "
+        "State concrete numbers. Do not invent data not in the rows."
+    )
+    explain_prompt = (
+        f"Question: {message}\nSQL: {sql}\n"
+        f"Rows ({len(rows)} total, showing {len(preview_rows)}): "
+        f"{json.dumps(preview_rows, ensure_ascii=False, default=str)}"
+    )
+    try:
+        answer = _ollama_generate(explain_prompt, system=explain_system)
+    except (urllib.error.URLError, TimeoutError):
+        answer = f"Query returned {len(rows)} row(s)."
+
+    return {"answer": answer or f"Query returned {len(rows)} row(s).",
+            "sql": sql, "rows": rows}
+
 
 # Serve static files
 if (BASE_DIR / "static").exists():
