@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>V3 Attendance Console · Update Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #eef3f5;
+    --ink: #132026;
+    --muted: #5a6b73;
+    --surface: #ffffff;
+    --surface-soft: #f7fbfc;
+    --brand: #0d8f71;
+    --brand-strong: #0b6f58;
+    --accent: #125e91;
+    --warn: #b86912;
+    --danger: #b42318;
+    --line: #d4e2e8;
+    --shadow: 0 10px 32px rgba(11, 35, 46, 0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 12% 15%, rgba(18, 94, 145, 0.09), transparent 34%),
+      radial-gradient(circle at 88% 18%, rgba(13, 143, 113, 0.11), transparent 38%),
+      var(--bg);
+    line-height: 1.55;
+  }
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(8px);
+  }
+  .brand {
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--brand-strong);
+    font-size: 0.95rem;
+  }
+  .lang-toggle {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-soft);
+    padding: 2px;
+    overflow: hidden;
+  }
+  .lang-btn {
+    border: 0;
+    background: transparent;
+    padding: 0.3rem 0.75rem;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--muted);
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: "IBM Plex Mono", "Space Grotesk", sans-serif;
+  }
+  .lang-btn.active { background: var(--brand); color: #fff; }
+
+  .page {
+    width: min(960px, 100%);
+    margin: 1.2rem auto 3rem;
+    padding: 0 0.9rem;
+  }
+  .intro {
+    padding: 1.1rem 1.2rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    margin-bottom: 1.3rem;
+  }
+  .intro h1 {
+    font-size: 1.35rem;
+    margin-bottom: 0.35rem;
+  }
+  .intro p {
+    color: var(--muted);
+    font-size: 0.92rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .timeline {
+    position: relative;
+    padding-left: 1.2rem;
+  }
+  .timeline::before {
+    content: "";
+    position: absolute;
+    left: 0.35rem;
+    top: 0.4rem;
+    bottom: 0.4rem;
+    width: 2px;
+    background: linear-gradient(180deg, #b8e4d8, #d4e2e8);
+    border-radius: 2px;
+  }
+  .entry {
+    position: relative;
+    margin-bottom: 1.1rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  .entry::before {
+    content: "";
+    position: absolute;
+    left: -1.2rem;
+    top: 1.35rem;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--brand);
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 1px var(--brand);
+  }
+  .entry-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.4rem;
+  }
+  .entry-date {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    color: var(--accent);
+    background: #eef6fb;
+    border: 1px solid #bfd9ea;
+    border-radius: 999px;
+    padding: 0.15rem 0.55rem;
+    white-space: nowrap;
+  }
+  .entry-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ink);
+    flex: 1 1 auto;
+  }
+  .entry-summary {
+    color: var(--ink);
+    font-size: 0.93rem;
+    line-height: 1.65;
+    padding: 0.6rem 0.75rem;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .entry-summary.ja-pending {
+    color: var(--warn);
+    background: #fff8ea;
+    border-color: #f0dbb8;
+    font-size: 0.82rem;
+    margin-bottom: 0.5rem;
+  }
+  .entry-items {
+    list-style: none;
+    display: grid;
+    gap: 0.5rem;
+    padding: 0;
+  }
+  .entry-items li {
+    padding: 0.55rem 0.65rem 0.55rem 0.7rem;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  .item-area {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--brand-strong);
+    background: #ecfaf4;
+    border: 1px solid #b8e4d8;
+    border-radius: 999px;
+    padding: 0.1rem 0.45rem;
+    margin-right: 0.5rem;
+    white-space: nowrap;
+  }
+  .item-area.area-bug,
+  .item-area.area-fix,
+  .item-area.area-security {
+    color: var(--danger);
+    background: #fff2f1;
+    border-color: #f0c8c4;
+  }
+  .item-area.area-feature,
+  .item-area.area-ui {
+    color: var(--accent);
+    background: #eef6fb;
+    border-color: #bfd9ea;
+  }
+  .item-area.area-docs,
+  .item-area.area-ops,
+  .item-area.area-tooling {
+    color: var(--warn);
+    background: #fff8ea;
+    border-color: #f0dbb8;
+  }
+  .status {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .status.error { color: var(--danger); }
+
+  body[data-lang="ja"] {
+    font-family: "Noto Sans JP", "Hiragino Sans", "Space Grotesk", sans-serif;
+  }
+  @media (max-width: 600px) {
+    .intro h1 { font-size: 1.15rem; }
+    .entry { padding: 0.85rem 0.9rem; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">V3 Attendance Console · Update Log</div>
+  <div class="lang-toggle" role="group" aria-label="Language">
+    <button type="button" class="lang-btn active" data-lang="en">EN</button>
+    <button type="button" class="lang-btn" data-lang="ja">日本語</button>
+  </div>
+</header>
+
+<main class="page">
+  <section class="intro">
+    <h1 data-i18n-en="What's new" data-i18n-ja="更新のお知らせ"></h1>
+    <p data-i18n-en="A plain-language timeline of every update made to the Attendance Console. Newest changes first."
+       data-i18n-ja="勤怠コンソールに加えられた更新を、分かりやすい言葉で時系列に並べています。新しいものが上に来ます。"></p>
+    <p data-i18n-en="Each card shows the date the change went live and a short description of what users will notice."
+       data-i18n-ja="各カードには変更が反映された日付と、利用者が気付く変更点を簡単にまとめています。"></p>
+  </section>
+
+  <div id="timeline" class="timeline" aria-live="polite">
+    <div class="status" data-i18n-en="Loading update log…" data-i18n-ja="更新ログを読み込み中…"></div>
+  </div>
+</main>
+
+<script>
+(() => {
+  const timeline = document.getElementById("timeline");
+  let currentLang = "en";
+  let entries = null;
+
+  const esc = (value) => String(value ?? "").replace(/[&<>"'`=\/]/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;",
+    "'": "&#39;", "`": "&#96;", "=": "&#61;", "/": "&#47;",
+  }[c]));
+
+  const T = {
+    empty: {
+      en: "No updates found yet.",
+      ja: "まだ更新はありません。",
+    },
+    error: {
+      en: "Could not load the update log.",
+      ja: "更新ログを読み込めませんでした。",
+    },
+  };
+
+  function formatDate(iso, lang) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    if (!match) return iso || "";
+    const [, y, m, d] = match;
+    if (lang === "ja") return `${y}年${Number(m)}月${Number(d)}日`;
+    try {
+      const date = new Date(Number(y), Number(m) - 1, Number(d));
+      return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    } catch (err) {
+      return iso;
+    }
+  }
+
+  function renderEntries() {
+    if (!entries) return;
+    if (entries.length === 0) {
+      timeline.innerHTML = `<div class="status">${esc(T.empty[currentLang])}</div>`;
+      return;
+    }
+    const isJa = currentLang === "ja";
+    timeline.innerHTML = entries.map((entry) => {
+      const title = isJa ? (entry.title_ja || entry.title || "") : (entry.title || "");
+      // JA view: show the hand-written summary paragraph instead of the raw
+      // English bullet list, so non-technical readers get a genuine JA page.
+      let body = "";
+      if (isJa && entry.summary_ja) {
+        body = `<p class="entry-summary">${esc(entry.summary_ja)}</p>`;
+      } else if (isJa && !entry.summary_ja && (entry.items || []).length) {
+        body = `
+          <p class="entry-summary ja-pending">日本語訳は準備中です。以下は英語の詳細です。</p>
+          ${renderItemList(entry.items, false)}
+        `;
+      } else {
+        body = renderItemList(entry.items || [], false);
+      }
+      return `
+        <article class="entry">
+          <div class="entry-head">
+            <h2 class="entry-title">${esc(title)}</h2>
+            <span class="entry-date">${esc(formatDate(entry.date, currentLang))}</span>
+          </div>
+          ${body}
+        </article>
+      `;
+    }).join("");
+  }
+
+  function renderItemList(items, isJa) {
+    if (!items.length) return "";
+    const lis = items.map((item) => {
+      const tagClass = (item.tag || "").split("/")[0].replace(/[^a-z]/g, "");
+      const area = isJa ? (item.area_ja || item.area || "更新") : (item.area || "Update");
+      return `
+        <li>
+          <span class="item-area area-${esc(tagClass)}">${esc(area)}</span>
+          <span>${esc(item.text || "")}</span>
+        </li>
+      `;
+    }).join("");
+    return `<ul class="entry-items">${lis}</ul>`;
+  }
+
+  function applyLang(lang) {
+    currentLang = lang;
+    document.body.setAttribute("data-lang", lang);
+    document.documentElement.setAttribute("lang", lang === "ja" ? "ja" : "en");
+    const key = lang === "ja" ? "data-i18n-ja" : "data-i18n-en";
+    document.querySelectorAll("[data-i18n-en]").forEach((el) => {
+      el.textContent = el.getAttribute(key) || el.getAttribute("data-i18n-en") || "";
+    });
+    document.querySelectorAll(".lang-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.lang === lang);
+    });
+    renderEntries();
+  }
+
+  document.querySelectorAll(".lang-btn").forEach((btn) => {
+    btn.addEventListener("click", () => applyLang(btn.dataset.lang));
+  });
+
+  async function loadLogs() {
+    try {
+      const response = await fetch("./api/logs", { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      entries = Array.isArray(data.entries) ? data.entries : [];
+      renderEntries();
+    } catch (err) {
+      timeline.innerHTML = `<div class="status error">${esc(T.error[currentLang])}</div>`;
+    }
+  }
+
+  applyLang("en");
+  loadLogs();
+})();
+</script>
+</body>
+</html>

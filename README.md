@@ -44,6 +44,7 @@ It uploads attendance PDFs, parses rostered employee rows, previews extracted da
 
 - Health check: `/attendance/api/health`
 - V3 console: `/attendance/console`
+- User management mockup: `/attendance/management`
 - Gantt report: `/attendance/gantt`
 - Summary report: `/attendance/summary`
 - Preview one file: `/attendance/api/preview`
