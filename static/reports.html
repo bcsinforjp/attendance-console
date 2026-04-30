@@ -58,6 +58,8 @@
   }
   .topnav a:hover { color: var(--brand-strong); border-color: var(--line); background: var(--surface-soft); }
   .topnav a.active { color: var(--brand-strong); border-color: #b8e4d8; background: #ecfaf4; }
+  .topnav a.dash-link { background:#10b981; color:#fff; border-color:#10b981; font-weight:700; }
+  .topnav a.dash-link:hover { background:#059669; border-color:#059669; color:#fff; }
 
   .page { width: min(1200px, 100%); margin: 1.2rem auto 2.5rem; padding: 0 0.9rem; }
 
@@ -149,19 +151,11 @@
   .message.success { color: var(--brand-strong); background: #eaf9f3; border-color: #b8e4d8; }
   .message.error   { color: var(--danger);       background: #fff2f1; border-color: #f0c8c4; }
 </style>
+<script src="./static/site_header.js" defer></script>
 </head>
 <body>
 
-<header class="topbar">
-  <div class="brand">V3 Attendance Console <small>· Reports</small></div>
-  <nav class="topnav">
-    <a href="./console">← Upload</a>
-    <a href="./management">Management</a>
-    <a href="./reports" class="active">Reports</a>
-    <a href="./logs">Logs</a>
-    <a href="/grafana/" target="_blank" rel="noopener">Dashboard ↗</a>
-  </nav>
-</header>
+<div id="siteHeader"></div>
 
 <main class="page">
   <section class="card panel">
@@ -180,30 +174,27 @@
       </div>
     </div>
 
+    <p class="lede" style="margin-top:0.6rem;font-size:0.85rem;color:var(--muted);">Reports view — read-only · 報告書は別ウィンドウで開きます。そのウィンドウで <strong>🖨 印刷 / Print</strong> と <strong>💬 Send to LINE</strong> ができます。</p>
+
     <div class="reports-grid">
       <div class="report-card">
         <span class="datebadge" id="badgeAttendance">—</span>
         <h3>Attendance Report</h3>
         <p>Per-employee Gantt chart grouped by department (製造１課 / 製造２課). A4 portrait print layout.</p>
-        <button type="button" class="button button-accent" id="btnReportAttendance">Open in new tab ↗</button>
-        <button type="button" class="button button-outline" id="btnLineAttendance" title="Send report link to LINE" style="margin-left:0.4rem">💬 Send to LINE</button>
+        <button type="button" class="button button-accent" id="btnReportAttendance">📂 Open Report ↗</button>
       </div>
       <div class="report-card pending">
         <span class="datebadge" id="badgeSummary">—</span>
         <h3>Summarizing Report</h3>
-        <p>Per-department productivity, company-wide efficiency, target line. B4 portrait print. <em>Page is pending — backend tables are ready.</em></p>
-        <button type="button" class="button button-outline" id="btnReportSummary">Open in new tab ↗</button>
-        <button type="button" class="button button-outline" id="btnLineSummary" title="Send report link to LINE" style="margin-left:0.4rem">💬 Send to LINE</button>
+        <p>Per-department productivity, company-wide efficiency, target line. B4 portrait print.</p>
+        <button type="button" class="button button-outline" id="btnReportSummary">📂 Open Report ↗</button>
       </div>
     </div>
 
-    <div class="report-card" style="margin-top:1rem">
-      <h3>LINE bot</h3>
-      <p>Send a one-off "Hi 👋" to all registered LINE recipients (test only — does not include a report link). Recipients self-register by messaging the bot first.</p>
-      <button type="button" class="button button-outline" id="btnLineHi">💬 Send Hi (test)</button>
-      <button type="button" class="button button-outline" id="btnLineList" style="margin-left:0.4rem">List recipients</button>
-      <pre id="lineRecipientsOut" class="mono" style="margin-top:0.6rem;max-height:140px;overflow:auto;font-size:0.78rem;color:var(--muted);"></pre>
-    </div>
+    <p style="margin-top:1rem;font-size:.78rem;color:var(--muted);">
+      LINE recipient management (rename / remove / send Hi test) moved to
+      <a href="./management" style="color:var(--brand-strong);">Management → 💬 LINE Recipients</a>.
+    </p>
 
     <div id="msgReports" class="message"></div>
   </section>
@@ -248,64 +239,144 @@ $reportDate.addEventListener("input", () => {
   $reportDateSource.textContent = "source: manually selected";
 });
 
+function openReportWindow(path, date, name) {
+  // ?report=1 → tells site_header.js to add body.report-mode and hide the top nav.
+  const url = api(path) + `?date=${encodeURIComponent(date)}&report=1`;
+  // One named popup so clicking either card reuses the same window if it's open.
+  const win = window.open(url, "rndReportView", "width=1280,height=900,resizable=yes,scrollbars=yes,toolbar=no,menubar=no");
+  if (win) win.focus();
+  return win;
+}
 document.getElementById("btnReportAttendance").addEventListener("click", () => {
   const d = $reportDate.value;
   if (!d) { showMsg("error", "Pick a report date."); return; }
-  window.open(api("/gantt") + `?date=${d}`, "_blank");
+  openReportWindow("/gantt", d, "Attendance");
+  showMsg("info", "Attendance report opened in a separate window. Print / Send to LINE from inside that window.");
 });
 document.getElementById("btnReportSummary").addEventListener("click", () => {
   const d = $reportDate.value;
   if (!d) { showMsg("error", "Pick a report date."); return; }
-  window.open(api("/summary") + `?date=${d}`, "_blank");
-  showMsg("info", "Summarizing Report opened in a new tab — page is still pending.");
+  openReportWindow("/summary", d, "Summary");
+  showMsg("info", "Summary report opened in a separate window. Print / Send to LINE from inside that window.");
 });
+
+const HTML2CANVAS_URL = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+function loadHtml2Canvas() {
+  return new Promise((resolve, reject) => {
+    if (window.html2canvas) return resolve();
+    const s = document.createElement("script");
+    s.src = HTML2CANVAS_URL;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("failed to load html2canvas"));
+    document.head.appendChild(s);
+  });
+}
+
+function fmtCnt(n) { return (Number(n)||0).toLocaleString("ja-JP"); }
+function fmt(n, d=2) { return Number(n||0).toFixed(d); }
+
+function buildAttendanceSnapshotHtml(date, prod) {
+  const sects = prod.sections || [];
+  const s1 = sects.find(s => s.id === 1) || { label:"製造１課", total_hours_hhmm:"—", staff_present:0, staff_total:0, lp:0 };
+  const s2 = sects.find(s => s.id === 2) || { label:"製造２課", total_hours_hhmm:"—", staff_present:0, staff_total:0, lp:0 };
+  const co = prod.combined || { total_hours_hhmm:"—", staff_present:0, lp:0 };
+  const packs = prod.total_packs || 0;
+  const card = (color, tag, val, unit, meta) => `
+    <div style="background:#fff;border:1px solid #dce5ea;border-left:4px solid ${color};border-radius:12px;padding:14px 16px;min-width:0;">
+      <div style="font-size:12px;color:#5a6b73;letter-spacing:.04em;">${tag}</div>
+      <div style="font-size:32px;font-weight:700;line-height:1.05;margin-top:5px;color:#132026;font-variant-numeric:tabular-nums;">${val}<span style="font-size:13px;font-weight:500;color:#5a6b73;margin-left:5px;">${unit}</span></div>
+      <div style="font-size:12px;color:#5a6b73;margin-top:5px;">${meta}</div>
+    </div>`;
+  return `
+    <div style="font-family:system-ui,-apple-system,'Hiragino Kaku Gothic ProN',Meiryo,sans-serif;color:#132026;background:#f4f7f9;padding:16px;width:520px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid #132026;padding-bottom:5px;margin-bottom:10px;">
+        <div style="font-weight:700;font-size:15px;">勤怠記録 — Attendance Report</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#5a6b73;">${date}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+        ${card("#c7701b","製造パック数 / Packs",fmtCnt(packs),"P","total")}
+        ${card("#125e91",`${s1.label} 人時生産性`,fmt(s1.lp),"P/h",`Hrs ${s1.total_hours_hhmm} · ${s1.staff_present}/${s1.staff_total}`)}
+        ${card("#1d7a4e",`${s2.label} 人時生産性`,fmt(s2.lp),"P/h",`Hrs ${s2.total_hours_hhmm} · ${s2.staff_present}/${s2.staff_total}`)}
+        ${card("#0d8f71","合計 人時生産性 / Combined",fmt(co.lp),"P/h",`Hrs ${co.total_hours_hhmm} · ${co.staff_present}`)}
+      </div>
+    </div>`;
+}
+
+function buildSummarySnapshotHtml(date, d) {
+  const card = (color, tag, val, unit, meta) => `
+    <div style="background:#fff;border:1px solid #dce5ea;border-left:4px solid ${color};border-radius:12px;padding:14px 16px;min-width:0;">
+      <div style="font-size:12px;color:#5a6b73;letter-spacing:.04em;">${tag}</div>
+      <div style="font-size:32px;font-weight:700;line-height:1.05;margin-top:5px;color:#132026;font-variant-numeric:tabular-nums;">${val}<span style="font-size:13px;font-weight:500;color:#5a6b73;margin-left:5px;">${unit}</span></div>
+      <div style="font-size:12px;color:#5a6b73;margin-top:5px;">${meta}</div>
+    </div>`;
+  return `
+    <div style="font-family:system-ui,-apple-system,'Hiragino Kaku Gothic ProN',Meiryo,sans-serif;color:#132026;background:#f4f7f9;padding:16px;width:520px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid #132026;padding-bottom:5px;margin-bottom:10px;">
+        <div style="font-weight:700;font-size:15px;">月次サマリー — Monthly Summary (rolling 30 days)</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#5a6b73;">${d.start} → ${d.anchor}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+        ${card("#c7701b","合計パック数 / Total Packs",fmtCnt(d.total_packs),"P",`${d.days_with_data}/${d.days} days w/ data`)}
+        ${card("#125e91","製造１課 平均 P/h",fmt(d.s1_avg_lp),"P/h",`Hrs ${fmt(d.s1_total_hours,1)}`)}
+        ${card("#1d7a4e","製造２課 平均 P/h",fmt(d.s2_avg_lp),"P/h",`Hrs ${fmt(d.s2_total_hours,1)}`)}
+        ${card("#0d8f71","合計 平均 P/h / Combined",fmt(d.combined_avg_lp),"P/h",`Hrs ${fmt(d.combined_total_hours,1)}`)}
+      </div>
+    </div>`;
+}
+
+async function captureSnapshotPng(html) {
+  await loadHtml2Canvas();
+  const holder = document.createElement("div");
+  holder.style.cssText = "position:fixed;left:-99999px;top:0;width:520px;background:#fff;";
+  holder.innerHTML = html;
+  document.body.appendChild(holder);
+  try {
+    const canvas = await window.html2canvas(holder.firstElementChild, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+    return await new Promise(res => canvas.toBlob(b => res(b), "image/png"));
+  } finally {
+    holder.remove();
+  }
+}
 
 async function sendToLine(type) {
   const d = $reportDate.value;
   if (!d) { showMsg("error", "Pick a report date."); return; }
-  showMsg("info", "Sending to LINE…");
+  showMsg("info", "Building snapshot…");
   try {
-    const res = await fetch(api("/api/line/send"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ report_date: d, type }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok || !j.ok) {
-      showMsg("error", "LINE send failed: " + (j.detail || JSON.stringify(j)));
-      return;
+    let snippet;
+    if (type === "attendance") {
+      const r = await fetch(api("/api/gantt/" + d));
+      if (!r.ok) throw new Error("gantt API HTTP " + r.status);
+      const data = await r.json();
+      snippet = buildAttendanceSnapshotHtml(d, data.productivity || {});
+    } else {
+      const r = await fetch(api("/api/m/summary?date=" + d + "&days=30"));
+      if (!r.ok) throw new Error("summary API HTTP " + r.status);
+      const data = await r.json();
+      snippet = buildSummarySnapshotHtml(d, data);
     }
-    showMsg("success", `Sent to ${j.results.length} recipient(s) on LINE.`);
+    showMsg("info", "Rendering image…");
+    const blob = await captureSnapshotPng(snippet);
+    if (!blob) throw new Error("html2canvas returned no blob");
+    showMsg("info", `Uploading (${(blob.size/1024).toFixed(0)} KB) and sending…`);
+    const fd = new FormData();
+    fd.append("file", blob, `${type}_${d}.png`);
+    fd.append("report_date", d);
+    fd.append("type", type);
+    const res = await fetch(api("/api/line/send-mobile-link"), { method: "POST", body: fd });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.ok) { showMsg("error", "LINE send failed: " + (j.detail || JSON.stringify(j))); return; }
+    showMsg("success", `Sent to ${(j.results||[]).length} recipient(s) → ${j.link_url}`);
   } catch (err) {
-    showMsg("error", "LINE send error: " + err.message);
+    showMsg("error", "LINE send error: " + (err.message || err));
   }
 }
-document.getElementById("btnLineAttendance").addEventListener("click", () => sendToLine("attendance"));
-document.getElementById("btnLineSummary").addEventListener("click", () => sendToLine("summary"));
+// (Per-card "Send to LINE" buttons moved into the popup report windows
+//  themselves — gantt.html and summary.html. The Reports page is now a
+//  read-only launcher, so those handlers are intentionally gone.)
 
-document.getElementById("btnLineHi").addEventListener("click", async () => {
-  showMsg("info", "Sending Hi to LINE…");
-  try {
-    const res = await fetch(api("/api/line/test-hi"), { method: "POST" });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) { showMsg("error", "Hi failed: " + (j.detail || JSON.stringify(j))); return; }
-    const okCount = (j.results || []).filter(r => r.status >= 200 && r.status < 300).length;
-    showMsg(okCount ? "success" : "error", `Hi delivered to ${okCount}/${(j.results||[]).length} recipient(s).`);
-  } catch (err) { showMsg("error", "Hi error: " + err.message); }
-});
-
-document.getElementById("btnLineList").addEventListener("click", async () => {
-  const out = document.getElementById("lineRecipientsOut");
-  out.textContent = "loading…";
-  try {
-    const res = await fetch(api("/api/line/recipients"));
-    const j = await res.json();
-    const list = j.recipients || [];
-    out.textContent = list.length
-      ? list.map(r => `${r.kind}\t${r.id}\t${r.registered_at || ""}`).join("\n")
-      : "(no recipients yet — have the test phone send a message to the bot first)";
-  } catch (err) { out.textContent = "error: " + err.message; }
-});
+// LINE recipient management (Hi / list / rename / delete) lives on
+// /management → "💬 LINE Recipients" tab now. Old handlers removed.
 
 loadLatestDbDate();
 </script>

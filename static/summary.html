@@ -39,6 +39,8 @@ body{
 .topbar-links a{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;color:var(--muted);text-decoration:none;border:1px solid transparent;}
 .topbar-links a:hover{background:var(--soft);color:var(--ink);border-color:var(--line);}
 .topbar-links a.active{color:var(--brand);background:var(--brand-tint);border-color:var(--brand);}
+.topbar-links a.dash-link{background:#10b981;color:#fff;border-color:#10b981;font-weight:700;}
+.topbar-links a.dash-link:hover{background:#059669;color:#fff;border-color:#059669;}
 
 /* -------- Controls -------- */
 .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 14px;background:var(--panel);border-radius:8px;box-shadow:0 4px 16px rgba(19,32,38,.06);}
@@ -155,6 +157,68 @@ body{
 }
 
 /* -------- Print -------- */
+/* Mobile mode (served at /m/summary) — keep all graphics, hide admin chrome */
+body.mobile .topbar-links,
+body.mobile #btnPrint,
+body.mobile #btnReload,
+body.mobile .topbar-links.no-print,
+body.mobile .ctrl-spacer,
+body.mobile .controls .sep,
+body.mobile .controls label[for="chkPrev"],
+body.mobile .controls label:has(#chkPrev),
+body.mobile .controls label:has(#chkTargets){display:none !important;}
+body.mobile .topbar{justify-content:center;padding:8px 10px;}
+body.mobile .topbar h1{font-size:1.05rem;}
+body.mobile .controls{justify-content:center;padding:6px 8px;}
+body.mobile .wrap{padding:6px;gap:6px;}
+/* Bigger chart on phone — portrait fills more vertical space, landscape fills width */
+body.mobile .chart-svg{width:100%;height:54vh;max-height:none;}
+@media (orientation:landscape){
+  body.mobile .chart-svg{height:78vh;}
+}
+body.mobile .chart-svg .axis-lbl{font-size:13px;}
+body.mobile .chart-svg .tg-lbl{font-size:11px;font-weight:700;}
+/* Tap chart-box → fullscreen rotated landscape view */
+body.mobile #chartBox{cursor:zoom-in;position:relative;}
+body.mobile #chartBox::after{
+  content:"⤢ tap to rotate / 横向きで表示";position:absolute;right:8px;top:8px;
+  background:rgba(11,35,46,.78);color:#fff;font-size:10px;padding:3px 8px;border-radius:10px;
+  pointer-events:none;letter-spacing:.04em;
+}
+body.fs-chart{overflow:hidden;}
+body.fs-chart #chartBox{
+  position:fixed;left:0;top:0;width:100vw;height:100vh;background:#fff;z-index:9999;
+  margin:0;padding:0;cursor:default;display:flex;align-items:center;justify-content:center;
+}
+body.fs-chart #chartBox::after{display:none;}
+body.fs-chart #chartBox > svg.chart-svg{
+  width:100vh !important;height:100vw !important;max-height:none;
+  transform:rotate(var(--fs-rot,90deg));transform-origin:center center;
+}
+.fs-controls{display:none;}
+body.fs-chart .fs-controls{
+  display:flex;gap:10px;position:fixed;z-index:10000;
+  top:12px;right:12px;
+}
+body.fs-chart .fs-controls button{
+  width:42px;height:42px;border-radius:50%;border:0;
+  background:rgba(11,35,46,.85);color:#fff;font-size:20px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 14px rgba(0,0,0,.2);
+}
+body.fs-chart .fs-controls button:active{background:#0d8f71;}
+body.fs-chart #chartTip{
+  /* Tooltip lives inside the (rotated) chartBox but is itself NOT rotated,
+     because chartBox uses position:fixed and only the inner svg gets the rotate.
+     We position it via JS in chartBox-relative coords. */
+  z-index:10001;font-size:13px;max-width:60vw;
+}
+/* Compact legend — short labels only (long localized names get auto-translated by browsers and overflow) */
+body.mobile #chartLegend{gap:8px;font-size:11px;flex-wrap:wrap;}
+body.mobile #chartLegend .leg .lbl-long{display:none;}
+body.mobile #chartLegend .leg .lbl-short{display:inline;}
+#chartLegend .leg .lbl-short{display:none;}
+
 @media print{
   /* PDF output = B3 landscape (353 × 500 mm) — wide enough to fit the chart,
      comparison grid and full 14-day table side-by-side without column truncation. */
@@ -170,25 +234,24 @@ body{
   @page{size:B3 landscape;margin:10mm;}
 }
 </style>
+<script src="static/site_header.js" defer></script>
 </head>
 <body>
 
+<div id="siteHeader"></div>
+
 <div class="wrap">
 
-  <!-- Header -->
+  <!-- Page-local header — title + Print/Send actions only (top nav lives in site_header.js) -->
   <div class="card topbar">
     <div class="brand">
       <h1>生産性サマリー</h1>
       <small>Productivity Summary · <span id="brandDate">—</span></small>
     </div>
-    <div class="topbar-links">
-      <a href="console">Console</a>
-      <a href="gantt">Gantt</a>
-      <a href="summary" class="active">Summary</a>
-      <a href="reports">Reports</a>
-    </div>
-    <div class="topbar-links no-print">
-      <button class="btn primary" id="btnPrint" type="button">⬇ PDF</button>
+    <div class="topbar-links no-print" style="margin-left:auto;">
+      <button class="btn primary" id="btnPrint" type="button">🖨 Print</button>
+      <button class="btn" id="btnLineSend" type="button" title="Send a snapshot of this summary view to LINE">💬 Send to LINE</button>
+      <span id="lineSendStatus" style="font-size:11px;color:var(--muted);"></span>
     </div>
   </div>
 
@@ -198,8 +261,8 @@ body{
     <span class="sep"></span>
     <div class="pill-group" id="rangeGroup" role="tablist">
       <button type="button" class="pill" data-range="day">Day</button>
-      <button type="button" class="pill active" data-range="week">Week</button>
-      <button type="button" class="pill" data-range="month">Month</button>
+      <button type="button" class="pill" data-range="week">Week</button>
+      <button type="button" class="pill active" data-range="month">Month</button>
       <button type="button" class="pill" data-range="3month">3 Month</button>
     </div>
     <span class="sep"></span>
@@ -219,9 +282,9 @@ body{
 
   <!-- Main combined chart -->
   <div class="card">
-    <h2>人時生産性の推移 <small>Labor Productivity Trend · with target lines (S1 85 / S2 35 / Combined 25)</small></h2>
-    <div class="chart-legend" id="chartLegend"></div>
-    <div class="chart-box" id="chartBox">
+    <h2 translate="no">人時生産性の推移 <small>Labor Productivity Trend · S1 85 / S2 35 / Combined 25</small></h2>
+    <div class="chart-legend" id="chartLegend" translate="no"></div>
+    <div class="chart-box" id="chartBox" translate="no">
       <svg class="chart-svg" id="chartSvg" viewBox="0 0 1000 340"></svg>
       <div class="chart-tip" id="chartTip"></div>
     </div>
@@ -264,6 +327,67 @@ body{
 <script>
 "use strict";
 
+/* Mobile mode — same graphics as /summary, served at /m/summary with admin
+   chrome (top-nav links, PDF/Reload buttons, compare/target toggles) hidden.
+   Plus tap-to-rotate-fullscreen for the chart. */
+(function(){
+  const params=new URLSearchParams(location.search);
+  const mobile=/^\/.*\/m\/summary\/?$/.test(location.pathname)||params.get('mobile')==='1';
+  if(!mobile)return;
+  document.body.classList.add('mobile');
+
+  function setupFullscreenChart(){
+    const box=document.getElementById('chartBox');
+    if(!box)return;
+    let rot=90;
+    function enter(){
+      document.body.classList.add('fs-chart');
+      document.body.style.setProperty('--fs-rot',rot+'deg');
+      // Try device orientation lock to landscape (Android Chrome supports this in fullscreen).
+      if(document.fullscreenElement===null && document.documentElement.requestFullscreen){
+        document.documentElement.requestFullscreen({navigationUI:"hide"}).then(()=>{
+          if(screen.orientation && screen.orientation.lock){
+            screen.orientation.lock('landscape').catch(()=>{});
+          }
+        }).catch(()=>{});
+      }
+    }
+    function exit(){
+      document.body.classList.remove('fs-chart');
+      if(screen.orientation && screen.orientation.unlock){try{screen.orientation.unlock();}catch{}}
+      if(document.fullscreenElement){document.exitFullscreen().catch(()=>{});}
+    }
+    function flip(){
+      rot=(rot===90)?-90:90;
+      document.body.style.setProperty('--fs-rot',rot+'deg');
+    }
+    box.addEventListener('click',e=>{
+      if(document.body.classList.contains('fs-chart'))return;
+      // Don't enter fullscreen if user tapped the legend or tooltip.
+      if(e.target.closest('.chart-legend')||e.target.closest('.chart-tip'))return;
+      enter();
+    });
+    // Floating controls live outside box so rotation transform doesn't move them.
+    const ctrls=document.createElement('div');
+    ctrls.className='fs-controls';
+    ctrls.innerHTML=`
+      <button type="button" id="fsFlip" title="再回転 / Re-rotate" aria-label="rotate">↻</button>
+      <button type="button" id="fsClose" title="閉じる / Close" aria-label="close">✕</button>`;
+    document.body.appendChild(ctrls);
+    document.getElementById('fsFlip').addEventListener('click',e=>{e.stopPropagation();flip();});
+    document.getElementById('fsClose').addEventListener('click',e=>{e.stopPropagation();exit();});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')exit();});
+    document.addEventListener('fullscreenchange',()=>{
+      if(!document.fullscreenElement && document.body.classList.contains('fs-chart'))exit();
+    });
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',setupFullscreenChart);
+  }else{
+    setupFullscreenChart();
+  }
+})();
+
 /* ==================================================================
    Targets — editable single source of truth.
    Dept 1  85 P/h   ·   Dept 2  35 P/h   ·   Combined  25 P/h
@@ -284,6 +408,9 @@ const WEEKDAYS_JA = ["日","月","火","水","木","金","土"];
    ================================================================== */
 const BASE = (() => {
   const p = location.pathname;
+  // Mobile path /attendance/m/summary → BASE should be /attendance, not /attendance/m
+  const mMobile = p.match(/^(\/.*?)\/m\/summary\/?$/);
+  if (mMobile) return mMobile[1];
   const i = p.lastIndexOf("/summary");
   return i >= 0 ? p.slice(0, i) : "";
 })();
@@ -305,12 +432,12 @@ const fmt = {
    State — single bag of truth, re-render on mutation.
    ================================================================== */
 const state = {
-  range: "week",
+  range: "month",
   end:   null,      // ISO yyyy-mm-dd
   comparePrev: true,
   showTargets: true,
   data: null,       // from /api/productivity
-  legend: { s1:true, s2:true, cb:true, packs:false },
+  legend: { s1:true, s2:true, cb:true, packs:true },
 };
 
 /* Set default end date = latest date that has data, fall back to today. */
@@ -581,14 +708,15 @@ function renderChart() {
 
 function renderLegend() {
   const items = [
-    {key:"s1", label:`${LABELS.s1.ja} (S1)`, color:COLORS.s1},
-    {key:"s2", label:`${LABELS.s2.ja} (S2)`, color:COLORS.s2},
-    {key:"cb", label:`${LABELS.cb.ja} (Combined)`, color:COLORS.cb},
-    {key:"packs", label:`${LABELS.packs.ja} (Bars)`, color:COLORS.packs},
+    {key:"s1",    long:`${LABELS.s1.ja} (S1)`,    short:"S1",    color:COLORS.s1},
+    {key:"s2",    long:`${LABELS.s2.ja} (S2)`,    short:"S2",    color:COLORS.s2},
+    {key:"cb",    long:`${LABELS.cb.ja} (Combined)`, short:"合計", color:COLORS.cb},
+    {key:"packs", long:`${LABELS.packs.ja} (Bars)`,  short:"Packs", color:COLORS.packs},
   ];
+  $("chartLegend").setAttribute("translate","no");
   $("chartLegend").innerHTML = items.map(it =>
-    `<div class="leg ${state.legend[it.key]?"":"off"}" data-key="${it.key}">
-      <span class="sw" style="background:${it.color}"></span>${it.label}
+    `<div class="leg ${state.legend[it.key]?"":"off"}" data-key="${it.key}" translate="no">
+      <span class="sw" style="background:${it.color}"></span><span class="lbl-long">${it.long}</span><span class="lbl-short">${it.short}</span>
     </div>`
   ).join("");
   document.querySelectorAll("#chartLegend .leg").forEach(el => {
@@ -602,21 +730,30 @@ function attachChartHover({xs,ys,labels,cur,prv,series}) {
   const cross = $("chartCross");
   const hoverRect = $("chartHover");
   const box = $("chartBox");
-  const W = 1000;
   const n = labels.length;
-  function idxAt(clientX) {
-    const r = svg.getBoundingClientRect();
-    const ratio = W / r.width;
-    const px = (clientX - r.left) * ratio;
+  // Convert client (screen) coords → SVG user-space coords. Works under any
+  // CSS transform (e.g. rotate(90deg) in fullscreen mode) because the matrix
+  // returned by getScreenCTM() already accounts for the transform.
+  function idxAtClient(clientX, clientY) {
+    let svgX;
+    try {
+      const pt = svg.createSVGPoint(); pt.x = clientX; pt.y = clientY;
+      const ctm = svg.getScreenCTM();
+      if (ctm) svgX = pt.matrixTransform(ctm.inverse()).x;
+    } catch {}
+    if (svgX == null) {
+      const r = svg.getBoundingClientRect();
+      svgX = (clientX - r.left) * (1000 / r.width);
+    }
     let best = 0, bestD = Infinity;
     for (let i=0;i<n;i++) {
-      const d = Math.abs(xs(i) - px);
+      const d = Math.abs(xs(i) - svgX);
       if (d < bestD) { bestD = d; best = i; }
     }
     return best;
   }
-  hoverRect.addEventListener("mousemove", e => {
-    const i = idxAt(e.clientX);
+  function showAt(clientX, clientY) {
+    const i = idxAtClient(clientX, clientY);
     svg.classList.add("hover");
     cross.setAttribute("x1", xs(i).toFixed(1));
     cross.setAttribute("x2", xs(i).toFixed(1));
@@ -638,20 +775,37 @@ function attachChartHover({xs,ys,labels,cur,prv,series}) {
       `<div class="tip-row"><span class="k">Packs</span><span class="v">${fmt.num(cur.packs[i])}</span></div>`,
     ];
     tip.innerHTML = lines.join("");
-    const svgRect = svg.getBoundingClientRect();
     const boxRect = box.getBoundingClientRect();
-    const px = e.clientX - boxRect.left;
-    const py = e.clientY - boxRect.top;
-    const tipW = tip.offsetWidth;
+    const px = clientX - boxRect.left;
+    const py = clientY - boxRect.top;
+    const tipW = tip.offsetWidth || 180;
+    const tipH = tip.offsetHeight || 120;
     const left = Math.min(boxRect.width - tipW - 6, Math.max(6, px + 14));
+    const top  = Math.min(boxRect.height - tipH - 6, Math.max(6, py - tipH/2));
     tip.style.left = left + "px";
-    tip.style.top  = Math.max(6, py - 30) + "px";
+    tip.style.top  = top + "px";
     tip.classList.add("show");
-  });
-  hoverRect.addEventListener("mouseleave", () => {
-    svg.classList.remove("hover");
-    tip.classList.remove("show");
-  });
+  }
+  function hide() { svg.classList.remove("hover"); tip.classList.remove("show"); }
+  // Mouse (desktop)
+  hoverRect.addEventListener("mousemove", e => showAt(e.clientX, e.clientY));
+  hoverRect.addEventListener("mouseleave", hide);
+  // Touch (mobile) — listen on the whole chartBox so taps anywhere register,
+  // including when the SVG is rotated 90deg in fullscreen mode.
+  function fromTouch(e){
+    if (!e.touches || !e.touches.length) return null;
+    const t = e.touches[0]; return {x:t.clientX, y:t.clientY};
+  }
+  box.addEventListener("touchstart", e => {
+    const p = fromTouch(e); if (!p) return;
+    showAt(p.x, p.y);
+    if (document.body.classList.contains("fs-chart")) e.preventDefault();
+  }, {passive:false});
+  box.addEventListener("touchmove", e => {
+    const p = fromTouch(e); if (!p) return;
+    showAt(p.x, p.y);
+    if (document.body.classList.contains("fs-chart")) e.preventDefault();
+  }, {passive:false});
 }
 
 /* Comparisons block — 4 angles:
@@ -802,6 +956,47 @@ $("chkPrev").addEventListener("change", () => { state.comparePrev = $("chkPrev")
 $("chkTargets").addEventListener("change", () => { state.showTargets = $("chkTargets").checked; renderChart(); });
 $("btnReload").addEventListener("click", loadData);
 $("btnPrint").addEventListener("click", () => window.print());
+
+/* Send-to-LINE — captures a 2x2 KPI snapshot from the live summary page and
+   pushes a Buttons-Template card to all registered LINE recipients. */
+const HTML2CANVAS_SRC = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+function loadHtml2Canvas() {
+  return new Promise((resolve, reject) => {
+    if (window.html2canvas) return resolve();
+    const s = document.createElement("script");
+    s.src = HTML2CANVAS_SRC; s.onload = () => resolve(); s.onerror = () => reject(new Error("html2canvas load failed"));
+    document.head.appendChild(s);
+  });
+}
+async function summarySendToLine() {
+  const status = $("lineSendStatus");
+  const btn = $("btnLineSend");
+  const date = $("endDate")?.value || new Date().toISOString().slice(0,10);
+  btn.disabled = true; status.textContent = "rendering snapshot…";
+  try {
+    await loadHtml2Canvas();
+    // Snapshot the KPI strip (the 4 cards at the top). Selector matches the existing block.
+    const kpi = document.querySelector(".kpi-grid") || document.querySelector(".card") || document.body;
+    const canvas = await window.html2canvas(kpi, { scale: 2, backgroundColor: "#ffffff", useCORS: true, width: 760 });
+    const blob = await new Promise(res => canvas.toBlob(b => res(b), "image/png"));
+    if (!blob) throw new Error("snapshot returned no blob");
+    status.textContent = `uploading (${(blob.size/1024).toFixed(0)} KB)…`;
+    const fd = new FormData();
+    fd.append("file", blob, `summary_${date}.png`);
+    fd.append("report_date", date);
+    fd.append("type", "summary");
+    const res = await fetch(BASE + "/api/line/send-mobile-link", { method: "POST", body: fd });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.ok) { status.textContent = "✗ " + (j.detail || "send failed"); return; }
+    const okN = (j.results||[]).length;
+    status.textContent = `✅ sent to ${okN} recipient(s)`;
+  } catch (err) {
+    status.textContent = "error: " + (err.message || err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+$("btnLineSend").addEventListener("click", summarySendToLine);
 
 /* Boot */
 (async () => {

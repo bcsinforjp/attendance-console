@@ -269,3 +269,91 @@ curl -s -X POST -H "X-API-Key: %KEY%" %BASE%/api/v1/pdf/auto-upload
 ```
 
 If all three return `200 OK` JSON, your keys, folders, and routes are wired correctly and the Electron app will work end-to-end.
+
+---
+
+## 8. LINE Messaging API integration (v3.2)
+
+The app pushes attendance reports to phones over LINE. Three things happen:
+
+1. **A LINE bot** sits at `https://rnd.asiakawaii.com/attendance/api/line/webhook`. When anyone messages the bot, their `userId` (or `groupId`/`roomId` if it's in a chat) is auto-registered into the recipient list. The bot replies with a confirmation. They will then receive any report that someone sends from the console.
+2. **Mobile-only viewer pages** at `/m/report` and `/m/summary` — these serve the **same** files as `/gantt` and `/summary` so the graphics are 100% identical, but a `body.mobile` CSS class hides admin chrome (top nav, print/PDF buttons, Member Hours tab, compare/target toggles).
+3. **Send buttons** on the Reports page (`/reports`) and the Gantt page (`/gantt`) compose a thumbnail image of the productivity 4-box, upload it to the server, and push a single LINE **Buttons Template card** (image + title + tap button → mobile viewer) to every registered recipient.
+
+### 8.1 Configuration
+
+- File: `attendance_app/line_config.json` (chmod 600, **gitignored**)
+- Schema:
+  ```json
+  {
+    "channel_id": "...",
+    "channel_secret": "...",
+    "channel_access_token": "...",
+    "public_base_url": "https://rnd.asiakawaii.com/attendance",
+    "recipients": [
+      { "id": "U…", "kind": "user|group|room", "display_name": "…", "registered_at": "ISO-8601" }
+    ]
+  }
+  ```
+- Credentials come from **LINE Developers Console** (`developers.line.biz`) → channel → Messaging API tab. Webhook toggle must be **ON**, and Auto-reply / Greeting messages must be **OFF** in `manager.line.biz` (Settings → Response settings) — otherwise LINE intercepts user messages before they reach our webhook.
+
+### 8.2 LINE endpoints
+
+All `/api/line/...` endpoints are **unauthenticated** (no `X-API-Key`) — same convention as the browser-facing `/api/gantt/*` endpoints. The webhook is protected by HMAC signature verification.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/line/webhook` | LINE → us. Verifies `X-Line-Signature` (HMAC-SHA256, channel secret, base64). Auto-registers any sender's id (user / group / room). On `message` events: replies with their id; on `report` / `report YYYY-MM-DD`: replies with the gantt URL. Empty/probe payloads (LINE's "Verify" button) return 200. |
+| `POST` | `/api/line/send` | Body `{report_date, type}`. Pushes a plain text message with the gantt URL to every recipient. Older flow — kept for compatibility; UI now uses `send-mobile-link`. |
+| `POST` | `/api/line/upload-and-send` | Multipart: `file` (PDF, ≤12 MB, must start with `%PDF-`), `report_date`, `type`. Saves to `static/line_pdfs/<type>_<date>.pdf` and pushes the public URL. Used by the gantt-page **💬 Send PDF to LINE** button. |
+| `POST` | `/api/line/send-mobile-link` | Multipart: `file` (PNG or JPEG, ≤5 MB), `report_date`, `type`. Saves to `static/line_images/<type>_<date>.<ext>`, sends a single **Buttons Template card** (`thumbnail + title + body + tap button`) per recipient with `defaultAction = uri to /m/<type>`. Used by Reports-page **💬 Send to LINE** buttons. |
+| `POST` | `/api/line/test-hi` | Pushes "Hi 👋 (test from V3 Attendance Console)" to all recipients. No body. |
+| `GET` | `/api/line/recipients` | Lists registered recipients (id, kind, display_name, registered_at). |
+| `POST` | `/api/line/recipients/rename` | Body `{id, display_name}`. Renames a recipient (max 60 chars). |
+| `POST` | `/api/line/recipients/delete` | Body `{id}`. Removes a recipient — they no longer receive reports unless they re-message the bot. |
+
+#### `send-mobile-link` response
+
+```json
+{
+  "ok": true,
+  "image_url": "https://rnd.asiakawaii.com/attendance/static/line_images/attendance_2026-04-28.png",
+  "link_url":  "https://rnd.asiakawaii.com/attendance/m/report?date=2026-04-28",
+  "results": [
+    { "id": "U…", "card_status": 200, "response": "{}" }
+  ]
+}
+```
+
+### 8.3 Mobile viewer endpoints
+
+| Method | Path | Serves | Notes |
+|---|---|---|---|
+| `GET` | `/m/report?date=YYYY-MM-DD` | `static/gantt.html` | Same gantt page; mobile-mode JS detects `/m/...` path and adds `body.mobile`, hides admin chrome, drops the **Member Hours** tab, and injects a `<base href="/attendance/">` so relative `fetch('api/...')` resolves correctly under the new path. |
+| `GET` | `/m/summary?date=YYYY-MM-DD` | `static/summary.html` | Same summary page; mobile-mode JS hides admin chrome, defaults to **Month** range with all four legend chips ON (S1/S2/Combined/Packs), short legend labels (`S1 / S2 / 合計 / Packs`) with `translate="no"` to defeat browser auto-translate. **Tap chart** → fullscreen rotated landscape with ✕ close + ↻ re-rotate buttons. Tap-to-show tooltip works in both portrait and rotated views (uses `getScreenCTM().inverse()` for rotation-aware hit testing). |
+| `GET` | `/api/m/summary?date=YYYY-MM-DD&days=30` | JSON | Rolling-N-day aggregate (1..92). Iterates `gantt_for_date()` per day, returns `{anchor, start, days, days_with_data, total_packs, s1/s2/combined_total_hours, s1/s2/combined_avg_lp, rows[]}`. Currently used internally by the Reports page snapshot builder. |
+
+### 8.4 Bootstrapping a new recipient
+
+1. Operator opens the bot on LINE (scan QR from Developers Console → Messaging API tab → QR code) and taps **Add Friend**.
+2. They send any message to the bot.
+3. LINE forwards it to our webhook. We verify the signature, extract `userId` from `events[].source.userId`, append it to `recipients[]` with `display_name=""`, and reply confirming registration.
+4. Operator on the Reports page clicks **List recipients**, then **✎** to rename them to a human label like `creator`, `factory_manager`, etc.
+5. From then on, every **💬 Send to LINE** click reaches that person.
+
+### 8.5 LINE quick-test (copy-paste)
+
+```cmd
+set BASE=https://rnd.asiakawaii.com/attendance
+
+:: List who is currently subscribed to receive reports
+curl -s %BASE%/api/line/recipients
+
+:: Send a Hi to everyone (no payload required)
+curl -s -X POST %BASE%/api/line/test-hi
+
+:: Rename a recipient
+curl -s -X POST -H "Content-Type: application/json" ^
+  -d "{\"id\":\"Ube67de00fe2a3e138cc46e34ae46914f\",\"display_name\":\"creator\"}" ^
+  %BASE%/api/line/recipients/rename
+```

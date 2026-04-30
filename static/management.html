@@ -62,6 +62,8 @@
   }
   .topnav a:hover { color: var(--brand-strong); border-color: var(--line); background: var(--surface-soft); }
   .topnav a.active { color: var(--brand-strong); border-color: #b8e4d8; background: #ecfaf4; }
+  .topnav a.dash-link { background:#10b981; color:#fff; border-color:#10b981; font-weight:700; }
+  .topnav a.dash-link:hover { background:#059669; border-color:#059669; color:#fff; }
   .toolbar {
     display: flex;
     align-items: center;
@@ -751,25 +753,90 @@
   }
   .message.error { color: var(--danger); }
   .message.ok { color: var(--brand-strong); }
+  /* Page-local toolbar (Save / Reset / Lock) — sits below the unified header */
+  .mgmt-toolbar { display:flex; align-items:center; justify-content:flex-end; gap:.5rem; padding:.5rem 1rem; border-bottom:1px solid var(--line); background:var(--surface-soft); }
+
+  /* ---------- Management tab bar ---------- */
+  .mgmt-tabs { display:flex; flex-wrap:wrap; gap:.4rem; padding: .8rem 1rem .2rem; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
+  .mgmt-tabs button {
+    padding:.5rem 1rem; border:1px solid var(--line); background:var(--surface);
+    border-radius:8px 8px 0 0; font-weight:600; font-size:.85rem; color:var(--muted);
+    cursor:pointer; transition:all .15s;
+  }
+  .mgmt-tabs button:hover { color:var(--brand-strong); background:#f0f7f4; }
+  .mgmt-tabs button.active { color:var(--brand-strong); background:var(--surface); border-color:var(--brand); border-bottom-color:transparent; box-shadow:0 -2px 0 var(--brand) inset; }
+  [data-mgmt-panel] { padding: .5rem 0; }
+  [data-mgmt-panel][hidden] { display: none !important; }
+
+  /* ---------- Day-off Schedule grid ---------- */
+  .dayoff-card { padding: 1rem 1.2rem; }
+  .dayoff-toolbar { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center; margin:.4rem 0 .8rem; padding:.6rem .8rem; background:var(--surface-soft); border:1px solid var(--line); border-radius:8px; }
+  .dayoff-toolbar label { font-size:.75rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; display:flex; align-items:center; gap:.4rem; }
+  .dayoff-toolbar input[type=date] { padding:.35rem .6rem; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  .dayoff-toolbar .spacer { flex:1; }
+  .dayoff-toolbar .pill { font-size:.72rem; padding:.25rem .6rem; }
+  .dayoff-grid-wrap { overflow:auto; border:1px solid var(--line); border-radius:8px; max-height:65vh; background:var(--surface); }
+  table.dayoff-grid { border-collapse:collapse; font-size:.78rem; min-width:100%; }
+  table.dayoff-grid th, table.dayoff-grid td { border:1px solid var(--line); padding:0; text-align:center; vertical-align:middle; background:var(--surface); }
+  table.dayoff-grid thead th { position:sticky; top:0; background:#f0f5f7; z-index:2; font-weight:700; color:var(--ink); padding:.4rem .3rem; min-width:34px; height:54px; line-height:1.1; }
+  table.dayoff-grid thead th .dow { display:block; font-size:.65rem; font-weight:500; color:var(--muted); margin-top:2px; }
+  table.dayoff-grid thead th.weekend { background:#fdeaea; color:#9a2a1f; }
+  table.dayoff-grid thead th.weekend .dow { color:#bb554b; }
+  table.dayoff-grid th.emp-col, table.dayoff-grid td.emp-col {
+    position:sticky; left:0; z-index:3; min-width:170px; max-width:220px;
+    background:var(--surface); text-align:left; padding:.35rem .55rem; font-weight:600; color:var(--ink);
+    border-right:2px solid var(--line);
+  }
+  table.dayoff-grid thead th.emp-col { z-index:4; background:#f0f5f7; }
+  table.dayoff-grid td.emp-col small { display:block; color:var(--muted); font-weight:400; font-family:'IBM Plex Mono',monospace; font-size:.7rem; }
+  table.dayoff-grid td.day-cell { width:32px; height:32px; cursor:pointer; user-select:none; }
+  table.dayoff-grid td.day-cell:hover { background:#eaf6ee; }
+  table.dayoff-grid td.day-cell.off {
+    background: #c7701b; color:#fff; font-weight:700; font-size:.75rem;
+    background-image: linear-gradient(135deg, #c7701b 0%, #d98c3d 100%);
+  }
+  table.dayoff-grid td.day-cell.off:hover { filter: brightness(1.05); }
+  table.dayoff-grid td.day-cell.weekend:not(.off) { background:#fef3f3; }
+  table.dayoff-grid tbody tr.section-row td {
+    background:#eef3f5; font-weight:700; color:var(--brand-strong); padding:.4rem .55rem;
+    text-align:left; font-size:.76rem; letter-spacing:.04em; text-transform:uppercase;
+  }
+  .dayoff-legend { display:flex; gap:.8rem; font-size:.75rem; color:var(--muted); margin-top:.6rem; flex-wrap:wrap; }
+  .dayoff-legend .lb { display:inline-flex; align-items:center; gap:.3rem; }
+  .dayoff-legend .sw { width:14px; height:14px; border-radius:3px; border:1px solid var(--line); display:inline-block; }
+  .dayoff-legend .sw.off { background:linear-gradient(135deg, #c7701b 0%, #d98c3d 100%); border-color:#c7701b; }
+  .dayoff-legend .sw.weekend { background:#fef3f3; border-color:#f0c8c4; }
+
+  /* ---------- LINE Recipients ---------- */
+  .line-card { padding: 1rem 1.2rem; }
+  .line-card .row {
+    display:flex; gap:.6rem; align-items:center; padding:.45rem .6rem; border:1px solid var(--line);
+    border-radius:8px; margin-bottom:.4rem; background:var(--surface);
+  }
+  .line-card .row .kind { min-width:42px; color:var(--muted); font-size:.75rem; font-family:'IBM Plex Mono',monospace; }
+  .line-card .row .name { flex:0 0 180px; font-weight:600; color:var(--ink); }
+  .line-card .row .id { flex:1; color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:.72rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .line-card .row .registered { font-size:.68rem; color:var(--muted); white-space:nowrap; }
+  .line-card .row button.act { padding:.25rem .55rem; font-size:.72rem; border:1px solid var(--line); border-radius:5px; background:var(--surface); cursor:pointer; }
+  .line-card .row button.act:hover { background:var(--surface-soft); }
+  .line-card .row button.act.danger { color:var(--danger); border-color:#f0c8c4; }
+  .line-card .empty { padding:1rem; color:var(--muted); font-size:.85rem; text-align:center; border:1px dashed var(--line); border-radius:8px; }
+  .line-card .actions { display:flex; gap:.5rem; margin-top:.8rem; }
+  .line-card .status { margin-top:.6rem; font-size:.78rem; min-height:1.2em; }
+  .line-card .status.ok { color: var(--brand-strong); }
+  .line-card .status.err { color: var(--danger); }
 </style>
+<script src="./static/site_header.js" defer></script>
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">V3 Attendance Console</div>
-  <nav class="topnav" aria-label="Main navigation">
-    <a href="./console">Upload</a>
-    <a href="./management" class="active">Management</a>
-    <a href="/grafana/" target="_blank" rel="noopener">Dashboard ↗</a>
-    <a href="https://rnd.asiakawaii.com/attendance/console" target="_blank" rel="noopener">Console ↗</a>
-  </nav>
-  <div class="toolbar">
-    <span id="statusPill" class="pill">Locked</span>
-    <span id="dirtyPill" class="pill saved">Saved</span>
-    <button id="saveBtn" class="button primary" type="button" disabled>Save</button>
-    <button id="resetBtn" class="button" type="button" disabled>Reset</button>
-    <button id="lockBtn" class="button warn" type="button" hidden>Lock</button>
-  </div>
-</header>
+<div id="siteHeader"></div>
+<div class="mgmt-toolbar">
+  <span id="statusPill" class="pill">Locked</span>
+  <span id="dirtyPill" class="pill saved">Saved</span>
+  <button id="saveBtn" class="button primary" type="button" disabled>Save</button>
+  <button id="resetBtn" class="button" type="button" disabled>Reset</button>
+  <button id="lockBtn" class="button warn" type="button" hidden>Lock</button>
+</div>
 
 <div class="beta-banner" role="status" aria-live="polite">
   <span class="beta-banner__badge">BETA</span>
@@ -857,6 +924,18 @@
   </section>
 
   <section id="management" class="management">
+
+    <!-- Tab bar — three management areas -->
+    <nav class="mgmt-tabs" role="tablist" aria-label="Management areas">
+      <button type="button" data-mgmt-tab="roster" class="active">📋 Roster · 名簿管理</button>
+      <button type="button" data-mgmt-tab="dayoff">📅 Day-off Schedule · 休暇予定表</button>
+      <button type="button" data-mgmt-tab="line">💬 LINE Recipients · LINE 通知先</button>
+    </nav>
+
+    <!-- ============================================================
+         Tab 1: Roster · 名簿管理 — existing employee management UI
+         ============================================================ -->
+    <div data-mgmt-panel="roster">
     <section class="add-panel card">
       <h2>+ Add employee</h2>
       <div class="section-strip" role="tablist" aria-label="Target department">
@@ -921,7 +1000,66 @@
     </div>
 
     <div id="board" class="board" aria-live="polite"></div>
-  </section>
+    </div><!-- /panel:roster -->
+
+    <!-- ============================================================
+         Tab 2: Day-off Schedule · 休暇予定表
+         ============================================================ -->
+    <div data-mgmt-panel="dayoff" hidden>
+      <section class="card dayoff-card">
+        <h2>📅 Day-off Schedule · 休暇予定表</h2>
+        <p style="color:var(--muted);font-size:.85rem;margin:.3rem 0 .6rem;">Click a cell to toggle a planned day off (vacation, AL, fixed off-day). Changes are kept in draft until you press <strong>Save</strong>.<br>
+        <small>各セルをタップすると、その日が休み（休暇・公休など）として登録されます。<strong>保存</strong>を押すまでは下書き状態のままです。</small></p>
+
+        <div class="dayoff-toolbar">
+          <label>From <input type="date" id="doFrom"></label>
+          <label>To <input type="date" id="doTo"></label>
+          <button type="button" class="button" id="doRangeMonth">This month</button>
+          <button type="button" class="button" id="doRangeNext30">Next 30 days</button>
+          <span class="spacer"></span>
+          <span class="pill" id="doStatusPill">Saved</span>
+          <button type="button" class="button primary" id="doSave" disabled>💾 Save</button>
+          <button type="button" class="button" id="doReset" disabled>Reset</button>
+        </div>
+
+        <div class="dayoff-grid-wrap">
+          <table class="dayoff-grid" id="dayoffGrid">
+            <thead><tr><th class="emp-col">Employee · 氏名</th></tr></thead>
+            <tbody><tr><td class="emp-col">loading…</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="dayoff-legend">
+          <span class="lb"><span class="sw"></span>Working day · 勤務日</span>
+          <span class="lb"><span class="sw weekend"></span>Sat / Sun · 土日</span>
+          <span class="lb"><span class="sw off"></span>Day off (planned) · 休み（予定）</span>
+          <span class="lb">Last saved: <span id="doSavedAt">—</span></span>
+        </div>
+      </section>
+    </div><!-- /panel:dayoff -->
+
+    <!-- ============================================================
+         Tab 3: LINE Recipients · LINE 通知先
+         ============================================================ -->
+    <div data-mgmt-panel="line" hidden>
+      <section class="card line-card">
+        <h2>💬 LINE Recipients · LINE 通知先</h2>
+        <p style="color:var(--muted);font-size:.85rem;margin:.3rem 0 .6rem;">People and groups who receive attendance / summary reports on LINE. To add a new recipient: have them message the bot once — the webhook auto-registers them and they appear here.<br>
+        <small>勤怠・サマリーレポートを LINE で受け取る登録先一覧です。新規登録する人は bot に 1 回メッセージを送るだけで自動登録されます。</small></p>
+
+        <div id="lineRecipientsList" class="line-card-list">
+          <div class="empty">loading…</div>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="button" id="lineRefreshBtn">↻ Refresh</button>
+          <button type="button" class="button" id="lineHiBtn">💬 Send Hi (test to all)</button>
+        </div>
+        <div id="lineStatusMsg" class="status"></div>
+      </section>
+    </div><!-- /panel:line -->
+
+  </section><!-- /#management -->
 </main>
 
 <script>
@@ -1751,6 +1889,297 @@
     return "";
   });
 })();
+</script>
+
+<script>
+/* ================================================================
+   Management tab bar — switches between Roster / Day-off / LINE
+   ================================================================ */
+(function() {
+  const tabs = document.querySelectorAll(".mgmt-tabs button[data-mgmt-tab]");
+  const panels = document.querySelectorAll("[data-mgmt-panel]");
+  function show(name) {
+    tabs.forEach(t => t.classList.toggle("active", t.dataset.mgmtTab === name));
+    panels.forEach(p => p.toggleAttribute("hidden", p.dataset.mgmtPanel !== name));
+    if (name === "dayoff" && !window.__dayoffInited) { window.__dayoffInited = true; initDayoff(); }
+    if (name === "line"   && !window.__lineMgmtInited) { window.__lineMgmtInited = true; initLineMgmt(); }
+  }
+  tabs.forEach(t => t.addEventListener("click", () => show(t.dataset.mgmtTab)));
+})();
+
+/* ================================================================
+   Day-off Schedule grid
+   ================================================================ */
+const _doBASE = (() => {
+  const m = location.pathname.match(/^(\/.*?)\/management\/?$/);
+  return (m && m[1]) || "";
+})();
+const _doApi = (p) => _doBASE + (p.startsWith("/") ? p : "/" + p);
+const _doFmtISO = (d) => {
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), dd = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${dd}`;
+};
+const _DOW_JA = ["日","月","火","水","木","金","土"];
+
+const dayoff = {
+  saved: {},      // server-side schedule (employee_code -> Set of dates)
+  draft: {},      // working copy with toggles
+  rosterBySection: [],  // [{label, rows:[{code,name}]}]
+  from: null, to: null,
+  updatedAt: null,
+  dirty: false,
+};
+
+function _doToSet(arr) { return new Set(arr || []); }
+function _doFromSet(s) { return [...s].sort(); }
+
+async function initDayoff() {
+  // Default range: this month
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const last  = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  document.getElementById("doFrom").value = _doFmtISO(first);
+  document.getElementById("doTo").value   = _doFmtISO(last);
+
+  document.getElementById("doFrom").addEventListener("change", _doRender);
+  document.getElementById("doTo").addEventListener("change", _doRender);
+  document.getElementById("doRangeMonth").addEventListener("click", () => {
+    const n = new Date();
+    document.getElementById("doFrom").value = _doFmtISO(new Date(n.getFullYear(), n.getMonth(), 1));
+    document.getElementById("doTo").value   = _doFmtISO(new Date(n.getFullYear(), n.getMonth()+1, 0));
+    _doRender();
+  });
+  document.getElementById("doRangeNext30").addEventListener("click", () => {
+    const n = new Date(); const e = new Date(n); e.setDate(e.getDate()+29);
+    document.getElementById("doFrom").value = _doFmtISO(n);
+    document.getElementById("doTo").value   = _doFmtISO(e);
+    _doRender();
+  });
+  document.getElementById("doSave").addEventListener("click", _doSave);
+  document.getElementById("doReset").addEventListener("click", () => { _doReset(); });
+
+  await Promise.all([_doFetchRoster(), _doFetchSchedule()]);
+  _doRender();
+}
+
+async function _doFetchRoster() {
+  const r = await fetch(_doApi("/api/management/bootstrap"));
+  const j = await r.json();
+  // bootstrap shape: { sections:[{id,label,codes:[]}], employees:[{code,name,section_id,section_label}] }
+  const order = (j.sections || []).map(s => s.id);
+  const sectsMap = {};
+  (j.sections || []).forEach(s => { sectsMap[s.id] = { id: s.id, label: s.label || `Section ${s.id}`, rows: [] }; });
+  (j.employees || []).forEach(e => {
+    const sid = e.section_id;
+    if (sid == null) return;
+    if (!sectsMap[sid]) sectsMap[sid] = { id: sid, label: e.section_label || `Section ${sid}`, rows: [] };
+    sectsMap[sid].rows.push({ code: e.code, name: e.name || "" });
+  });
+  // Preserve sections.json order
+  dayoff.rosterBySection = order.map(id => sectsMap[id]).filter(Boolean).filter(s => s.rows.length);
+  // Append any sections we encountered but weren't in the order list
+  Object.values(sectsMap).forEach(s => { if (!order.includes(s.id) && s.rows.length) dayoff.rosterBySection.push(s); });
+}
+
+async function _doFetchSchedule() {
+  try {
+    const r = await fetch(_doApi("/api/dayoff/schedule"));
+    const j = await r.json();
+    dayoff.saved = {};
+    Object.entries(j.schedule || {}).forEach(([code, dates]) => { dayoff.saved[code] = _doToSet(dates); });
+    dayoff.updatedAt = j.updated_at;
+    dayoff.draft = {};
+    Object.entries(dayoff.saved).forEach(([code, s]) => { dayoff.draft[code] = new Set(s); });
+    dayoff.dirty = false;
+    _doUpdateStatus();
+    document.getElementById("doSavedAt").textContent = j.updated_at || "—";
+  } catch (e) { console.warn("dayoff fetch failed", e); }
+}
+
+function _doDateRange(fromStr, toStr) {
+  const out = [];
+  if (!fromStr || !toStr) return out;
+  const a = new Date(fromStr + "T00:00:00"), b = new Date(toStr + "T00:00:00");
+  if (a > b) return out;
+  for (let d = new Date(a); d <= b; d.setDate(d.getDate()+1)) out.push(_doFmtISO(d));
+  if (out.length > 184) return out.slice(0, 184);  // hard cap to 6 months for UI
+  return out;
+}
+
+function _doRender() {
+  const from = document.getElementById("doFrom").value;
+  const to   = document.getElementById("doTo").value;
+  dayoff.from = from; dayoff.to = to;
+  const dates = _doDateRange(from, to);
+  const tbl = document.getElementById("dayoffGrid");
+  if (!dates.length || !dayoff.rosterBySection.length) {
+    tbl.innerHTML = `<thead><tr><th class="emp-col">Employee · 氏名</th></tr></thead><tbody><tr><td class="emp-col" colspan="1">No data</td></tr></tbody>`;
+    return;
+  }
+  // Header row
+  let head = `<tr><th class="emp-col">Employee · 氏名</th>`;
+  dates.forEach(d => {
+    const dt = new Date(d + "T00:00:00");
+    const dow = dt.getDay();
+    const isWk = (dow === 0 || dow === 6);
+    head += `<th class="${isWk ? 'weekend' : ''}">${String(dt.getDate())}<span class="dow">${_DOW_JA[dow]}</span></th>`;
+  });
+  head += `</tr>`;
+  // Body rows grouped by section
+  let body = "";
+  dayoff.rosterBySection.forEach(sect => {
+    body += `<tr class="section-row"><td class="emp-col" colspan="${dates.length+1}">${escapeHtmlDO(sect.label)} (${sect.rows.length})</td></tr>`;
+    sect.rows.forEach(emp => {
+      body += `<tr data-code="${emp.code}">`;
+      body += `<td class="emp-col">${escapeHtmlDO(emp.name || "—")}<small>${emp.code}</small></td>`;
+      const offSet = dayoff.draft[emp.code] || new Set();
+      dates.forEach(d => {
+        const dt = new Date(d + "T00:00:00");
+        const isWk = (dt.getDay() === 0 || dt.getDay() === 6);
+        const off = offSet.has(d);
+        body += `<td class="day-cell ${isWk ? 'weekend' : ''} ${off ? 'off' : ''}" data-date="${d}">${off ? "OFF" : ""}</td>`;
+      });
+      body += `</tr>`;
+    });
+  });
+  tbl.innerHTML = `<thead>${head}</thead><tbody>${body}</tbody>`;
+  tbl.querySelectorAll("td.day-cell").forEach(cell => {
+    cell.addEventListener("click", () => {
+      const code = cell.parentElement.dataset.code;
+      const date = cell.dataset.date;
+      if (!code || !date) return;
+      if (!dayoff.draft[code]) dayoff.draft[code] = new Set();
+      const s = dayoff.draft[code];
+      if (s.has(date)) { s.delete(date); cell.classList.remove("off"); cell.textContent = ""; }
+      else             { s.add(date);    cell.classList.add("off");    cell.textContent = "OFF"; }
+      dayoff.dirty = true;
+      _doUpdateStatus();
+    });
+  });
+}
+
+function escapeHtmlDO(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function _doUpdateStatus() {
+  const pill = document.getElementById("doStatusPill");
+  const save = document.getElementById("doSave");
+  const reset = document.getElementById("doReset");
+  pill.textContent = dayoff.dirty ? "Unsaved changes" : "Saved";
+  pill.className = "pill " + (dayoff.dirty ? "warn" : "ok");
+  save.disabled = !dayoff.dirty;
+  reset.disabled = !dayoff.dirty;
+}
+
+function _doReset() {
+  dayoff.draft = {};
+  Object.entries(dayoff.saved).forEach(([code, s]) => { dayoff.draft[code] = new Set(s); });
+  dayoff.dirty = false;
+  _doUpdateStatus();
+  _doRender();
+}
+
+async function _doSave() {
+  const payload = { schedule: {} };
+  Object.entries(dayoff.draft).forEach(([code, s]) => {
+    if (s && s.size) payload.schedule[code] = _doFromSet(s);
+  });
+  try {
+    const r = await fetch(_doApi("/api/dayoff/schedule"), {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { const t = await r.text(); alert("Save failed: " + t); return; }
+    const j = await r.json();
+    // Adopt saved state as new baseline
+    dayoff.saved = {};
+    Object.entries(j.schedule || {}).forEach(([c,d]) => { dayoff.saved[c] = _doToSet(d); });
+    dayoff.draft = {};
+    Object.entries(dayoff.saved).forEach(([c,s]) => { dayoff.draft[c] = new Set(s); });
+    dayoff.dirty = false;
+    document.getElementById("doSavedAt").textContent = j.updated_at || "—";
+    _doUpdateStatus();
+    _doRender();
+  } catch (e) { alert("Save error: " + e.message); }
+}
+
+/* ================================================================
+   LINE Recipients management (moved from /reports)
+   ================================================================ */
+async function initLineMgmt() {
+  document.getElementById("lineRefreshBtn").addEventListener("click", lineMgmtRefresh);
+  document.getElementById("lineHiBtn").addEventListener("click", lineMgmtSendHi);
+  await lineMgmtRefresh();
+}
+
+async function lineMgmtRefresh() {
+  const host = document.getElementById("lineRecipientsList");
+  host.innerHTML = '<div class="empty">loading…</div>';
+  try {
+    const r = await fetch(_doApi("/api/line/recipients"));
+    const j = await r.json();
+    const list = j.recipients || [];
+    if (!list.length) {
+      host.innerHTML = '<div class="empty">No recipients yet — have someone message the bot to register.<br><small>受信者がまだいません。bot にメッセージを送ると自動登録されます。</small></div>';
+      return;
+    }
+    host.innerHTML = list.map(r => `
+      <div class="row" data-id="${r.id}">
+        <span class="kind">${r.kind || "?"}</span>
+        <span class="name rcp-name">${escapeHtmlDO(r.display_name || "(unnamed)")}</span>
+        <span class="id">${r.id}</span>
+        <span class="registered">${(r.registered_at || "").slice(0,10)}</span>
+        <button type="button" class="act rcp-rename" title="Rename">✎ Rename</button>
+        <button type="button" class="act danger rcp-del" title="Remove">✕ Remove</button>
+      </div>`).join("");
+    host.querySelectorAll(".rcp-rename").forEach(b => b.addEventListener("click", e => lineMgmtRename(e.currentTarget.closest(".row"))));
+    host.querySelectorAll(".rcp-del").forEach(b => b.addEventListener("click", e => lineMgmtDelete(e.currentTarget.closest(".row"))));
+  } catch (err) {
+    host.innerHTML = `<div class="empty">error: ${escapeHtmlDO(err.message)}</div>`;
+  }
+}
+
+function lineMgmtStatus(text, kind) {
+  const el = document.getElementById("lineStatusMsg");
+  el.textContent = text || "";
+  el.className = "status " + (kind || "");
+}
+
+async function lineMgmtRename(row) {
+  const id = row.dataset.id;
+  const cur = row.querySelector(".rcp-name").textContent.replace("(unnamed)", "");
+  const next = prompt("New name for this recipient:\n新しい表示名:", cur);
+  if (next == null) return;
+  const r = await fetch(_doApi("/api/line/recipients/rename"), {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ id, display_name: next }),
+  });
+  if (!r.ok) { lineMgmtStatus("Rename failed: " + await r.text(), "err"); return; }
+  lineMgmtStatus(`Renamed → ${next || "(unnamed)"}`, "ok");
+  await lineMgmtRefresh();
+}
+
+async function lineMgmtDelete(row) {
+  const id = row.dataset.id;
+  if (!confirm(`Remove recipient ${id}?\n本当にこの受信者を削除しますか？\n(They will no longer receive reports unless they re-message the bot.)`)) return;
+  const r = await fetch(_doApi("/api/line/recipients/delete"), {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ id }),
+  });
+  if (!r.ok) { lineMgmtStatus("Delete failed: " + await r.text(), "err"); return; }
+  lineMgmtStatus("Removed.", "ok");
+  await lineMgmtRefresh();
+}
+
+async function lineMgmtSendHi() {
+  lineMgmtStatus("sending Hi…");
+  try {
+    const r = await fetch(_doApi("/api/line/test-hi"), { method:"POST" });
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok) { lineMgmtStatus("Hi failed: " + (j.detail || JSON.stringify(j)), "err"); return; }
+    const ok = (j.results||[]).filter(r => r.status >= 200 && r.status < 300).length;
+    lineMgmtStatus(`Hi delivered to ${ok}/${(j.results||[]).length} recipient(s).`, ok ? "ok" : "err");
+  } catch (e) { lineMgmtStatus("Hi error: " + e.message, "err"); }
+}
 </script>
 </body>
 </html>

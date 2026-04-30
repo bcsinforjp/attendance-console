@@ -10,6 +10,19 @@ body{font-family:"Space Grotesk","Hiragino Sans","Meiryo",sans-serif;background:
 .page{width:210mm;min-height:297mm;background:#fff;margin:12px auto;padding:6mm 5mm;box-shadow:0 8px 24px rgba(0,0,0,.08);}
 body.embed{background:#fff;font-size:11px;}
 body.embed .page{width:100%;min-height:0;margin:0;padding:4mm 4mm;box-shadow:none;}
+/* Mobile mode (served at /m/report) — same graphics as /gantt, but hide admin chrome */
+body.mobile .toolbar nav,
+body.mobile #refreshBtn,
+body.mobile #printBtn,
+body.mobile #lineBtn,
+body.mobile #lineStatus,
+body.mobile #memTab,
+body.mobile #memWrap{display:none !important;}
+body.mobile .toolbar{justify-content:center;padding:6px;gap:6px;max-width:100%;}
+body.mobile .toolbar label{font-size:13px;}
+body.mobile .toolbar input[type=date]{padding:6px 8px;font-size:14px;}
+body.mobile .page{width:100%;margin:0;padding:6px 6px;box-shadow:none;}
+body.mobile{background:#f4f7f9;}
 
 /* Screen-only: fit the viewport. Desktop stretches to a comfortable monitor
    width, tablets shrink proportionally, phones drop to full-width with smaller
@@ -286,16 +299,13 @@ body.embed .page{width:100%;min-height:0;margin:0;padding:4mm 4mm;box-shadow:non
   @page{size:A4 portrait;margin:4mm;}
 }
 </style>
+<script src="static/site_header.js" defer></script>
 </head>
 <body>
 
+<div id="siteHeader"></div>
+
 <div class="toolbar no-print" id="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;">
-  <nav style="display:flex;gap:4px;margin-right:6px;">
-    <a href="console" style="padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;color:#5a6b73;text-decoration:none;border:1px solid #d4e2e8;">Console</a>
-    <a href="gantt"   style="padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;color:#0d8f71;text-decoration:none;border:1px solid #0d8f71;background:#ecfaf4;">Gantt</a>
-    <a href="summary" style="padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;color:#5a6b73;text-decoration:none;border:1px solid #d4e2e8;">Summary</a>
-    <a href="reports" style="padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;color:#5a6b73;text-decoration:none;border:1px solid #d4e2e8;">Reports</a>
-  </nav>
   <label>Date: <input type="date" id="dateInput"></label>
   <button id="refreshBtn" type="button">Refresh</button>
   <button id="printBtn" class="primary" type="button">⬇ Download PDF</button>
@@ -370,6 +380,19 @@ body.embed .page{width:100%;min-height:0;margin:0;padding:4mm 4mm;box-shadow:non
 const WIN_START=10, WIN_HOURS=22.5, MN_AX=24-WIN_START, MN_PCT=(MN_AX/WIN_HOURS)*100;
 const params=new URLSearchParams(location.search);
 if(params.get('embed')==='1')document.body.classList.add('embed');
+const MOBILE_MODE=/^\/.*\/m\/(report|summary)\/?$/.test(location.pathname)||params.get('mobile')==='1';
+if(MOBILE_MODE){
+  document.body.classList.add('mobile');
+  // The page's relative fetch('api/…') paths are anchored against the URL.
+  // Served at /attendance/m/report they would resolve to /attendance/m/api/…
+  // (404). Inject a <base> so they resolve back to /attendance/api/… instead.
+  const m=location.pathname.match(/^(\/.*?)\/m\/(report|summary)\/?$/);
+  if(m){
+    const b=document.createElement('base');
+    b.href=m[1].replace(/\/$/,'')+'/';
+    document.head.insertBefore(b,document.head.firstChild);
+  }
+}
 
 const $=id=>document.getElementById(id);
 const parseH=s=>{if(!s)return null;const t=String(s).replace(/\s*hr?s?\.?\s*$/i,'').trim();if(!t)return null;const[h,m]=t.split(':').map(Number);return isNaN(h)?null:h+(m||0)/60;};
@@ -699,9 +722,10 @@ function render(data){
     secBox.appendChild(w);
   });
 
-  // Member Hours tab (replaces the old Productivity tab)
+  // Member Hours tab (replaces the old Productivity tab) — skipped in mobile mode
+  if(MOBILE_MODE) return;
   const ptab=document.createElement('button');
-  ptab.type='button';ptab.className='tab';
+  ptab.type='button';ptab.className='tab';ptab.id='memTab';
   ptab.innerHTML='👥 Member Hours';
   ptab.onclick=()=>{
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));

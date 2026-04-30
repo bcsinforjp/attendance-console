@@ -5,7 +5,195 @@
 
 **Version / バージョン:** 3.2
 
-**Latest update / 最新更新 (2026-04-30 — LINE messaging integrated into the console)**
+**Latest update / 最新更新 (2026-04-30 — Management has 3 clean tabs: Roster / Day-off / LINE)**
+
+The Management page is now organised into three clear tabs so all
+operator data lives in one place:
+
+1. **📋 Roster · 名簿管理** — the existing employee management board
+   (drag-and-drop section assignment, manual add, PDF import, search).
+   Unchanged in behaviour, just wrapped into its own tab.
+2. **📅 Day-off Schedule · 休暇予定表** — a new grid for marking
+   planned days off (vacation, fixed off-days, AL, etc.). Employees
+   are listed down the side, dates run across the top with weekday
+   labels. Tap any cell to toggle that person's day off; weekend
+   columns are tinted so they stand out at a glance. The toolbar
+   has date-range pickers and quick presets ("This month", "Next 30
+   days"), a status pill, and Save / Reset buttons that activate
+   only when there are unsaved changes. The schedule persists in
+   `dayoff_schedule.json` on the server.
+3. **💬 LINE Recipients · LINE 通知先** — moved here from the
+   Reports page. Each registered user/group is shown as a row with
+   their display name, kind (user/group/room), userId, registration
+   date, and inline ✎ rename + ✕ remove buttons. There's a Send Hi
+   test button so an operator can verify the bot is reaching the
+   right people without sending a real report.
+
+The Reports page was simplified: the "LINE bot" card disappears
+and is replaced by a small pointer to Management → LINE Recipients.
+
+Management ページを 3 つのタブに整理し、運用に必要な情報を
+1 か所にまとめました：
+
+1. **📋 Roster · 名簿管理** — 既存の社員管理画面（ドラッグ＆ドロップ
+   による課の割当、手動追加、PDF 取り込み、検索）。動作は変えず、
+   タブの中に収めただけです。
+2. **📅 Day-off Schedule · 休暇予定表** — 新規の休暇登録グリッド
+   です。縦に従業員、横に日付（曜日付き）が並び、セルをタップする
+   だけでその人の休みを ON/OFF できます。土日列は赤味掛かった色で
+   一目で分かるようにしています。ツールバーには From / To の
+   日付ピッカー、「今月」「次の 30 日」のクイックプリセット、
+   保存状態のピル、未保存の変更があるときだけ有効になる Save /
+   Reset ボタンがあります。データはサーバー側の
+   `dayoff_schedule.json` に保存されます。
+3. **💬 LINE Recipients · LINE 通知先** — Reports ページから
+   こちらに移動しました。各登録先は表示名・種別（user/group/room）
+   ・userId・登録日が並び、行ごとに ✎ 名称変更と ✕ 削除のボタン
+   があります。Send Hi テストボタンで bot が届いているかを
+   実レポート無しで確認できます。
+
+Reports ページは「LINE bot」カードを削除し、Management →
+LINE Recipients への小さなリンクだけ残しました。
+
+---
+
+**Previous update / 前回の更新 (2026-04-30 — Unified header on every page)**
+
+The top header is now the same on every page in the console. We
+made three operator-visible changes:
+
+1. **Single shared header.** Console, Dashboard, Gantt, Summary,
+   Reports and Management all use one common header file. The
+   header has the title on the left, the navigation tabs in the
+   middle (with the green Dashboard tab first), the API status
+   pill, and the live clock with computed Shift / Prod dates on
+   the right. Edit the header once and all pages update at the
+   same time.
+2. **Reports opens in the same window.** The previous behaviour of
+   opening Reports as a separate browser window was removed.
+   Clicking the Reports tab now navigates in the current window
+   like the other tabs. (The "Open Report" buttons inside the
+   Reports launcher still open a popup window for each individual
+   report — that part is unchanged.)
+3. **Grafana link removed from the top nav.** Grafana is still
+   reachable directly at `/grafana/`, but the link is no longer
+   in the in-app navigation so the tab bar stays focused on the
+   attendance/productivity workflow.
+
+トップヘッダーを全ページで完全に統一しました。
+オペレーターから見える変更は次の 3 点です：
+
+1. **共通ヘッダー。** Console / Dashboard / Gantt / Summary /
+   Reports / Management のすべてのページが同じヘッダーを使い
+   ます。左にタイトル、中央にナビゲーションタブ（緑色の
+   Dashboard を先頭）、API 稼働ピル、右側にライブ時計と
+   シフト日 / 生産日の表示。1 ヶ所の修正で全ページが一斉に
+   更新されます。
+2. **Reports は同じウィンドウで開く。** Reports タブを別
+   ウィンドウで開く動作をやめました。他のタブと同じく現在
+   のウィンドウ内で遷移します（Reports ランチャーの中の
+   各「報告書を開く」ボタンは引き続き別ウィンドウで開きます。
+   そこは変更ありません）。
+3. **Grafana リンクをトップナビから削除。** Grafana は引き続き
+   `/grafana/` で直接アクセス可能ですが、タブバーから外して
+   勤怠 / 生産性ワークフローに集中できるようにしました。
+
+---
+
+**Previous update / 前回の更新 (2026-04-30 — Toolbar refactor: green Dashboard tab + Reports as popup launcher)**
+
+The navigation across the console was tightened up so the layout is
+ready for a future live-operations dashboard, and the Reports flow
+was changed so each report opens in its own window:
+
+1. **🌐 Dashboard tab.** A new green-filled "Dashboard" tab now shows
+   as the first item on every page (Console, Gantt, Summary, Reports,
+   Management). The page itself is intentionally empty for now, with
+   an "Under development" message and links to the existing pages.
+   This is a placeholder so the nav layout is final and the real
+   dashboard content can drop in later without another reshuffle.
+2. **Reports = launcher.** The Reports page is now read-only. It has
+   one button per report — **📂 Open Report ↗** — that opens the
+   actual report in a separate window. Inside that window the user
+   uses the existing **🖨 Print** and **💬 Send to LINE** buttons.
+   The duplicate Send buttons that used to live on the Reports
+   launcher have been removed.
+3. **Summary's popup window** now has a **Send to LINE** button next
+   to Print, so when an operator opens the Summary report from the
+   Reports launcher, they can both print and send LINE messages
+   without going back to the launcher.
+
+The legacy `Dashboard ↗` link that pointed to Grafana has been renamed
+to `Grafana ↗` so the new green Dashboard tab is unambiguous.
+
+新しいライブ運用ダッシュボードを将来追加する準備として
+コンソール全体のナビゲーションを整理し、Reports からは各
+報告書が別ウィンドウで開くように変更しました：
+
+1. **🌐 Dashboard タブ。** 緑色の「Dashboard」タブを各ページ
+   （Console / Gantt / Summary / Reports / Management）の
+   先頭に追加しました。ページ自体は意図的に空で、
+   「開発中」メッセージと既存ページへのリンクのみです。
+   レイアウトを先に確定させ、後から実コンテンツを差し込めるよう
+   にするための土台です。
+2. **Reports = ランチャー。** Reports ページは読み取り専用に
+   なりました。各報告書には **📂 Open Report ↗** ボタンが
+   1 つだけあり、報告書本体は別ウィンドウで開きます。その
+   ウィンドウ内の **🖨 Print** と **💬 Send to LINE** ボタン
+   で印刷・LINE 送信を行います。ランチャー側にあった重複の
+   Send ボタンは削除しました。
+3. **Summary の別ウィンドウ** にも、Print の隣に
+   **Send to LINE** ボタンを追加しました。Reports ランチャー
+   から Summary を開いた担当者は、ウィンドウを戻らずに印刷も
+   LINE 送信もできます。
+
+旧来の Grafana を指していた `Dashboard ↗` リンクは
+`Grafana ↗` に名前を変更し、新しい緑の Dashboard タブと
+混同しないようにしました。
+
+---
+
+**Previous update / 前回の更新 (2026-04-30 — LINE flow polished: smart card + mobile viewer + recipient management)**
+
+The LINE pipeline that we built earlier today was tightened up so it
+feels finished. Three things changed:
+
+1. **One smart card instead of two messages.** Tapping **Send to LINE**
+   now delivers a single styled card in chat: the snapshot image at
+   the top, the report title and date in the middle, and a clear
+   tap button at the bottom. Tapping anywhere on the card opens the
+   mobile viewer — no raw URL clutter.
+2. **Two mobile viewer pages.** `/m/report` shows the same gantt as
+   the desktop page, just without admin buttons; `/m/summary` shows
+   the same productivity chart. The summary page now defaults to a
+   Month range with all four series visible, and tapping the chart
+   makes it rotate fullscreen so the recipient can read it sideways
+   on a phone with a close button to come back.
+3. **Recipient management.** The Reports page **List recipients**
+   button now shows each subscriber as a row with their current name,
+   plus pencil and ✕ buttons to rename or remove them in one click.
+   The first registered phone has been renamed to `creator`.
+
+午前中に組み上げた LINE 連携を、仕上がりの状態まで整えました。
+変更点は次の 3 つです：
+
+1. **メッセージ 2 通 → スマートカード 1 通に。** **Send to LINE**
+   をタップすると、画像・件名・日付・タップボタンが一体になった
+   1 通のカードがチャットに届きます。カードのどこをタップしても
+   モバイル用の表示ページが開きます。生 URL は表示されません。
+2. **モバイル用の 2 ページ。** `/m/report` はデスクトップ版と同じ
+   ガント表示、`/m/summary` は同じ生産性チャートを、管理ボタン
+   抜きで表示します。サマリーは初期表示が Month、4 系列すべて
+   ON。チャートをタップすると全画面で 90° 回転し、横向きで
+   読みやすく、閉じるボタンで戻れます。
+3. **受信者の管理。** Reports ページの **List recipients** に
+   1 名ずつ行が並び、鉛筆ボタンで名前変更、✕ ボタンで削除が
+   できるようになりました。最初に登録された端末は名前を
+   `creator` に設定済みです。
+
+---
+
+**Previous update / 前回の更新 (2026-04-30 — LINE messaging integrated into the console)**
 
 The attendance console can now talk to LINE. Three things changed for
 the operator:

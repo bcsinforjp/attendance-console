@@ -37,7 +37,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 # Create app
-app = FastAPI(title="V3 Attendance Console", version="3.2")
+app = FastAPI(title="V3 Attendance Console", version="3.3")
 
 BASE_DIR = Path(__file__).resolve().parent
 EMPLOYEE_ROSTER_PATH = BASE_DIR / "employee_roster.json"
@@ -1327,6 +1327,27 @@ async def reports_page():
     return FileResponse(STATIC_DIR / "reports.html")
 
 
+@app.get("/m/report")
+async def mobile_report_page():
+    """Mobile attendance viewer — serves the regular gantt page so the graphics
+    are 100% identical to /gantt; the page itself detects the /m/ path and
+    hides toolbar admin/print controls."""
+    return FileResponse(
+        STATIC_DIR / "gantt.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.get("/m/summary")
+async def mobile_summary_page():
+    """Mobile summary viewer — serves the regular summary page; mobile-mode JS
+    hides admin/print/reload controls."""
+    return FileResponse(
+        STATIC_DIR / "summary.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
 @app.get("/console")
 async def console_page():
     """V3 Attendance Console — four-tab entry workflow."""
@@ -1334,6 +1355,16 @@ async def console_page():
         STATIC_DIR / "console.html",
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
+
+@app.get("/dashboard")
+async def dashboard_page():
+    """Live operations dashboard — placeholder, under development.
+    Reserved as the landing for the new green Dashboard nav tab."""
+    return FileResponse(
+        STATIC_DIR / "dashboard.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
 
 @app.get("/management")
 async def management_page():
@@ -1567,6 +1598,73 @@ async def logs_api():
     except FileNotFoundError:
         return {"entries": []}
     return {"entries": _parse_changelog(raw)}
+
+# ---------------------------------------------------------------------------
+# Day-off Schedule — operator-managed planned absences (vacation, day off, etc.)
+# Stored in dayoff_schedule.json; consumed by the Management → Day-off tab and
+# (in the future) overlaid on the gantt to mark expected non-working days.
+# ---------------------------------------------------------------------------
+DAYOFF_PATH = BASE_DIR / "dayoff_schedule.json"
+_DAYOFF_LOCK = threading.Lock()
+_DAYOFF_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _dayoff_load() -> dict:
+    if not DAYOFF_PATH.exists():
+        return {"schedule": {}, "updated_at": None}
+    try:
+        d = json.loads(DAYOFF_PATH.read_text(encoding="utf-8"))
+        if not isinstance(d, dict):
+            return {"schedule": {}, "updated_at": None}
+        d.setdefault("schedule", {})
+        d.setdefault("updated_at", None)
+        return d
+    except Exception:
+        return {"schedule": {}, "updated_at": None}
+
+
+def _dayoff_save(payload: dict) -> None:
+    tmp = DAYOFF_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(DAYOFF_PATH)
+
+
+@app.get("/api/dayoff/schedule")
+async def dayoff_get():
+    """Return the full saved day-off schedule.
+    Shape: { schedule: {employee_code: ["YYYY-MM-DD", ...]}, updated_at }"""
+    return _dayoff_load()
+
+
+@app.put("/api/dayoff/schedule")
+async def dayoff_save(payload: dict = Body(...)):
+    """Replace the saved schedule. Validates each date is YYYY-MM-DD and that
+    employee codes are 8-digit strings present in EMPLOYEE_ROSTER."""
+    raw = payload.get("schedule")
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=400, detail="schedule must be an object {code: [dates]}")
+    valid_codes = {e["employee_code"] for e in EMPLOYEE_ROSTER}
+    cleaned: dict[str, list[str]] = {}
+    for code, dates in raw.items():
+        code_s = str(code).strip()
+        if code_s not in valid_codes:
+            continue  # silently drop unknown codes rather than 400 — keeps UI lenient
+        if not isinstance(dates, list):
+            raise HTTPException(status_code=400, detail=f"dates for {code_s} must be a list")
+        seen = []
+        for d in dates:
+            ds = str(d).strip()
+            if not _DAYOFF_DATE_RE.match(ds):
+                raise HTTPException(status_code=400, detail=f"bad date '{ds}' (expected YYYY-MM-DD)")
+            if ds not in seen:
+                seen.append(ds)
+        if seen:
+            cleaned[code_s] = sorted(seen)
+    out = {"schedule": cleaned, "updated_at": datetime.utcnow().isoformat() + "Z"}
+    with _DAYOFF_LOCK:
+        _dayoff_save(out)
+    return {"ok": True, **out}
+
 
 @app.get("/api/management/bootstrap")
 async def management_bootstrap():
@@ -5049,6 +5147,41 @@ async def line_recipients():
     cfg = _line_load()
     return {"recipients": cfg.get("recipients", [])}
 
+
+@app.post("/api/line/recipients/rename")
+async def line_recipient_rename(body: dict = Body(...)):
+    rid = (body.get("id") or "").strip()
+    name = (body.get("display_name") or "").strip()[:60]
+    if not rid:
+        raise HTTPException(status_code=400, detail="id required")
+    with _LINE_LOCK:
+        cfg = _line_load()
+        recipients = cfg.get("recipients", [])
+        target = next((r for r in recipients if r.get("id") == rid), None)
+        if target is None:
+            raise HTTPException(status_code=404, detail=f"no recipient with id={rid}")
+        target["display_name"] = name
+        cfg["recipients"] = recipients
+        _line_save(cfg)
+    return {"ok": True, "id": rid, "display_name": name}
+
+
+@app.post("/api/line/recipients/delete")
+async def line_recipient_delete(body: dict = Body(...)):
+    rid = (body.get("id") or "").strip()
+    if not rid:
+        raise HTTPException(status_code=400, detail="id required")
+    with _LINE_LOCK:
+        cfg = _line_load()
+        recipients = cfg.get("recipients", []) or []
+        before = len(recipients)
+        recipients = [r for r in recipients if r.get("id") != rid]
+        if len(recipients) == before:
+            raise HTTPException(status_code=404, detail=f"no recipient with id={rid}")
+        cfg["recipients"] = recipients
+        _line_save(cfg)
+    return {"ok": True, "removed": rid}
+
 @app.post("/api/line/send")
 async def line_send(body: dict = Body(...)):
     cfg = _line_load()
@@ -5075,6 +5208,8 @@ async def line_send(body: dict = Body(...)):
 
 LINE_PDF_DIR = BASE_DIR / "static" / "line_pdfs"
 LINE_PDF_DIR.mkdir(parents=True, exist_ok=True)
+LINE_IMG_DIR = BASE_DIR / "static" / "line_images"
+LINE_IMG_DIR.mkdir(parents=True, exist_ok=True)
 _LINE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 @app.post("/api/line/upload-and-send")
@@ -5110,6 +5245,194 @@ async def line_upload_and_send(
         results.append({"id": r["id"], "status": status, "response": resp[:200]})
     ok = all(200 <= r["status"] < 300 for r in results)
     return {"ok": ok, "pdf_url": pdf_url, "size": len(data), "results": results}
+
+def _line_push_image(to_id: str, image_url: str, token: str) -> tuple[int, str]:
+    return _line_api_call(
+        "/v2/bot/message/push",
+        {
+            "to": to_id,
+            "messages": [{
+                "type": "image",
+                "originalContentUrl": image_url,
+                "previewImageUrl": image_url,
+            }],
+        },
+        token,
+    )
+
+
+def _line_push_button_template(
+    to_id: str, image_url: str, title: str, text: str,
+    button_label: str, link_url: str, alt_text: str, token: str,
+) -> tuple[int, str]:
+    """Send a single 'buttons template' card: thumbnail + title + text + tap button."""
+    return _line_api_call(
+        "/v2/bot/message/push",
+        {
+            "to": to_id,
+            "messages": [{
+                "type": "template",
+                "altText": alt_text[:400],
+                "template": {
+                    "type": "buttons",
+                    "thumbnailImageUrl": image_url,
+                    "imageAspectRatio": "rectangle",
+                    "imageSize": "contain",
+                    "imageBackgroundColor": "#FFFFFF",
+                    "title": title[:40],
+                    "text": text[:60],
+                    "defaultAction": {"type": "uri", "label": "open", "uri": link_url},
+                    "actions": [
+                        {"type": "uri", "label": button_label[:20], "uri": link_url},
+                    ],
+                },
+            }],
+        },
+        token,
+    )
+
+
+@app.post("/api/line/send-mobile-link")
+async def line_send_mobile_link(
+    file: UploadFile = File(...),
+    report_date: str = Form(...),
+    type: str = Form("attendance"),
+):
+    """Send a 4-box snapshot image plus a tap-to-open link to the mobile viewer.
+
+    Two LINE messages per recipient: image first, then text+URL.
+    """
+    cfg = _line_load()
+    token = cfg.get("channel_access_token", "")
+    if not token:
+        raise HTTPException(status_code=500, detail="LINE not configured")
+    recipients = cfg.get("recipients", []) or []
+    if not recipients:
+        raise HTTPException(status_code=400, detail="no LINE recipients yet — have a user message the bot first")
+    safe_date = _LINE_FILENAME_RE.sub("", report_date)[:20] or "report"
+    safe_type = _LINE_FILENAME_RE.sub("", type)[:20] or "attendance"
+    data = await file.read()
+    if not (data[:8].startswith(b"\x89PNG") or data[:3] == b"\xff\xd8\xff"):
+        raise HTTPException(status_code=400, detail="upload must be PNG or JPEG")
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="image too large (>5 MB)")
+    ext = "png" if data[:8].startswith(b"\x89PNG") else "jpg"
+    fname = f"{safe_type}_{safe_date}.{ext}"
+    out_path = LINE_IMG_DIR / fname
+    out_path.write_bytes(data)
+    base = cfg.get("public_base_url", "").rstrip("/")
+    img_url = f"{base}/static/line_images/{fname}"
+    page = "report" if safe_type == "attendance" else "summary"
+    link_url = f"{base}/m/{page}?date={safe_date}"
+    label_ja = "勤怠記録" if safe_type == "attendance" else "月次サマリー"
+    label_en = "Attendance Report" if safe_type == "attendance" else "Monthly Summary"
+    title = f"{label_ja} · {label_en}"
+    body_text = f"📅 {safe_date}　タップで詳細を表示"
+    btn_label = "📊 View Report" if safe_type == "attendance" else "📈 View Summary"
+    alt_text = f"{label_en} {safe_date} — {link_url}"
+    results = []
+    for r in recipients:
+        rid = r["id"]
+        s_card, resp_card = _line_push_button_template(
+            rid, img_url, title, body_text, btn_label, link_url, alt_text, token,
+        )
+        results.append({"id": rid, "card_status": s_card, "response": resp_card[:200]})
+    ok = all(200 <= r["card_status"] < 300 for r in results)
+    return {"ok": ok, "image_url": img_url, "link_url": link_url, "results": results}
+
+
+@app.get("/api/m/summary")
+async def mobile_summary_api(date: str | None = None, days: int = 30):
+    """Rolling-N-day summary for the mobile summary page.
+
+    Returns: window dates, total packs, total hours per section, per-day
+    breakdown rows ready for a list/chart.
+    """
+    if days < 1 or days > 92:
+        raise HTTPException(status_code=400, detail="days must be 1..92")
+    if date:
+        try:
+            anchor = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    else:
+        anchor = (datetime.utcnow() - timedelta(days=1)).date()
+    start = anchor - timedelta(days=days - 1)
+    rows = []
+    total_packs = 0
+    s1_hours = 0.0
+    s2_hours = 0.0
+    s1_present = 0
+    s2_present = 0
+    days_with_data = 0
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT record_date, number_of_packs
+                    FROM daily_packs
+                    WHERE record_date BETWEEN %s AND %s
+                    ORDER BY record_date
+                    """,
+                    (start.isoformat(), anchor.isoformat()),
+                )
+                packs_by_date = {r["record_date"].isoformat(): int(r["number_of_packs"] or 0) for r in cur.fetchall()}
+    except Exception:
+        packs_by_date = {}
+    cur_d = start
+    while cur_d <= anchor:
+        ds = cur_d.isoformat()
+        try:
+            day_obj = await gantt_for_date(ds)
+        except Exception:
+            day_obj = None
+        if day_obj:
+            prod = day_obj.get("productivity") or {}
+            packs = int(prod.get("total_packs") or 0)
+            sects = prod.get("sections") or []
+            s1 = next((s for s in sects if s.get("id") == 1), None)
+            s2 = next((s for s in sects if s.get("id") == 2), None)
+            row = {
+                "date": ds,
+                "packs": packs,
+                "s1_hours": (s1 or {}).get("total_hours") or 0.0,
+                "s2_hours": (s2 or {}).get("total_hours") or 0.0,
+                "s1_present": (s1 or {}).get("staff_present") or 0,
+                "s2_present": (s2 or {}).get("staff_present") or 0,
+                "s1_lp": (s1 or {}).get("lp") or 0.0,
+                "s2_lp": (s2 or {}).get("lp") or 0.0,
+            }
+            if packs or row["s1_hours"] or row["s2_hours"]:
+                days_with_data += 1
+            total_packs += packs
+            s1_hours += float(row["s1_hours"])
+            s2_hours += float(row["s2_hours"])
+            s1_present += int(row["s1_present"])
+            s2_present += int(row["s2_present"])
+            rows.append(row)
+        else:
+            rows.append({"date": ds, "packs": packs_by_date.get(ds, 0),
+                         "s1_hours": 0.0, "s2_hours": 0.0,
+                         "s1_present": 0, "s2_present": 0,
+                         "s1_lp": 0.0, "s2_lp": 0.0})
+        cur_d = cur_d + timedelta(days=1)
+    combined_hours = s1_hours + s2_hours
+    return {
+        "anchor": anchor.isoformat(),
+        "start": start.isoformat(),
+        "days": days,
+        "days_with_data": days_with_data,
+        "total_packs": total_packs,
+        "s1_total_hours": round(s1_hours, 2),
+        "s2_total_hours": round(s2_hours, 2),
+        "combined_total_hours": round(combined_hours, 2),
+        "s1_avg_lp": round((total_packs / s1_hours), 2) if s1_hours > 0 else 0.0,
+        "s2_avg_lp": round((total_packs / s2_hours), 2) if s2_hours > 0 else 0.0,
+        "combined_avg_lp": round((total_packs / combined_hours), 2) if combined_hours > 0 else 0.0,
+        "rows": rows,
+    }
+
 
 # Test ping (helps debug "Hi" send to a known recipient)
 @app.post("/api/line/test-hi")

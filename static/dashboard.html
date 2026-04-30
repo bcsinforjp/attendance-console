@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard · V3 Attendance Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef3f5;--ink:#132026;--muted:#5a6b73;--surface:#fff;--soft:#f7fbfc;
+  --line:#d4e2e8;--brand:#0d8f71;--brand-strong:#0b6f58;--accent:#125e91;
+  --shadow:0 10px 32px rgba(11,35,46,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:"Space Grotesk","Segoe UI",sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;line-height:1.5;}
+.topbar{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:auto 1fr;align-items:center;
+  padding:0.7rem 1rem;border-bottom:1px solid var(--line);background:rgba(255,255,255,.94);backdrop-filter:blur(8px);gap:.9rem;}
+.brand{font-weight:700;color:var(--brand-strong);font-size:.95rem;}
+.brand small{font-family:"IBM Plex Mono",monospace;color:var(--muted);margin-left:.4rem;font-size:.72rem;}
+.topnav{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-self:end;}
+.topnav a{padding:6px 12px;border-radius:6px;font-size:.78rem;font-weight:600;color:var(--muted);text-decoration:none;border:1px solid transparent;transition:all .15s;}
+.topnav a:hover{color:var(--brand-strong);border-color:var(--line);background:var(--soft);}
+.topnav a.active{color:var(--brand-strong);border-color:#b8e4d8;background:#ecfaf4;}
+.topnav a.dash-link{background:#10b981;color:#fff;border-color:#10b981;font-weight:700;}
+.topnav a.dash-link:hover{background:#059669;border-color:#059669;color:#fff;}
+.topnav a.dash-link.active{background:#10b981;color:#fff;border-color:#10b981;}
+main{max-width:980px;margin:0 auto;padding:1.5rem 1rem 3rem;}
+.hero{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:2.4rem 2rem;
+  text-align:center;box-shadow:var(--shadow);}
+.hero .badge{display:inline-block;padding:6px 14px;border-radius:999px;background:#fef3c7;color:#92400e;
+  font-weight:700;font-size:.78rem;letter-spacing:.04em;margin-bottom:1rem;}
+.hero h1{font-size:1.5rem;margin-bottom:.5rem;}
+.hero p{color:var(--muted);font-size:.95rem;max-width:640px;margin:0 auto 1.6rem;}
+.hero .pile{display:inline-flex;gap:.6rem;flex-wrap:wrap;justify-content:center;}
+.hero .pile a{padding:.55rem 1rem;border-radius:8px;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink);text-decoration:none;font-weight:600;font-size:.85rem;transition:all .15s;}
+.hero .pile a:hover{background:var(--soft);border-color:var(--brand);color:var(--brand-strong);}
+.note{margin-top:1.5rem;padding:1rem 1.2rem;background:var(--surface);border:1px dashed var(--line);
+  border-radius:10px;font-size:.85rem;color:var(--muted);}
+.note b{color:var(--ink);}
+@media(max-width:700px){
+  .topbar{grid-template-columns:1fr;gap:.6rem;}
+  .topnav{justify-self:start;}
+  .hero{padding:1.6rem 1rem;}
+  .hero h1{font-size:1.2rem;}
+}
+</style>
+<script src="./static/site_header.js" defer></script>
+</head>
+<body>
+<div id="siteHeader"></div>
+
+<main>
+  <section class="hero">
+    <span class="badge">🚧 開発中 · Under development</span>
+    <h1>Dashboard</h1>
+    <p>This page is reserved for the new live operations dashboard
+      (KPIs, current-day status, alerts, AI summary). It is not ready
+      yet — content and layout will be redesigned from scratch in a
+      separate work batch.</p>
+    <p style="font-size:.85rem;">この画面は「ライブ運用ダッシュボード」用に確保されています。
+      現在は開発中で、別の作業バッチで再設計されます。</p>
+    <div class="pile">
+      <a href="./console">Console →</a>
+      <a href="./gantt">Gantt →</a>
+      <a href="./summary">Summary →</a>
+      <a href="./reports">Reports →</a>
+    </div>
+    <div class="note">
+      <b>Status:</b> placeholder · <b>Owner:</b> TBD · <b>ETA:</b> TBD ·
+      <b>Notes:</b> the toolbar refactor (path B of the spec) created this
+      empty page so the new <code>🌐 Dashboard</code> nav tab has somewhere
+      to land. The actual KPI/chart/AI content will be built later.
+    </div>
+  </section>
+</main>
+</body>
+</html>

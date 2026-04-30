@@ -70,6 +70,8 @@
   }
   .topnav a:hover { color: var(--brand-strong); border-color: var(--line); background: var(--surface-soft); }
   .topnav a.active { color: var(--brand-strong); border-color: #b8e4d8; background: #ecfaf4; }
+  .topnav a.dash-link { background:#10b981; color:#fff; border-color:#10b981; font-weight:700; }
+  .topnav a.dash-link:hover { background:#059669; border-color:#059669; color:#fff; }
 
   /* ===== Live clock widget (top-right) ===== */
   .clockbox {
@@ -584,35 +586,12 @@
     font-size: 0.88rem;
   }
 </style>
+<script src="./static/site_header.js" defer></script>
 </head>
 <body>
 
-<header class="topbar">
-  <div class="brand">V3 Attendance Console</div>
-  <nav class="topnav">
-    <a href="./console" class="active">Console</a>
-    <a href="./gantt">Gantt</a>
-    <a href="./summary">Summary</a>
-    <a href="./reports">Reports</a>
-    <a href="./management">Management</a>
-    <a href="/grafana/" target="_blank" rel="noopener">Dashboard ↗</a>
-    <span id="healthPill" class="pill">checking…</span>
-  </nav>
-  <div class="clockbox" id="clockBox" title="Live clock and computed shift / production dates">
-    <div class="now">
-      <span class="tm" id="clkTime">--:--:--</span>
-      <span class="dt" id="clkDate">----/--/--</span>
-    </div>
-    <div class="pair">
-      <span>Shift</span>
-      <b id="clkShift">—</b>
-    </div>
-    <div class="pair">
-      <span>Prod</span>
-      <b id="clkProd">—</b>
-    </div>
-  </div>
-</header>
+<!-- Unified header injected by /static/site_header.js -->
+<div id="siteHeader"></div>
 
 <div id="annBanner" class="ann-banner amber hidden" role="status" aria-live="polite">
   <span id="annBadge" class="ann-banner__badge">BETA</span>
@@ -1053,33 +1032,7 @@ function switchTab(name) {
 }
 document.querySelectorAll(".console-tab").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
-/* ----------------- Top health pill ----------------- */
-fetch(api("/api/health")).then(r => r.json()).then(j => {
-  const p = document.getElementById("healthPill");
-  p.textContent = j.status === "healthy" ? "API healthy" : "API degraded";
-  p.classList.add(j.status === "healthy" ? "ok" : "warn");
-}).catch(() => {
-  const p = document.getElementById("healthPill");
-  p.textContent = "API offline"; p.classList.add("err");
-});
-
-/* ----------------- Live clock + computed Shift/Prod dates ----------------- */
-(function startClock() {
-  const $t = document.getElementById("clkTime");
-  const $d = document.getElementById("clkDate");
-  const $s = document.getElementById("clkShift");
-  const $p = document.getElementById("clkProd");
-  const pad = (n) => String(n).padStart(2, "0");
-  function tick() {
-    const now = new Date();
-    $t.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    $d.textContent = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())}`;
-    $s.textContent = shiftDateForNow();
-    $p.textContent = productionDateForNow();
-  }
-  tick();
-  setInterval(tick, 1000);
-})();
+/* Top health pill + live clock are owned by /static/site_header.js. */
 
 /* ================================================================
    TAB 1 — Attendance PDF upload + auto-preview + confirm

@@ -1,4 +1,4 @@
-# V3 Attendance Console — v3.2
+# V3 Attendance Console — v3.3
 
 Live app:
 
@@ -19,6 +19,7 @@ It uploads attendance PDFs, parses rostered employee rows, previews extracted da
 - Serve summary and employee dashboard APIs
 - Provide a plain-text employee-code endpoint for automation
 - **(v3.2)** Push attendance reports to LINE — webhook auto-registers recipients who message the bot; the Gantt page renders a PDF in the browser and the server sends a tap-to-open link to all recipients
+- **(v3.3)** Unified site header on every page; new `🌐 Dashboard` placeholder tab; Reports is a read-only popup launcher with `?report=1` flag that hides the top nav for focused viewing; Management page reorganised into 3 tabs (📋 Roster · 📅 Day-off Schedule · 💬 LINE Recipients) with a new day-off grid persisted to `dayoff_schedule.json`
 
 ## Main files
 

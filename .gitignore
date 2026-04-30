@@ -19,9 +19,13 @@ announcement.json
 auto_upload_config.json
 auto_uploads/
 logs/
+dayoff_schedule.json
 
 # Generated outputs
 static/line_pdfs/
+static/line_images/
 
 # Local backups (kept on disk, not in repo)
 *.bak
+*.bak[0-9]
+*.bak[0-9][0-9]
