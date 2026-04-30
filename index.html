@@ -1292,8 +1292,8 @@
                     <option value="50" data-i18n="att.rows_50">50 rows</option>
                     <option value="100" data-i18n="att.rows_100">100 rows</option>
                 </select>
-                <label class="toggle"><input id="missingFilter" type="checkbox" data-i18n="att.filter_missing">Missing leave only</label>
-                <label class="toggle"><input id="overnightFilter" type="checkbox" data-i18n="att.filter_overnight">Overnight only</label>
+                <label class="toggle"><input id="missingFilter" type="checkbox" data-i18n="att.filter_missing">Not recorded data</label>
+                <label class="toggle"><input id="overnightFilter" type="checkbox" data-i18n="att.filter_absent">Absent</label>
             </div>
 
             <div class="table-wrap">
@@ -1486,13 +1486,18 @@
             };
         }
 
+        // "Not recorded" = either IN or OUT missing (data not received).
+        // "Absent"       = both IN and OUT missing.
         function isMissingLeave(record) {
-            return record.commute_time !== "" && record.leave_time === "";
+            const hasIn  = (record.commute_time || "") !== "";
+            const hasOut = (record.leave_time   || "") !== "";
+            return !hasIn || !hasOut;
         }
 
         function isOvernight(record) {
-            const leaveMinutes = parseTimeToMinutes(record.leave_time);
-            return Number.isFinite(leaveMinutes) && leaveMinutes >= 24 * 60;
+            const hasIn  = (record.commute_time || "") !== "";
+            const hasOut = (record.leave_time   || "") !== "";
+            return !hasIn && !hasOut;
         }
 
         function getTotalSelectedBytes() {

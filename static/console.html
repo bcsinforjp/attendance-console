@@ -99,20 +99,24 @@
     .clockbox .now .tm { font-size: 0.85rem; }
   }
 
-  /* ===== Beta / test-mode banner ===== */
-  .beta-banner {
+  /* ===== Announcement banner (driven by /api/announcement; admin-editable) ===== */
+  .ann-banner {
     display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap;
     padding: 0.55rem 1rem;
-    background: linear-gradient(90deg, #fff7e6 0%, #fff2d1 100%);
-    border-bottom: 1px solid #f0c67a;
-    color: #6a4a12;
+    border-bottom: 1px solid transparent;
     font-size: 0.82rem;
     line-height: 1.35;
   }
-  .beta-banner__badge {
+  .ann-banner.amber { background: linear-gradient(90deg, #fff7e6 0%, #fff2d1 100%); border-bottom-color:#f0c67a; color:#6a4a12; }
+  .ann-banner.red   { background: linear-gradient(90deg, #fdecec 0%, #fad4d1 100%); border-bottom-color:#e8a39c; color:#7a1c12; }
+  .ann-banner.blue  { background: linear-gradient(90deg, #e8f1f8 0%, #d3e2ee 100%); border-bottom-color:#9cc1da; color:#0e3f5f; }
+  .ann-banner.green { background: linear-gradient(90deg, #e6f5f0 0%, #c8ead9 100%); border-bottom-color:#90c9b6; color:#0a5c49; }
+  .ann-banner.gray  { background: linear-gradient(90deg, #eef1f3 0%, #dfe6ea 100%); border-bottom-color:#c2ccd2; color:#39474f; }
+  .ann-banner.purple{ background: linear-gradient(90deg, #efe9fc 0%, #ddd1f7 100%); border-bottom-color:#bba9f1; color:#3d2a76; }
+  .ann-banner__badge {
     flex: 0 0 auto;
     padding: 0.18rem 0.5rem;
-    background: #c6830f;
+    background: rgba(0,0,0,0.55);
     color: #fff;
     border-radius: 4px;
     font-family: "IBM Plex Mono", monospace;
@@ -120,15 +124,25 @@
     font-weight: 700;
     letter-spacing: 0.08em;
   }
-  .beta-banner__text b { color: #4a3209; }
-  .beta-banner__ja {
-    color: #6a4a12;
+  .ann-banner__text { flex: 1 1 auto; }
+  .ann-banner__text b { filter: brightness(0.7); }
+  .ann-banner__ja {
     font-family: "Noto Sans JP", "Hiragino Sans", sans-serif;
     margin-left: 0.25rem;
-    margin-right: 0.35rem;
   }
+  .ann-banner__close {
+    flex: 0 0 auto; cursor: pointer; background: transparent; border: 0;
+    color: inherit; opacity: 0.65; font-size: 1rem; padding: 0 0.3rem; line-height: 1;
+  }
+  .ann-banner__close:hover { opacity: 1; }
+  .ann-banner.hidden { display: none; }
+  /* tiny "Show banner" pill in topbar when dismissed */
+  .ann-restore { display:none; margin-left:0.4rem; font-size:0.72rem; padding:0.2rem 0.5rem;
+                 border:1px solid #d5e2ea; border-radius:999px; background:#f5fbfd; color:#5f7078;
+                 cursor:pointer; font-family:inherit; }
+  .ann-restore:hover { color:#12618f; border-color:#12618f; }
   @media (max-width: 680px) {
-    .beta-banner { font-size: 0.75rem; padding: 0.5rem 0.75rem; }
+    .ann-banner { font-size: 0.75rem; padding: 0.5rem 0.75rem; }
   }
 
   .page { width: min(1200px, 100%); margin: 1.2rem auto 2.5rem; padding: 0 0.9rem; }
@@ -576,10 +590,12 @@
 <header class="topbar">
   <div class="brand">V3 Attendance Console</div>
   <nav class="topnav">
-    <a href="./console" class="active">Upload</a>
+    <a href="./console" class="active">Console</a>
+    <a href="./gantt">Gantt</a>
+    <a href="./summary">Summary</a>
+    <a href="./reports">Reports</a>
     <a href="./management">Management</a>
     <a href="/grafana/" target="_blank" rel="noopener">Dashboard ↗</a>
-    <a href="https://rnd.asiakawaii.com/attendance/console" target="_blank" rel="noopener">Console ↗</a>
     <span id="healthPill" class="pill">checking…</span>
   </nav>
   <div class="clockbox" id="clockBox" title="Live clock and computed shift / production dates">
@@ -598,33 +614,99 @@
   </div>
 </header>
 
-<div class="beta-banner" role="status" aria-live="polite">
-  <span class="beta-banner__badge">BETA</span>
-  <span class="beta-banner__text">
-    <b>This app is currently under test and data verification.</b>
-    <span class="beta-banner__ja">本アプリは現在テスト・データ検証中です。</span>
-    Please double-check results before relying on them.
-    <span class="beta-banner__ja">ご利用の際は結果をご確認ください。</span>
-    <b>Test period ends 2026-04-30.</b>
-    <span class="beta-banner__ja">テスト期間は 2026年4月30日 までです。</span>
+<div id="annBanner" class="ann-banner amber hidden" role="status" aria-live="polite">
+  <span id="annBadge" class="ann-banner__badge">BETA</span>
+  <span class="ann-banner__text">
+    <span id="annTextEn"></span>
+    <span id="annTextJa" class="ann-banner__ja"></span>
   </span>
+  <button id="annClose" class="ann-banner__close" type="button" aria-label="Dismiss" title="Dismiss">✕</button>
 </div>
+<button id="annRestore" class="ann-restore" type="button" title="Show announcement">show notice</button>
+<script>
+(function(){
+  /* Announcement banner: configurable via /admin (Announcement tab),
+     dismissible per browser (localStorage). New publishes (different
+     updated_at) clear the dismiss so users see the new notice. */
+  const $ = (id) => document.getElementById(id);
+  const COLORS = ["amber","red","blue","green","gray","purple"];
+  function dismissedKey(id){ return "annDismissed:" + id; }
+
+  async function loadAnnouncement(){
+    try{
+      const r = await fetch("/attendance/api/announcement", { cache: "no-store" });
+      const a = await r.json();
+      if (!a || a.enabled === false || (!a.text_en && !a.text_ja)) {
+        $("annBanner").classList.add("hidden");
+        $("annRestore").style.display = "none";
+        return;
+      }
+      const id = a.updated_at || (a.badge + "|" + a.text_en);
+      const isDismissed = a.dismissible !== false && localStorage.getItem(dismissedKey(id)) === "1";
+
+      const banner = $("annBanner");
+      banner.classList.remove("hidden", ...COLORS);
+      banner.classList.add(COLORS.includes(a.color) ? a.color : "amber");
+      $("annBadge").textContent = a.badge || "INFO";
+      $("annTextEn").textContent = a.text_en || "";
+      $("annTextJa").textContent = a.text_ja || "";
+      $("annClose").style.display = (a.dismissible !== false) ? "" : "none";
+      banner.dataset.annId = id;
+
+      if (isDismissed){
+        banner.classList.add("hidden");
+        $("annRestore").style.display = "inline-block";
+      } else {
+        $("annRestore").style.display = "none";
+      }
+    } catch(e){ /* silent — banner stays hidden */ }
+  }
+
+  document.addEventListener("click", (ev) => {
+    if (ev.target && ev.target.id === "annClose"){
+      const id = $("annBanner").dataset.annId;
+      if (id) localStorage.setItem(dismissedKey(id), "1");
+      $("annBanner").classList.add("hidden");
+      $("annRestore").style.display = "inline-block";
+    }
+    if (ev.target && ev.target.id === "annRestore"){
+      const id = $("annBanner").dataset.annId;
+      if (id) localStorage.removeItem(dismissedKey(id));
+      $("annBanner").classList.remove("hidden");
+      $("annRestore").style.display = "none";
+    }
+  });
+
+  loadAnnouncement();
+  /* Re-poll every 5 minutes so changes from /admin show up without a reload. */
+  setInterval(loadAnnouncement, 5 * 60 * 1000);
+})();
+</script>
 
 <main class="page">
 
   <nav class="console-tabs card" role="tablist">
-    <button type="button" class="console-tab active" data-tab="upload"><span class="num">1</span>Attendance PDF</button>
-    <button type="button" class="console-tab" data-tab="fullcast"><span class="num">2</span>フルキャスト</button>
+    <button type="button" class="console-tab active" data-tab="fullcast"><span class="num">1</span>フルキャスト</button>
+    <button type="button" class="console-tab" data-tab="upload"><span class="num">2</span>Attendance PDF</button>
     <button type="button" class="console-tab" data-tab="packs"><span class="num">3</span>Daily Packs</button>
-    <button type="button" class="console-tab" data-tab="reports"><span class="num">4</span>Reports</button>
+    <a class="console-tab" href="/attendance/reports" style="text-decoration:none;display:inline-flex;align-items:center;"><span class="num">4</span>Reports →</a>
   </nav>
 
   <!-- ============================================================ -->
   <!-- TAB 1 — Attendance PDF upload -->
   <!-- ============================================================ -->
-  <section id="tab-upload" class="card panel active">
+  <section id="tab-upload" class="card panel">
     <h2>Upload attendance PDF</h2>
     <p class="lede">Drop one or more attendance PDFs. Files are previewed automatically — review the table below, then click <strong>Confirm &amp; Save</strong> to persist to the database and move on.</p>
+
+    <!-- Auto-process: pick the latest PDF the server already received -->
+    <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.7rem;">
+      <button type="button" class="button button-accent" id="btnAuRun">Auto-update →</button>
+      <div id="auProgress" style="flex:1 1 180px;height:6px;background:var(--surface-soft);border:1px solid var(--line);border-radius:999px;overflow:hidden;display:none;">
+        <div id="auProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--brand),var(--accent));transition:width .25s ease;"></div>
+      </div>
+      <span id="auProgressLabel" class="mono" style="font-size:0.78rem;color:var(--muted);"></span>
+    </div>
 
     <label for="uploadInput" class="dropzone" id="uploadDz">
       <strong>Click or drop PDF files here</strong>
@@ -653,8 +735,8 @@
           <option value="50">50 rows</option>
           <option value="100">100 rows</option>
         </select>
-        <label class="toggle"><input id="upMissing"   type="checkbox" />Missing leave only</label>
-        <label class="toggle"><input id="upOvernight" type="checkbox" />Overnight only</label>
+        <label class="toggle"><input id="upMissing"   type="checkbox" />Not recorded data</label>
+        <label class="toggle"><input id="upOvernight" type="checkbox" />Absent</label>
       </div>
       <div class="table-wrap">
         <table>
@@ -685,7 +767,7 @@
   <!-- ============================================================ -->
   <!-- TAB 2 — フルキャスト manual entry -->
   <!-- ============================================================ -->
-  <section id="tab-fullcast" class="card panel">
+  <section id="tab-fullcast" class="card panel active">
     <h2>フルキャスト 手動入力</h2>
     <p class="lede">Manual entry for temp-staff buckets. Company is always <strong>フルキャスト</strong>. <strong>Shift window: 18:00 → next-day 10:00</strong> — start must be 18:00–22:00, leave up to 10:00 next morning. Leave ≤ start auto-marks as <span class="mono" style="color:var(--accent);">翌日</span>. Rows outside the window are highlighted in red and blocked from saving. <span class="mono" style="color:var(--accent);">Shift date</span> auto-selects today; after midnight (before noon) it auto-shifts to yesterday. Selecting a date reloads saved rows from the database.</p>
 
@@ -736,11 +818,12 @@
     <p class="lede">One pack count per production date (shared across all employees that day). Enter manually or upload a PDF to auto-fill. <span class="mono" style="color:var(--accent);">Production date</span> auto-selects today; between 19:00 and 23:59 it auto-shifts to tomorrow. Selecting a date reloads its saved pack count.</p>
 
     <div class="segment-tabs" id="packSeg">
-      <button type="button" data-seg="manual" class="active">Manual entry</button>
+      <button type="button" data-seg="xlsx" class="active">Upload Excel</button>
       <button type="button" data-seg="pdf">Upload PDF</button>
+      <button type="button" data-seg="manual">Manual entry</button>
     </div>
 
-    <div id="segManual">
+    <div id="segManual" class="hidden">
       <div class="fields">
         <div class="field">
           <label for="packDate">Production date</label>
@@ -754,12 +837,20 @@
         </div>
         <div class="field">
           <label for="packNote">Note (optional)</label>
-          <input type="text" id="packNote" placeholder="" />
+          <input type="text" id="packNote" placeholder="any comment — saved with [manual] tag" />
+          <span class="hint" style="color:var(--muted);font-size:0.78rem;">Auto-filled when saving via PDF / Excel / Auto-update — shows source method (manual / pdf / pdf-auto / excel / excel-auto) + filename.</span>
         </div>
       </div>
     </div>
 
     <div id="segPdf" class="hidden">
+      <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.7rem;">
+        <button type="button" class="button button-accent" id="btnPackAuRun">Auto-update →</button>
+        <div id="packAuProgress" style="flex:1 1 180px;height:6px;background:var(--surface-soft);border:1px solid var(--line);border-radius:999px;overflow:hidden;display:none;">
+          <div id="packAuProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--brand),var(--accent));transition:width .25s ease;"></div>
+        </div>
+        <span id="packAuProgressLabel" class="mono" style="font-size:0.78rem;color:var(--muted);"></span>
+      </div>
       <label for="packPdfInput" class="dropzone" id="packDz">
         <strong>Click or drop Daily Pack PDF(s)</strong>
         <small>Production date and pack count are auto-extracted from each PDF's text.</small>
@@ -768,49 +859,125 @@
       <ul id="packList" class="file-list"></ul>
     </div>
 
-    <div class="actions">
+    <!-- ===== Excel upload (per-product breakdown + end-time prediction) ===== -->
+    <div id="segXlsx">
+      <p class="lede" style="margin-bottom:0.6rem;">
+        Upload the real Excel file (the PDF is just its print). Saving writes <b>both</b> the per-product breakdown
+        (<span class="mono">daily_pack_items</span>) <b>and</b> the day's total to <span class="mono">daily_packs</span>
+        — same as the existing Confirm &amp; Save flow. Production end time is predicted from per-product rates.
+      </p>
+
+      <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.7rem;">
+        <button type="button" class="button button-accent" id="btnXlsxAuRun">Auto-update →</button>
+        <div id="xlsxAuProgress" style="flex:1 1 180px;height:6px;background:var(--surface-soft);border:1px solid var(--line);border-radius:999px;overflow:hidden;display:none;">
+          <div id="xlsxAuProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--brand),var(--accent));transition:width .25s ease;"></div>
+        </div>
+        <span id="xlsxAuProgressLabel" class="mono" style="font-size:0.78rem;color:var(--muted);"></span>
+      </div>
+
+      <label for="packXlsxInput" class="dropzone">
+        <strong>Click or drop Daily Pack Excel (.xlsx) — one or many</strong>
+        <small>Layout flex-tolerant — products matched by name, not row position. Drop multiple files to batch-upload by date.</small>
+        <input id="packXlsxInput" type="file" multiple accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
+      </label>
+
+      <!-- Per-file queue (only visible when 2+ files were picked). -->
+      <div id="xlsxQueue" class="hidden" style="margin-top:0.8rem;border:1px solid var(--line);border-radius:10px;overflow:hidden;">
+        <table style="width:100%;font-size:0.85rem;">
+          <thead><tr>
+            <th style="text-align:left;">File</th>
+            <th>Date</th>
+            <th class="num">Products</th>
+            <th class="num">Total qty</th>
+            <th>Start → End</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody id="xlsxQueueTbody"></tbody>
+        </table>
+      </div>
+
+      <div id="xlsxPreview" class="hidden" style="margin-top:0.9rem;">
+        <div class="fields" style="margin-bottom:0.6rem;">
+          <div class="field"><label>Production date</label><input type="text" id="xlsxDate" readonly /></div>
+          <div class="field"><label>Input by</label><input type="text" id="xlsxInputBy" readonly /></div>
+          <div class="field"><label>Weather / Temp</label><input type="text" id="xlsxWeather" readonly /></div>
+        </div>
+
+        <div class="fields" style="margin-bottom:0.6rem;">
+          <div class="field">
+            <label>Start time</label>
+            <select id="xlsxStartTime">
+              <option value="17:00">17:00</option>
+              <option value="19:00">19:00</option>
+            </select>
+            <span class="hint" id="xlsxStartHint">—</span>
+          </div>
+          <div class="field">
+            <label>Predicted end</label>
+            <input type="text" id="xlsxEndTime" readonly />
+            <span class="hint" id="xlsxEndHint">—</span>
+          </div>
+          <div class="field">
+            <label>Total quantity</label>
+            <input type="text" id="xlsxTotalQty" readonly />
+            <span class="hint" id="xlsxTotalHint">—</span>
+          </div>
+        </div>
+
+        <div style="overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:420px;">
+          <table class="data-table" id="xlsxTable" style="width:100%;font-size:0.85rem;">
+            <thead><tr>
+              <th style="text-align:left;">Product</th>
+              <th class="num">N合計</th><th class="num">Y合計</th><th class="num">全合計</th><th class="num">入り数</th>
+              <th class="num">Rate p/h</th><th class="num">Min</th>
+              <th class="num">山梨 N</th><th class="num">長野 N</th><th class="num">松本 N</th>
+              <th class="num">山梨 Y</th><th class="num">長野 Y</th><th class="num">松本 Y</th>
+            </tr></thead>
+            <tbody id="xlsxTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <details style="margin-top:0.8rem;">
+        <summary style="cursor:pointer;font-weight:600;">Production rates editor (packs/hour)</summary>
+        <p style="color:var(--muted);font-size:0.86rem;margin:0.4rem 0;">
+          Edit per-product rates. Default rate is used when a product is missing. Save publishes to <span class="mono">production_rates.json</span>.
+        </p>
+        <div class="fields" style="margin-bottom:0.4rem;">
+          <div class="field">
+            <label>Default rate (packs/hour)</label>
+            <input type="number" id="rateDefault" min="1" />
+          </div>
+          <div class="field" style="flex:2;">
+            <span class="hint" id="rateStatus">—</span>
+          </div>
+        </div>
+        <div style="overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:300px;">
+          <table style="width:100%;font-size:0.85rem;">
+            <thead><tr><th style="text-align:left;">Product</th><th class="num" style="width:140px;">Rate p/h</th></tr></thead>
+            <tbody id="rateTbody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+          <button type="button" class="button button-primary" id="btnRateSave">Save rates</button>
+          <button type="button" class="button button-muted" id="btnRateReload">Reload</button>
+        </div>
+      </details>
+
+      <div class="actions" style="margin-top:0.9rem;">
+        <button type="button" class="button button-primary" id="btnSaveXlsxBatch" disabled>Confirm &amp; Save batch →</button>
+      </div>
+      <div id="msgXlsx" class="message"></div>
+    </div>
+
+    <div class="actions" id="packGlobalActions">
       <button type="button" class="button button-primary" id="btnConfirmPack">Confirm &amp; Save →</button>
       <button type="button" class="button button-muted" id="btnClearPack">Clear</button>
     </div>
     <div id="msgPack" class="message"></div>
   </section>
 
-  <!-- ============================================================ -->
-  <!-- TAB 4 — Reports -->
-  <!-- ============================================================ -->
-  <section id="tab-reports" class="card panel">
-    <h2>Reports</h2>
-    <p class="lede">Report date defaults to the working-day date inside the most recently uploaded attendance PDF. If no PDF was uploaded in this session, it falls back to the most recent PDF date already saved in the database. You can override below.</p>
-
-    <div class="fields" style="grid-template-columns: 1fr 2fr;">
-      <div class="field">
-        <label for="reportDate">Report date</label>
-        <input type="date" id="reportDate" />
-        <span class="hint" id="reportDateSource">source: —</span>
-      </div>
-      <div class="field">
-        <label>Latest PDF date in DB</label>
-        <div style="padding: 0.55rem 0.65rem; border:1px solid var(--line); border-radius:9px; background: var(--surface-soft); font-family: 'IBM Plex Mono', monospace; font-size:0.9rem; color: var(--ink);" id="latestDbDate">loading…</div>
-      </div>
-    </div>
-
-    <div class="reports-grid">
-      <div class="report-card">
-        <span class="datebadge" id="badgeAttendance">—</span>
-        <h3>Attendance Report</h3>
-        <p>Per-employee Gantt chart grouped by department (製造１課 / 製造２課). A4 portrait print layout.</p>
-        <button type="button" class="button button-accent" id="btnReportAttendance">Open in new tab ↗</button>
-      </div>
-      <div class="report-card pending">
-        <span class="datebadge" id="badgeSummary">—</span>
-        <h3>Summarizing Report</h3>
-        <p>Per-department productivity, company-wide efficiency, target line. B4 portrait print. <em>Page is pending — backend tables are ready.</em></p>
-        <button type="button" class="button button-outline" id="btnReportSummary">Open in new tab ↗</button>
-      </div>
-    </div>
-
-    <div id="msgReports" class="message"></div>
-  </section>
+  <!-- TAB 4 (Reports) is now a separate page — see /attendance/reports -->
 
 </main>
 
@@ -1027,23 +1194,31 @@ function renderPdfDateBanner(j) {
   }
 }
 
-/* Filtering + pagination (mirrors index.html behavior) */
-function isMissingLeave(r) {
-  return (r.commute_time || "").trim() !== "" && (r.leave_time || "").trim() === "";
+/* Filtering + pagination.
+   "Not recorded" = either IN or OUT missing (data not received).
+   "Absent"       = both IN and OUT missing (no record at all).
+   Both unchecked → all names pass through. */
+function isNotRecorded(r) {
+  const hasIn  = (r.commute_time || "").trim() !== "";
+  const hasOut = (r.leave_time   || "").trim() !== "";
+  return !hasIn || !hasOut;
 }
-function isOvernight(r) {
-  const match = (r.leave_time || "").match(/^(\d{1,2}):(\d{2})/);
-  if (!match) return false;
-  return parseInt(match[1], 10) >= 24;
+function isAbsent(r) {
+  const hasIn  = (r.commute_time || "").trim() !== "";
+  const hasOut = (r.leave_time   || "").trim() !== "";
+  return !hasIn && !hasOut;
 }
+/* Legacy aliases — kept so callers further down don't break. */
+const isMissingLeave = isNotRecorded;
+const isOvernight    = isAbsent;
 function applyUploadFilters() {
   let rows = [...uploadState.records];
   const q = ($upSearch.value || "").trim().toLowerCase();
   if (q) rows = rows.filter(r =>
     (r.employee_code || "").toLowerCase().includes(q) ||
     (r.name || "").toLowerCase().includes(q));
-  if ($upMissing.checked)  rows = rows.filter(isMissingLeave);
-  if ($upOver.checked)     rows = rows.filter(isOvernight);
+  if ($upMissing.checked)  rows = rows.filter(isNotRecorded);
+  if ($upOver.checked)     rows = rows.filter(isAbsent);
   uploadState.filtered = rows;
   uploadState.page = 1;
   renderUploadTable();
@@ -1064,7 +1239,7 @@ function renderUploadTable() {
   } else {
     for (const r of rows) {
       const tr = document.createElement("tr");
-      if (isMissingLeave(r) || isOvernight(r)) tr.className = "issue";
+      if (isNotRecorded(r)) tr.className = "issue";
       tr.innerHTML = `
         <td class="mono">${r.employee_code || ""}</td>
         <td>${r.name || ""}</td>
@@ -1089,11 +1264,10 @@ $upNext.addEventListener("click", () => {
   if (uploadState.page < pages) { uploadState.page++; renderUploadTable(); }
 });
 
-/* Confirm & Save — for v1 we reuse /api/convert-multiple which saves to DB
-   AND creates Excel server-side. The Excel download is not surfaced in the UI.
-   If the preview came from the watched folder (auto-upload), route through the
-   server-side save endpoint instead so no re-upload is needed.
-   TODO: swap to /api/attendance/save once that backend endpoint exists (see main.py). */
+/* Confirm & Save — reuses /api/convert-multiple which saves to DB and
+   creates an Excel server-side (Excel download not surfaced in the UI).
+   If the preview came from the watched folder (auto-upload), routes through
+   /api/attendance/auto-upload?save=true instead so no re-upload is needed. */
 document.getElementById("btnConfirmUpload").addEventListener("click", async () => {
   if (!uploadState.previewed) return;
   $btnConfirmUp.disabled = true;
@@ -1116,8 +1290,8 @@ document.getElementById("btnConfirmUpload").addEventListener("click", async () =
     else if (j.record_date) uploadState.latestPdfDate = j.record_date;
     syncReportDate({ source: "pdf-upload" });
     showMsg("msgUpload", "success",
-      `Saved ${j.records_processed || 0} records from ${j.file_count || 1} file(s). Shift date: ${uploadState.latestPdfDate || "—"}. Opening Tab 2…`);
-    setTimeout(() => switchTab("fullcast"), 600);
+      `Saved ${j.records_processed || 0} records from ${j.file_count || 1} file(s). Shift date: ${uploadState.latestPdfDate || "—"}. Opening Daily Packs…`);
+    setTimeout(() => switchTab("packs"), 600);
   } catch (err) {
     $btnConfirmUp.disabled = false;
     showMsg("msgUpload", "error", "Save failed: " + (err.message || err));
@@ -1137,12 +1311,6 @@ document.getElementById("btnClearUpload").addEventListener("click", () => {
   clearMsg("msgUpload");
 });
 
-/* ----------------- Auto-upload (watched folder) — backend-only for now.
-   The UI button was removed because the Windows desktop folder isn't
-   reachable from the Pi. Endpoints /api/attendance/auto-upload[/info]
-   remain live and will become usable once a folder on the Pi is wired
-   (e.g. a Samba mount of the Windows share, or a local sync inbox).
-   ---------------------------------------------------------------- */
 
 
 /* ================================================================
@@ -1366,8 +1534,8 @@ document.getElementById("btnConfirmFc").addEventListener("click", async () => {
     $fcDbStatus.textContent = `${j.saved_rows} rows saved`;
     $fcDbStatus.style.color = "var(--brand-strong)";
     showMsg("msgFc", "success",
-      `Saved ${j.saved_rows} row(s) for ${j.record_date} — ${j.total_people}名 / ${j.total_hours}hr. Opening Tab 3…`);
-    setTimeout(() => switchTab("packs"), 600);
+      `Saved ${j.saved_rows} row(s) for ${j.record_date} — ${j.total_people}名 / ${j.total_hours}hr. Opening Attendance PDF…`);
+    setTimeout(() => switchTab("upload"), 600);
   } catch (err) {
     showMsg("msgFc", "error", "Save failed: " + (err.message || err));
   }
@@ -1445,8 +1613,341 @@ $packDate.addEventListener("change", () => {
 document.querySelectorAll("#packSeg button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("#packSeg button").forEach(x => x.classList.toggle("active", x === b));
   document.getElementById("segManual").classList.toggle("hidden", b.dataset.seg !== "manual");
-  document.getElementById("segPdf").classList.toggle("hidden", b.dataset.seg !== "pdf");
+  document.getElementById("segPdf"   ).classList.toggle("hidden", b.dataset.seg !== "pdf");
+  document.getElementById("segXlsx"  ).classList.toggle("hidden", b.dataset.seg !== "xlsx");
+  /* Excel segment has its own Confirm & Save button — hide the global one to avoid confusion. */
+  document.getElementById("packGlobalActions").classList.toggle("hidden", b.dataset.seg === "xlsx");
+  if (b.dataset.seg === "xlsx") loadRateEditor();
 }));
+/* Initial state matches the active tab (Excel by default). */
+document.getElementById("packGlobalActions").classList.add("hidden");
+
+/* ================================================================
+   Daily Packs — Excel upload, prediction, rate editor
+   ================================================================ */
+const xlsxState = { parsed: null };
+
+const $xlsxInput   = document.getElementById("packXlsxInput");
+const $xlsxPreview = document.getElementById("xlsxPreview");
+const $xlsxTbody   = document.getElementById("xlsxTbody");
+const $xlsxStart   = document.getElementById("xlsxStartTime");
+const $btnSaveXlsx = document.getElementById("btnSaveXlsxBatch");
+
+function fmtNum(n){ return (n == null) ? "—" : Number(n).toLocaleString(); }
+function escHtml(s){ return String(s ?? "").replace(/[<>&"']/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function recomputePrediction() {
+  const p = xlsxState.parsed; if (!p) return;
+  const start = $xlsxStart.value || "17:00";
+  const res = await fetch(api("/api/daily-packs/extract-excel-recompute"), { method: "POST" })
+              .catch(() => null);
+  /* No re-fetch endpoint — recompute client-side using cached rates from /api/production-rates */
+  const rates = xlsxState.rates || (xlsxState.rates = await (await fetch(api("/api/production-rates"))).json());
+  const products = p.products || [];
+  let totalQty = 0, totalSec = 0;
+  const rows = products.map(prod => {
+    const qty = Number(prod.grand_total || 0);
+    const exact = (rates.products || {})[prod.product_name];
+    const rate  = Number(exact || rates._default_rate_per_hour || 2000);
+    const secs  = qty ? Math.round((qty / Math.max(rate, 1)) * 3600) : 0;
+    totalQty += qty; totalSec += secs;
+    return { ...prod, rate, used_default: !exact, minutes: Math.round(secs / 60) };
+  });
+  const [sh, sm] = start.split(":").map(n => parseInt(n, 10) || 0);
+  const endTotalMin = sh*60 + sm + Math.floor(totalSec / 60);
+  const eh = Math.floor(endTotalMin / 60) % 24, em = endTotalMin % 60;
+  const overnight = Math.floor(endTotalMin / 60) >= 24;
+  const hh = Math.floor(totalSec / 3600), mm = Math.floor((totalSec % 3600) / 60);
+  const avg = totalSec ? Math.round(totalQty / (totalSec / 3600)) : 0;
+  document.getElementById("xlsxEndTime").value = `${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}` + (overnight ? "  (next day)" : "");
+  document.getElementById("xlsxEndHint").textContent = `${hh}h ${mm}m run · avg ${fmtNum(avg)} p/h`;
+  document.getElementById("xlsxTotalQty").value = fmtNum(totalQty);
+  document.getElementById("xlsxTotalHint").textContent = `${products.length} products`;
+
+  $xlsxTbody.innerHTML = rows.map(r => `<tr${r.used_default ? ' style="background:rgba(240,200,80,0.10);"' : ''}>
+    <td>${escHtml(r.product_name)}</td>
+    <td class="num">${fmtNum(r.n_total)}</td>
+    <td class="num">${fmtNum(r.y_total)}</td>
+    <td class="num"><b>${fmtNum(r.grand_total)}</b></td>
+    <td class="num">${fmtNum(r.packs_per_case)}</td>
+    <td class="num">${fmtNum(r.rate)}${r.used_default ? ' <span class="hint" title="missing rate — used default">⚠</span>' : ''}</td>
+    <td class="num">${r.minutes}</td>
+    <td class="num">${fmtNum(r.n_yamanashi)}</td>
+    <td class="num">${fmtNum(r.n_nagano)}</td>
+    <td class="num">${fmtNum(r.n_matsumoto)}</td>
+    <td class="num">${fmtNum(r.y_yamanashi)}</td>
+    <td class="num">${fmtNum(r.y_nagano)}</td>
+    <td class="num">${fmtNum(r.y_matsumoto)}</td>
+  </tr>`).join("");
+  return { eh, em, overnight, totalQty, totalSec };
+}
+
+/* Render the per-file queue table (multi-file uploads). One row per picked
+   file, status pills update as parsing/saving proceeds. */
+const $xlsxQueue = document.getElementById("xlsxQueue");
+const $xlsxQueueTbody = document.getElementById("xlsxQueueTbody");
+function renderXlsxQueue(){
+  const q = xlsxState.queue || [];
+  if (q.length < 2){ $xlsxQueue.classList.add("hidden"); return; }
+  $xlsxQueue.classList.remove("hidden");
+  $xlsxQueueTbody.innerHTML = q.map((it, idx) => {
+    const p = it.parsed;
+    const date = p?.meta?.production_date || "—";
+    const cnt  = p?.products?.length ?? "—";
+    const qty  = p?.prediction?.total_qty?.toLocaleString?.() ?? "—";
+    const span = p ? `${p.prediction.start_time} → ${p.prediction.end_time}` : "—";
+    const statusCls = it.status === "saved" ? "ok" : (it.status === "failed" ? "bad" : "");
+    return `<tr${idx === xlsxState.activeIdx ? ' style="background:rgba(18,97,143,0.06);"' : ''}>
+      <td style="padding:0.4rem 0.55rem;">${escHtml(it.file_name)}</td>
+      <td style="padding:0.4rem 0.55rem;" class="mono">${date}</td>
+      <td class="num" style="padding:0.4rem 0.55rem;">${cnt}</td>
+      <td class="num" style="padding:0.4rem 0.55rem;">${qty}</td>
+      <td class="mono" style="padding:0.4rem 0.55rem;">${span}</td>
+      <td style="padding:0.4rem 0.55rem;"><span class="hint" style="${statusCls === 'ok' ? 'color:var(--good);' : statusCls === 'bad' ? 'color:var(--err);' : 'color:var(--muted);'}">${escHtml(it.status_label || it.status)}</span></td>
+    </tr>`;
+  }).join("");
+}
+
+async function _parseOneXlsx(file){
+  const fd = new FormData(); fd.append("file", file);
+  const r = await fetch(api("/api/daily-packs/extract-excel"), { method: "POST", body: fd });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.detail || "parse failed");
+  return j;
+}
+
+function _applyParsedToPreview(parsed){
+  xlsxState.parsed = parsed;
+  document.getElementById("xlsxDate").value     = parsed.meta.production_date || "(missing)";
+  document.getElementById("xlsxInputBy").value  = parsed.meta.input_by || "—";
+  document.getElementById("xlsxWeather").value  = `${parsed.meta.weather || "—"} / ${parsed.meta.temperature ?? "—"}°C`;
+  $xlsxStart.value = parsed.start.start_time || "17:00";
+  document.getElementById("xlsxStartHint").textContent =
+    parsed.start.source === "auto-detected"
+      ? `auto · median IN ${parsed.start.median_in} (n=${parsed.start.n})`
+      : (parsed.start.note || "default — no attendance data");
+  $xlsxPreview.classList.remove("hidden");
+  return recomputePrediction();
+}
+
+$xlsxInput.addEventListener("change", async e => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  clearMsg("msgXlsx");
+
+  xlsxState.sourceMethod = "excel";
+  xlsxState.rates = await (await fetch(api("/api/production-rates"))).json();
+  xlsxState.queue = files.map(f => ({ file_name: f.name, file: f, parsed: null, status: "queued", status_label: "queued" }));
+  xlsxState.activeIdx = 0;
+  renderXlsxQueue();
+
+  $btnSaveXlsx.disabled = true;
+  showMsg("msgXlsx", "info", `Parsing ${files.length} file${files.length > 1 ? "s" : ""}…`);
+
+  let okCount = 0;
+  for (let i = 0; i < xlsxState.queue.length; i++){
+    const it = xlsxState.queue[i];
+    it.status = "parsing"; it.status_label = "parsing…"; renderXlsxQueue();
+    try {
+      it.parsed = await _parseOneXlsx(it.file);
+      it.status = "parsed"; it.status_label = `${it.parsed.products.length} products`;
+      okCount++;
+    } catch (err) {
+      it.status = "failed"; it.status_label = `failed: ${err.message}`;
+    }
+    renderXlsxQueue();
+  }
+
+  // Display the first successfully-parsed file in the detailed preview.
+  const firstOk = xlsxState.queue.findIndex(x => x.status === "parsed");
+  if (firstOk >= 0){
+    xlsxState.activeIdx = firstOk;
+    await _applyParsedToPreview(xlsxState.queue[firstOk].parsed);
+    renderXlsxQueue();
+    $btnSaveXlsx.disabled = false;
+    $btnSaveXlsx.textContent = files.length > 1
+      ? `Confirm & Save all batches (${okCount}) →`
+      : "Confirm & Save batch →";
+    showMsg("msgXlsx", "success",
+      files.length > 1
+        ? `Parsed ${okCount}/${files.length} files. Detailed preview shows ${xlsxState.queue[firstOk].file_name}; save will commit all parsed batches.`
+        : `Parsed ${xlsxState.queue[firstOk].parsed.products.length} products from ${xlsxState.queue[firstOk].file_name}. Adjust start time if needed, then Save.`);
+  } else {
+    showMsg("msgXlsx", "error", `All ${files.length} file(s) failed to parse — check the queue rows for details.`);
+  }
+});
+$xlsxStart.addEventListener("change", recomputePrediction);
+
+async function _saveOneParsed(parsed, startOverride){
+  const pdate = parsed.meta.production_date;
+  if (!pdate) throw new Error("production date missing in Excel");
+  const r = await fetch(api("/api/daily-packs/save-excel-batch"), {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      production_date: pdate,
+      products:        parsed.products,
+      start_time:      startOverride || parsed.prediction.start_time,
+      end_time:        parsed.prediction.end_time,
+      source_filename: parsed.source_filename,
+      weather:         parsed.meta.weather,
+      temperature:     parsed.meta.temperature,
+      input_by:        parsed.meta.input_by,
+      source_method:   xlsxState.sourceMethod || "excel",
+    })
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.detail || "save failed");
+  return j;
+}
+
+$btnSaveXlsx.addEventListener("click", async () => {
+  const queue = (xlsxState.queue || []).filter(x => x.status === "parsed");
+  /* Single-file path: queue may be empty when the file came from Auto-update,
+     so fall back to xlsxState.parsed. */
+  if (!queue.length && xlsxState.parsed){
+    queue.push({ file_name: xlsxState.parsed.source_filename, parsed: xlsxState.parsed, status: "parsed" });
+  }
+  if (!queue.length) return;
+  $btnSaveXlsx.disabled = true;
+  let savedCount = 0;
+  let lastDate = null;
+  try {
+    for (const it of queue){
+      it.status = "saving"; it.status_label = "saving…"; renderXlsxQueue();
+      try {
+        /* Only the active file uses the user-edited start time; other dates
+           use the auto-suggested start that was returned with each parse. */
+        const startOverride = (xlsxState.queue && it === xlsxState.queue[xlsxState.activeIdx])
+          ? $xlsxStart.value
+          : null;
+        const j = await _saveOneParsed(it.parsed, startOverride);
+        it.status = "saved";
+        it.status_label = `✓ ${j.rows_saved} rows · ${(j.number_of_packs||0).toLocaleString()} packs`;
+        savedCount++;
+        lastDate = j.production_date;
+      } catch (err) {
+        it.status = "failed";
+        it.status_label = `✗ ${err.message}`;
+      }
+      renderXlsxQueue();
+    }
+    if (savedCount === 0) {
+      showMsg("msgXlsx", "error", `Save failed for all ${queue.length} batch(es) — see queue rows.`);
+      return;
+    }
+    showMsg("msgXlsx", "success",
+      queue.length > 1
+        ? `✓ Saved ${savedCount}/${queue.length} batches. Switching to Manual entry on ${lastDate}…`
+        : `✓ Saved batch for ${lastDate}.  Switching to Manual entry to confirm…`);
+    /* Next step: jump to Manual entry on the LAST successfully-saved date. */
+    setTimeout(() => {
+      const manualBtn = document.querySelector('#packSeg button[data-seg="manual"]');
+      if (manualBtn) manualBtn.click();
+      if (lastDate) {
+        $packDate.value = lastDate;
+        $packDate.dispatchEvent(new Event("change"));
+      }
+    }, 1000);
+  } finally {
+    $btnSaveXlsx.disabled = false;
+  }
+});
+
+/* ---- Rate editor ---- */
+const $rateTbody   = document.getElementById("rateTbody");
+const $rateDefault = document.getElementById("rateDefault");
+const $rateStatus  = document.getElementById("rateStatus");
+
+async function loadRateEditor(){
+  try {
+    const r = await fetch(api("/api/production-rates"));
+    const j = await r.json();
+    xlsxState.rates = j;
+    $rateDefault.value = j._default_rate_per_hour || 2000;
+    const products = j.products || {};
+    const merged = new Set(Object.keys(products));
+    /* include products from current parse so user can fill gaps right away */
+    (xlsxState.parsed?.products || []).forEach(p => p.product_name && merged.add(p.product_name));
+    $rateTbody.innerHTML = [...merged].sort().map(name => `<tr>
+      <td>${escHtml(name)}</td>
+      <td class="num"><input type="number" min="1" data-name="${escHtml(name)}" value="${products[name] ?? ""}" placeholder="(default)" style="width:120px;text-align:right;"/></td>
+    </tr>`).join("") || `<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:0.6rem;">No products yet — upload an Excel first or add rows here.</td></tr>`;
+    $rateStatus.textContent = `loaded · last updated ${j.updated_at || '—'}`;
+  } catch(e){ $rateStatus.textContent = "load failed: " + e.message; }
+}
+/* ---- Excel Auto-update (server picks latest .xlsx in daily_packs folder) ---- */
+const $btnXlsxAuRun  = document.getElementById("btnXlsxAuRun");
+const $xlsxAuProg    = document.getElementById("xlsxAuProgress");
+const $xlsxAuProgBar = document.getElementById("xlsxAuProgressBar");
+const $xlsxAuProgLbl = document.getElementById("xlsxAuProgressLabel");
+function setXlsxAuProgress(pct, label){
+  if (pct === null){ $xlsxAuProg.style.display = "none"; $xlsxAuProgLbl.textContent = ""; return; }
+  $xlsxAuProg.style.display = "block";
+  $xlsxAuProgBar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  $xlsxAuProgLbl.textContent = label || "";
+}
+$btnXlsxAuRun.addEventListener("click", async () => {
+  $btnXlsxAuRun.disabled = true;
+  clearMsg("msgXlsx");
+  setXlsxAuProgress(15, "fetching latest…");
+  try {
+    setXlsxAuProgress(45, "parsing on server…");
+    const r = await fetch(api("/api/daily-packs/auto-extract-excel"), { method: "POST" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || "auto-extract failed");
+    xlsxState.parsed = j;
+    xlsxState.sourceMethod = "excel-auto";
+    xlsxState.queue = [];  /* reset so save handler treats this as single-file */
+    xlsxState.activeIdx = 0;
+    renderXlsxQueue();
+    $btnSaveXlsx.textContent = "Confirm & Save batch →";
+    xlsxState.rates  = await (await fetch(api("/api/production-rates"))).json();
+
+    document.getElementById("xlsxDate").value     = j.meta.production_date || "(missing)";
+    document.getElementById("xlsxInputBy").value  = j.meta.input_by || "—";
+    document.getElementById("xlsxWeather").value  = `${j.meta.weather || "—"} / ${j.meta.temperature ?? "—"}°C`;
+    $xlsxStart.value = j.start.start_time || "17:00";
+    document.getElementById("xlsxStartHint").textContent =
+      j.start.source === "auto-detected"
+        ? `auto · median IN ${j.start.median_in} (n=${j.start.n})`
+        : (j.start.note || "default — no attendance data");
+    $xlsxPreview.classList.remove("hidden");
+    setXlsxAuProgress(85, "rendering preview…");
+    await recomputePrediction();
+    $btnSaveXlsx.disabled = !j.meta.production_date || !(j.products || []).length;
+    setXlsxAuProgress(100, "ready");
+    showMsg("msgXlsx", "success",
+      `Picked: ${j.source_filename} — ${j.products.length} products. Review and Confirm & Save.`);
+    setTimeout(() => setXlsxAuProgress(null), 1200);
+  } catch (e) {
+    setXlsxAuProgress(null);
+    showMsg("msgXlsx", "error", `Auto-update failed: ${e.message}`);
+  } finally {
+    $btnXlsxAuRun.disabled = false;
+  }
+});
+
+document.getElementById("btnRateReload").addEventListener("click", loadRateEditor);
+document.getElementById("btnRateSave").addEventListener("click", async () => {
+  const products = {};
+  $rateTbody.querySelectorAll("input[data-name]").forEach(el => {
+    const v = parseInt(el.value, 10);
+    if (Number.isFinite(v) && v > 0) products[el.dataset.name] = v;
+  });
+  const def = parseInt($rateDefault.value, 10) || 2000;
+  $rateStatus.textContent = "saving…";
+  try {
+    const r = await fetch(api("/api/production-rates"), {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ _default_rate_per_hour: def, products })
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || "save failed");
+    xlsxState.rates = j.rates;
+    $rateStatus.textContent = "✓ saved";
+    if (xlsxState.parsed) await recomputePrediction();
+  } catch(e){ $rateStatus.textContent = "✗ " + e.message; }
+});
 
 const packState = { files: [], extracted: [], choices: {}, extracting: false };
 const $packDz = document.getElementById("packDz");
@@ -1613,6 +2114,52 @@ $packDz.addEventListener("drop", e => {
   $packInput.dispatchEvent(new Event("change"));
 });
 
+/* "Use latest from server →" — same auto-process pattern as the Attendance PDF tab. */
+const $btnPackAuRun        = document.getElementById("btnPackAuRun");
+const $packAuProgress      = document.getElementById("packAuProgress");
+const $packAuProgressBar   = document.getElementById("packAuProgressBar");
+const $packAuProgressLabel = document.getElementById("packAuProgressLabel");
+function setPackAuProgress(pct, label) {
+  if (pct === null) { $packAuProgress.style.display = "none"; $packAuProgressLabel.textContent = ""; return; }
+  $packAuProgress.style.display = "block";
+  $packAuProgressBar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  $packAuProgressLabel.textContent = label || "";
+}
+$btnPackAuRun?.addEventListener("click", async () => {
+  $btnPackAuRun.disabled = true;
+  clearMsg("msgPack");
+  setPackAuProgress(15, "fetching latest…");
+  try {
+    setPackAuProgress(45, "extracting on server…");
+    const res = await fetch(api("/api/daily-packs/auto-extract"), { method: "POST" });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.detail || "auto-extract failed");
+
+    setPackAuProgress(85, "rendering preview…");
+    const fname = j.picked_filename || "(unknown)";
+    packState.files = [{ name: fname, size: j.picked_size || 0, __fromAutoUpload: true }];
+    packState.choices = {};
+    /* Tag each result so the Note stamp can distinguish pdf-auto from pdf. */
+    packState.extracted = (j.results || []).map(x => ({ ...x, __autoSource: true, source_filename: x.source_filename || fname }));
+    renderPackList();
+
+    if (packState.extracted[0]?.record_date) {
+      $packDate.value = packState.extracted[0].record_date;
+      $packCount.value = packState.extracted[0].number_of_packs ?? "";
+    }
+    const fcCount = packState.extracted.reduce((n, x) => n + ((x.fullcast_rows || []).length), 0);
+    setPackAuProgress(100, "ready");
+    showMsg("msgPack", "success",
+      `Picked: ${fname} — ${fcCount} フルキャスト row(s) found. Review and Confirm to save.`);
+    setTimeout(() => setPackAuProgress(null), 1200);
+  } catch (e) {
+    setPackAuProgress(null);
+    showMsg("msgPack", "error", `Auto-extract failed: ${e.message}`);
+  } finally {
+    $btnPackAuRun.disabled = false;
+  }
+});
+
 document.getElementById("btnClearPack").addEventListener("click", () => {
   packState.files = []; packState.extracted = []; packState.choices = {};
   $packInput.value = "";
@@ -1635,10 +2182,12 @@ document.getElementById("btnConfirmPack").addEventListener("click", async () => 
       if (packsNum > 100000) {
         throw new Error("Number of packs exceeds the 100,000 sanity cap.");
       }
+      const userNote = ($packNote.value || "").trim();
       const payload = {
         record_date: $packDate.value,
         number_of_packs: packsNum,
-        note: $packNote.value || null,
+        /* Stamp the source so the Note carries provenance like the auto flows. */
+        note: userNote ? `[manual] ${userNote}` : "[manual]",
       };
       if (!payload.record_date) throw new Error("Pick a production date.");
       const res = await fetch(api("/api/daily-packs"), {
@@ -1652,7 +2201,7 @@ document.getElementById("btnConfirmPack").addEventListener("click", async () => 
       // same date simply overwrites the previous value — by design).
       await loadPackFromDb(payload.record_date);
       showMsg("msgPack", "success",
-        `Saved ${payload.number_of_packs.toLocaleString()} packs for ${payload.record_date}. Opening Tab 4…`);
+        `Saved ${payload.number_of_packs.toLocaleString()} packs for ${payload.record_date}. Opening Reports…`);
     } else {
       if (packState.extracting) throw new Error("Still extracting — please wait a moment.");
       if (packState.files.length === 0) throw new Error("Drop or pick PDF(s) first.");
@@ -1665,7 +2214,9 @@ document.getElementById("btnConfirmPack").addEventListener("click", async () => 
         .map(x => ({
           record_date: x.record_date,
           number_of_packs: x.number_of_packs,
-          note: `auto from ${x.source_filename || x.filename || "pdf"}`,
+          /* Mark how this came in so the Daily Packs Note column shows
+             [pdf-auto] vs [pdf] vs [manual] vs [excel] / [excel-auto]. */
+          note: `[${x.__autoSource ? "pdf-auto" : "pdf"}] ${x.source_filename || x.filename || "pdf"}`,
         }));
 
       let packMsg = "";
@@ -1704,9 +2255,9 @@ document.getElementById("btnConfirmPack").addEventListener("click", async () => 
         }
       }
       const fcMsg = `フルキャスト: ${fcSaved} date(s)/${fcRowCount} row(s) saved, skipped ${fcSkipped}, failed ${fcFailed}.`;
-      showMsg("msgPack", fcFailed > 0 ? "error" : "success", `${packMsg} ${fcMsg} Opening Tab 4…`);
+      showMsg("msgPack", fcFailed > 0 ? "error" : "success", `${packMsg} ${fcMsg} Opening Reports…`);
     }
-    setTimeout(() => switchTab("reports"), 600);
+    setTimeout(() => { window.location.href = api("/reports"); }, 800);
   } catch (err) {
     showMsg("msgPack", "error", err.message || String(err));
   }
@@ -1717,65 +2268,66 @@ loadPackFromDb($packDate.value);
 
 
 /* ================================================================
-   TAB 4 — Reports
+   Auto-process: fetch the latest PDF the server already has, no path UI
    ================================================================ */
-const $reportDate = document.getElementById("reportDate");
-const $reportDateSource = document.getElementById("reportDateSource");
-const $latestDbDate = document.getElementById("latestDbDate");
-const $badgeA = document.getElementById("badgeAttendance");
-const $badgeS = document.getElementById("badgeSummary");
+const $btnAuRun        = document.getElementById("btnAuRun");
+const $auProgress      = document.getElementById("auProgress");
+const $auProgressBar   = document.getElementById("auProgressBar");
+const $auProgressLabel = document.getElementById("auProgressLabel");
 
-function syncReportDate({ source } = {}) {
-  const chosen = uploadState.latestPdfDate || $reportDate.value;
-  if (chosen && !$reportDate.value) $reportDate.value = chosen;
-  if (uploadState.latestPdfDate) {
-    $reportDate.value = uploadState.latestPdfDate;
-    $reportDateSource.textContent = "source: latest uploaded PDF (this session)";
+function setAuProgress(pct, label) {
+  if (pct === null) {
+    $auProgress.style.display = "none";
+    $auProgressLabel.textContent = "";
+    return;
   }
-  $badgeA.textContent = $reportDate.value || "—";
-  $badgeS.textContent = $reportDate.value || "—";
+  $auProgress.style.display = "block";
+  $auProgressBar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  $auProgressLabel.textContent = label || "";
 }
 
-async function loadLatestDbDate() {
+/* Stub: Reports moved to its own page; legacy callers still reference this. */
+function syncReportDate(_opts) { /* no-op */ }
+
+$btnAuRun?.addEventListener("click", async () => {
+  $btnAuRun.disabled = true;
+  clearMsg("msgUpload");
+  setAuProgress(15, "fetching latest…");
   try {
-    const res = await fetch(api("/api/gantt/latest-date"));
-    if (!res.ok) throw new Error(await res.text());
+    setAuProgress(45, "parsing PDF on server…");
+    const res = await fetch(api("/api/attendance/auto-upload?save=false"), { method: "POST" });
     const j = await res.json();
-    $latestDbDate.textContent = j.date || "no data yet";
-    if (!uploadState.latestPdfDate && !$reportDate.value && j.date) {
-      $reportDate.value = j.date;
-      $reportDateSource.textContent = "source: latest PDF date saved in DB";
-      $badgeA.textContent = j.date;
-      $badgeS.textContent = j.date;
-    }
-  } catch (err) {
-    $latestDbDate.textContent = "error";
-    console.warn("latest-date load failed:", err);
+    if (!res.ok) throw new Error(j.detail || "auto-upload failed");
+
+    setAuProgress(85, "rendering preview…");
+    const fname = j.picked_filename || (j.files && j.files[0] && j.files[0].filename) || "(unknown)";
+    const fakeFile = { name: fname, size: j.picked_size || 0, __fromAutoUpload: true };
+    uploadState.files = [fakeFile];
+    uploadState.autoSource = true;
+    uploadState.records = j.records || [];
+    uploadState.perFileDates = (j.files || []).map(f => ({ filename: f.filename, date: f.record_date }));
+    fakeFile.__savedDate = j.record_date || null;
+    const dates = uploadState.perFileDates.map(x => x.date).filter(Boolean).sort();
+    uploadState.latestPdfDate = dates.length ? dates[dates.length - 1] : (j.record_date || null);
+    uploadState.previewed = true;
+
+    renderUploadFileList();
+    renderPdfDateBanner(j);
+    applyUploadFilters();
+    $upWork.classList.remove("hidden");
+    $btnConfirmUp.disabled = false;
+
+    setAuProgress(100, "ready");
+    showMsg("msgUpload", "success",
+      `Picked: ${fname} — ${j.records_with_data ?? uploadState.records.length} rows with data. Review and Confirm to save.`);
+    setTimeout(() => setAuProgress(null), 1200);
+  } catch (e) {
+    setAuProgress(null);
+    showMsg("msgUpload", "error", `Auto-upload failed: ${e.message}`);
+  } finally {
+    $btnAuRun.disabled = false;
   }
-}
-
-$reportDate.addEventListener("input", () => {
-  $badgeA.textContent = $reportDate.value || "—";
-  $badgeS.textContent = $reportDate.value || "—";
-  $reportDateSource.textContent = "source: manually selected";
 });
-
-document.getElementById("btnReportAttendance").addEventListener("click", () => {
-  const d = $reportDate.value;
-  if (!d) { showMsg("msgReports", "error", "Pick a report date."); return; }
-  window.open(api("/gantt") + `?date=${d}`, "_blank");
-});
-document.getElementById("btnReportSummary").addEventListener("click", () => {
-  const d = $reportDate.value;
-  if (!d) { showMsg("msgReports", "error", "Pick a report date."); return; }
-  // Open the planned route in a new tab — will show a 404 until /summary page is built.
-  window.open(api("/summary") + `?date=${d}`, "_blank");
-  showMsg("msgReports", "info",
-    `Summarizing Report opened in a new tab at ${api("/summary")}?date=${d} — note: the page itself is still pending implementation (see TODO in main.py).`);
-});
-
-loadLatestDbDate();
-syncReportDate();
 </script>
 </body>
 </html>

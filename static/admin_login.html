@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Admin Login</title>
+<style>
+  :root{--bg:#0a0a0f;--surface:#111219;--line:#262835;--ink:#e6e8ef;--ink-soft:#9aa0b0;--accent:#00e5ff;--err:#ff5470;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:'Space Grotesk',system-ui,sans-serif;}
+  body{display:flex;align-items:center;justify-content:center;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:2rem 2.2rem;width:min(420px,90vw);box-shadow:0 12px 40px rgba(0,229,255,0.05);}
+  h1{margin:0 0 0.4rem;color:var(--accent);letter-spacing:0.06em;font-size:1.3rem;}
+  p{color:var(--ink-soft);margin:0 0 1.2rem;font-size:0.92rem;}
+  label{display:block;font-size:0.78rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.4rem;}
+  input{width:100%;padding:0.65rem 0.75rem;border:1px solid var(--line);border-radius:9px;background:#15161f;color:var(--ink);font-family:inherit;font-size:1rem;}
+  input:focus{outline:none;border-color:var(--accent);}
+  button{margin-top:1rem;width:100%;padding:0.7rem;border:none;border-radius:9px;background:var(--accent);color:#001016;font-weight:600;font-family:inherit;cursor:pointer;font-size:0.95rem;}
+  button:hover{filter:brightness(1.1);}
+  .err{color:var(--err);margin-top:0.7rem;font-size:0.88rem;min-height:1.2em;}
+  .hint{color:var(--ink-soft);font-size:0.78rem;margin-top:0.8rem;}
+</style>
+</head>
+<body>
+<form class="card" id="f">
+  <h1>/ADMIN</h1>
+  <p>Server-side panel. Restricted access.</p>
+  <label for="pw">Password</label>
+  <input id="pw" name="password" type="password" autocomplete="current-password" required autofocus />
+  <button type="submit">Sign in</button>
+  <div class="err" id="err"></div>
+  <div class="hint">Forgot? Reset in <span style="font-family:monospace">attendance_app/admin_config.json</span> on the server.</div>
+</form>
+<script>
+document.getElementById("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const pw = document.getElementById("pw").value;
+  const fd = new FormData(); fd.append("password", pw);
+  const r = await fetch("/admin/login", { method: "POST", body: fd, credentials: "same-origin" });
+  if (r.ok) { location.href = "/admin"; return; }
+  let msg = "Wrong password.";
+  try { const j = await r.json(); if (j.error) msg = j.error; } catch(_){}
+  document.getElementById("err").textContent = msg;
+});
+</script>
+</body>
+</html>

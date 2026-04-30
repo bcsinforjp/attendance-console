@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>/ADMIN — Operations Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#edf3f6; --ink:#132028; --muted:#5f7078;
+    --surface:#ffffff; --surface-soft:#f5fbfd; --line:#d5e2ea;
+    --good:#0d8f71; --warn:#9b640f; --danger:#b42318;
+    --brand:#12618f;
+    --shadow:0 10px 30px rgba(16,39,50,0.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{min-height:100vh;font-family:"Space Grotesk","Segoe UI",sans-serif;color:var(--ink);
+            background:radial-gradient(circle at 10% 18%, rgba(18,97,143,0.11), transparent 35%),
+                       radial-gradient(circle at 85% 22%, rgba(13,143,113,0.11), transparent 35%),
+                       var(--bg);}
+  .mono{font-family:"IBM Plex Mono",monospace;}
+
+  .topbar{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;
+          gap:0.8rem;flex-wrap:wrap;padding:0.9rem 1rem;background:rgba(255,255,255,0.94);
+          border-bottom:1px solid var(--line);backdrop-filter:blur(8px);}
+  .brand{font-weight:700;color:var(--brand);letter-spacing:0.03em;font-size:1.05rem;}
+  .topnav{display:flex;gap:0.7rem;flex-wrap:wrap;align-items:center;}
+  .topnav a, .topnav button{text-decoration:none;color:var(--muted);font-size:0.9rem;
+          border:1px solid transparent;border-radius:8px;padding:0.34rem 0.7rem;
+          transition:all 0.18s ease;background:transparent;cursor:pointer;font-family:inherit;}
+  .topnav a:hover, .topnav button:hover{color:var(--brand);border-color:var(--line);background:var(--surface-soft);}
+  .topnav .clock{color:var(--muted);font-size:0.8rem;font-family:"IBM Plex Mono",monospace;padding:0.34rem 0.4rem;}
+
+  .tabs{display:flex;gap:0.5rem;flex-wrap:wrap;padding:0.9rem 1.2rem 0;max-width:1320px;margin:0 auto;}
+  .tab{border:1px solid var(--line);background:var(--surface);color:var(--muted);
+       padding:0.5rem 1rem;border-radius:10px 10px 0 0;cursor:pointer;font-family:inherit;font-size:0.92rem;
+       border-bottom-color:transparent;transition:all 0.18s ease;}
+  .tab:hover{color:var(--brand);}
+  .tab.active{color:var(--brand);background:var(--surface);border-color:var(--line);
+              border-bottom:1px solid var(--surface);font-weight:600;
+              box-shadow:0 -2px 0 var(--brand) inset;}
+
+  main{max-width:1320px;margin:0 auto;padding:1rem 1.2rem 2.5rem;}
+  .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));}
+  .grid.span2 > .card.span2{grid-column:span 2;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1.1rem 1.2rem;
+        box-shadow:var(--shadow);}
+  .card h2{font-size:0.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.7rem;}
+  .card h2 .right{float:right;font-size:0.72rem;color:var(--muted);text-transform:none;letter-spacing:0;}
+
+  .kv{display:grid;grid-template-columns:max-content 1fr;gap:0.4rem 1rem;font-size:0.92rem;}
+  .kv dt{color:var(--muted);}
+  .kv dd{margin:0;font-family:"IBM Plex Mono",monospace;color:var(--ink);}
+
+  .pill{display:inline-block;padding:0.18rem 0.55rem;border-radius:999px;font-size:0.74rem;
+        border:1px solid var(--line);font-family:"IBM Plex Mono",monospace;color:var(--muted);background:var(--surface-soft);}
+  .pill.ok{color:var(--good);background:rgba(13,143,113,0.08);border-color:rgba(13,143,113,0.35);}
+  .pill.bad{color:var(--danger);background:rgba(180,35,24,0.08);border-color:rgba(180,35,24,0.35);}
+  .pill.warn{color:var(--warn);background:rgba(155,100,15,0.10);border-color:rgba(155,100,15,0.35);}
+  .pill.brand{color:var(--brand);background:rgba(18,97,143,0.08);border-color:rgba(18,97,143,0.35);}
+
+  table{width:100%;border-collapse:collapse;font-size:0.86rem;}
+  th,td{padding:0.5rem 0.55rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.7rem;letter-spacing:0.08em;
+     background:var(--surface-soft);position:sticky;top:0;}
+  tr.alert{background:rgba(155,100,15,0.06);}
+  tr.new td{background:rgba(18,97,143,0.04);}
+  td.num{text-align:right;font-family:"IBM Plex Mono",monospace;}
+
+  .scroll{max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);}
+  .empty{color:var(--muted);font-size:0.9rem;padding:0.8rem;text-align:center;}
+
+  .button{padding:0.45rem 0.9rem;border-radius:8px;border:1px solid var(--line);background:var(--surface);
+          color:var(--ink);font-family:inherit;cursor:pointer;font-size:0.86rem;}
+  .button:hover{border-color:var(--brand);color:var(--brand);}
+  .button.primary{background:var(--brand);color:#fff;border-color:var(--brand);}
+  .button.primary:hover{filter:brightness(1.08);}
+  .button.danger{color:var(--danger);border-color:rgba(180,35,24,0.4);}
+
+  input[type=text], input[type=date], select, textarea{font-family:inherit;font-size:0.9rem;
+    border:1px solid var(--line);border-radius:8px;padding:0.45rem 0.6rem;background:var(--surface);width:100%;}
+  textarea{min-height:70px;resize:vertical;}
+  label{font-size:0.82rem;color:var(--muted);display:block;margin-bottom:0.25rem;}
+  .field{margin-bottom:0.7rem;}
+  .row{display:flex;gap:0.7rem;flex-wrap:wrap;align-items:flex-end;}
+  .row > *{flex:1 1 220px;}
+
+  .alert-banner{background:rgba(155,100,15,0.10);border:1px solid rgba(155,100,15,0.35);color:var(--warn);
+                padding:0.65rem 0.9rem;border-radius:10px;margin-bottom:1rem;font-size:0.92rem;}
+  .alert-banner.hidden{display:none;}
+
+  iframe.bridge{width:100%;height:600px;border:1px solid var(--line);border-radius:12px;background:#fff;}
+
+  /* KPI grid + bars (mirrors /dashboard/) */
+  .kpi-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0.7rem;margin-bottom:1rem;}
+  @media (max-width: 1100px){ .kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
+  @media (max-width: 600px){  .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  .kpi{border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:var(--shadow);padding:0.78rem;}
+  .kpi .label{color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-size:0.69rem;margin-bottom:0.2rem;}
+  .kpi .value{font-size:1.28rem;font-weight:700;letter-spacing:-0.02em;}
+  .kpi .detail{margin-top:0.14rem;color:var(--muted);font-size:0.76rem;}
+  .bar{width:100%;height:8px;border-radius:999px;background:#e8f1f6;margin-top:0.45rem;overflow:hidden;}
+  .bar > span{display:block;height:100%;width:0%;border-radius:999px;transition:width 0.5s ease;}
+  .bar.good > span{background:var(--good);}
+  .bar.warn > span{background:var(--warn);}
+  .bar.danger > span{background:var(--danger);}
+
+  /* Services mini-grid */
+  .svc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0.6rem;}
+  .svc{display:grid;grid-template-columns:auto 1fr auto;gap:0.6rem;align-items:center;
+       padding:0.55rem 0.7rem;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft);}
+  .svc .dot{width:9px;height:9px;border-radius:50%;background:var(--good);}
+  .svc .dot.bad{background:var(--danger);}
+  .svc .name{font-weight:600;font-size:0.88rem;}
+  .svc .meta{color:var(--muted);font-size:0.74rem;}
+  .svc .mini-bars{min-width:130px;}
+  .mini-bar-row{display:flex;align-items:center;gap:0.4rem;font-size:0.7rem;color:var(--muted);}
+  .mini-bar{flex:1 1 auto;height:5px;background:#e8f1f6;border-radius:999px;overflow:hidden;}
+  .mini-bar > span{display:block;height:100%;background:var(--brand);}
+
+  .log-lines{max-height:260px;overflow:auto;font-family:"IBM Plex Mono",monospace;font-size:0.78rem;
+             background:#0f1923;color:#dde8ee;border-radius:10px;padding:0.6rem 0.8rem;line-height:1.45;}
+  .log-line{white-space:pre-wrap;}
+  .log-line.ok{color:#9bdcc1;} .log-line.action{color:#a8c8ec;} .log-line.warn{color:#e7b873;} .log-line.err{color:#f08a82;}
+
+  .swatch{display:inline-block;width:0.7rem;height:0.7rem;border-radius:50%;margin-right:0.3rem;vertical-align:middle;}
+  .swatch.amber{background:#d4a02f;} .swatch.red{background:#b42318;} .swatch.blue{background:#12618f;}
+  .swatch.green{background:#0d8f71;} .swatch.gray{background:#7a8a92;} .swatch.purple{background:#7c5cfc;}
+
+  /* Banner preview (Announcement editor) */
+  .ban{display:flex;align-items:center;gap:0.7rem;padding:0.6rem 0.9rem;border-radius:10px;
+       border:1px solid var(--line);font-size:0.88rem;}
+  .ban.amber{background:#fff7e6;border-color:#f0c67a;color:#6a4a12;}
+  .ban.red{background:#fdecec;border-color:#e8a39c;color:#7a1c12;}
+  .ban.blue{background:#e8f1f8;border-color:#9cc1da;color:#0e3f5f;}
+  .ban.green{background:#e6f5f0;border-color:#90c9b6;color:#0a5c49;}
+  .ban.gray{background:#eef1f3;border-color:#c2ccd2;color:#39474f;}
+  .ban.purple{background:#efe9fc;border-color:#bba9f1;color:#3d2a76;}
+  .ban .badge{font-family:"IBM Plex Mono",monospace;font-weight:700;font-size:0.7rem;letter-spacing:0.08em;
+              padding:0.2rem 0.55rem;border-radius:5px;background:rgba(0,0,0,0.18);color:#fff;}
+
+  .panel{display:none;}
+  .panel.active{display:block;}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">/ADMIN — Operations Console</div>
+  <div class="topnav">
+    <span class="clock" id="serverTime">—</span>
+    <a href="/attendance/console">Console</a>
+    <a href="/dashboard/">Dashboard</a>
+    <a href="/upload/">Uploads</a>
+    <a href="/grafana/">Grafana</a>
+    <button id="btnLogout">Logout</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" data-tab="overview">Overview</button>
+  <button class="tab" data-tab="access">Access Log</button>
+  <button class="tab" data-tab="visitors">Visitors</button>
+  <button class="tab" data-tab="alerts">Alerts</button>
+  <button class="tab" data-tab="security">Security</button>
+  <button class="tab" data-tab="announcement">Announcement</button>
+  <button class="tab" data-tab="bridge">Bridge</button>
+</nav>
+
+<main>
+<div id="alertBanner" class="alert-banner hidden"></div>
+
+<!-- ============================ OVERVIEW ============================ -->
+<section id="panel-overview" class="panel active">
+
+  <!-- Action bar -->
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:1rem;padding:0.7rem 1rem;">
+    <div>
+      <strong style="color:var(--brand);">System overview</strong>
+      <span class="mono" style="color:var(--muted);font-size:0.78rem;margin-left:0.5rem;">last refresh <span id="ohRefresh">—</span></span>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+      <button class="button" id="btnOhRefresh" title="Refresh all overview data">↻ Refresh</button>
+      <button class="button primary" id="btnRunHealth" title="Trigger /api/maintenance/run-health-monitor">⚕ Run health check</button>
+    </div>
+  </div>
+
+  <!-- KPI grid (matches /dashboard/) -->
+  <section class="kpi-grid" aria-label="System metrics">
+    <article class="kpi"><div class="label">CPU Usage</div><div id="cpuValue" class="value">--</div><div id="cpuBar" class="bar good"><span></span></div></article>
+    <article class="kpi"><div class="label">Memory</div><div id="memValue" class="value">--</div><div id="memBar" class="bar good"><span></span></div><div id="memDetail" class="detail">--</div></article>
+    <article class="kpi"><div class="label">Disk</div><div id="diskValue" class="value">--</div><div id="diskBar" class="bar good"><span></span></div><div id="diskDetail" class="detail">--</div></article>
+    <article class="kpi"><div class="label">Swap</div><div id="swapValue" class="value">--</div><div id="swapBar" class="bar good"><span></span></div></article>
+    <article class="kpi"><div class="label">Load Avg (1m)</div><div id="loadValue" class="value">--</div><div id="loadDetail" class="detail">--</div></article>
+    <article class="kpi"><div class="label">CPU Temp</div><div id="tempValue" class="value">--</div><div id="uptimeDetail" class="detail">Uptime: --</div></article>
+  </section>
+
+  <!-- Health monitor log + status (full width) -->
+  <div class="card" style="margin-bottom:1rem;">
+    <h2>Health monitor log <span class="right" id="hmStatus">—</span></h2>
+    <div id="logLines" class="log-lines"><div class="log-line">Waiting for log…</div></div>
+  </div>
+
+  <!-- Database / Auto-upload / Keys / Self -->
+  <div class="grid">
+    <div class="card">
+      <h2>Database</h2>
+      <dl class="kv" id="kvDb"><dt>—</dt><dd></dd></dl>
+    </div>
+    <div class="card">
+      <h2>Auto-upload</h2>
+      <dl class="kv" id="kvAuto"><dt>—</dt><dd></dd></dl>
+    </div>
+    <div class="card">
+      <h2>API Keys (masked)</h2>
+      <dl class="kv" id="kvKeys"><dt>—</dt><dd></dd></dl>
+      <small style="color:var(--muted);">Full values: <span class="mono">attendance_app/api_keys.json</span> (chmod 600).</small>
+    </div>
+    <div class="card">
+      <h2>This Process (uvicorn) <span class="right" id="selfPid">—</span></h2>
+      <dl class="kv" id="kvSelf"><dt>—</dt><dd></dd></dl>
+    </div>
+  </div>
+
+  <!-- Services -->
+  <div class="card" style="margin-top:1rem;">
+    <h2>Services</h2>
+    <div id="servicesGrid" class="svc-grid"></div>
+  </div>
+
+  <!-- Process tables -->
+  <div class="grid" style="margin-top:1rem;">
+    <div class="card">
+      <h2>Top CPU Processes</h2>
+      <div class="scroll" style="max-height:340px;">
+        <table>
+          <thead><tr><th>PID</th><th>Name</th><th>User</th><th class="num">CPU%</th><th class="num">MEM MB</th></tr></thead>
+          <tbody id="byCpuTbody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Top Memory Processes</h2>
+      <div class="scroll" style="max-height:340px;">
+        <table>
+          <thead><tr><th>PID</th><th>Name</th><th>User</th><th class="num">MEM MB</th><th class="num">CPU%</th></tr></thead>
+          <tbody id="byMemTbody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ ACCESS LOG ============================ -->
+<section id="panel-access" class="panel">
+  <div class="card">
+    <h2>Access Log <span class="right">
+      <input id="logFilter" type="text" placeholder="Filter ip / path…" style="width:240px;display:inline-block;margin-right:0.5rem;">
+      <button class="button" id="btnRefreshLog">Refresh</button>
+    </span></h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>When</th><th>IP</th><th>Label</th><th>Device</th><th class="mono">Method</th><th>Path</th><th class="num">Status</th><th class="num">ms</th></tr></thead>
+        <tbody id="logTbody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ VISITORS ============================ -->
+<section id="panel-visitors" class="panel">
+  <div class="card">
+    <h2>Visitors — grouped by IP <span class="right">
+      <button class="button" id="btnRefreshVisitors">Refresh</button>
+    </span></h2>
+    <p style="color:var(--muted);font-size:0.86rem;margin-bottom:0.8rem;">
+      Tag each IP so you can quickly tell <b>Office</b> vs <b>You</b> vs <b>Unknown</b>. Edit a label inline; press Enter to save.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>IP</th><th>Label</th><th>Owner</th><th>Color</th><th>First seen</th><th>Last seen</th><th class="num">Hits</th><th class="num">4xx</th><th class="num">5xx</th><th>Devices</th><th></th></tr></thead>
+        <tbody id="visTbody"><tr><td colspan="11" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ ALERTS ============================ -->
+<section id="panel-alerts" class="panel">
+  <div class="card">
+    <h2>New-login Alerts <span class="right">
+      <button class="button danger" id="btnClearAlerts">Clear all</button>
+    </span></h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>When</th><th>IP</th><th>Label</th><th>Device</th><th>Path</th></tr></thead>
+        <tbody id="alertsTbody"><tr><td colspan="5" class="empty">No alerts.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ SECURITY ============================ -->
+<section id="panel-security" class="panel">
+  <div class="grid">
+    <div class="card">
+      <h2>Traffic windows</h2>
+      <dl class="kv" id="kvSec"><dt>—</dt><dd></dd></dl>
+    </div>
+    <div class="card">
+      <h2>Top IPs (last 5 min)</h2>
+      <div class="scroll" style="max-height:320px;">
+        <table>
+          <thead><tr><th>IP</th><th>Label</th><th class="num">Hits</th></tr></thead>
+          <tbody id="topIpsTbody"><tr><td colspan="3" class="empty">—</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>4xx-heavy IPs (last hour)</h2>
+      <div class="scroll" style="max-height:320px;">
+        <table>
+          <thead><tr><th>IP</th><th>Label</th><th class="num">Errors</th></tr></thead>
+          <tbody id="top4xxTbody"><tr><td colspan="3" class="empty">—</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:1rem;">
+    <h2>Suspicious paths</h2>
+    <p style="color:var(--muted);font-size:0.86rem;margin-bottom:0.6rem;">
+      Probes for <span class="mono">.env</span>, <span class="mono">/wp-*</span>, <span class="mono">/.git</span>, <span class="mono">/phpmyadmin</span>, etc. — typical bot scans.
+    </p>
+    <div class="scroll" style="max-height:320px;">
+      <table>
+        <thead><tr><th>When</th><th>IP</th><th>Path</th><th class="num">Status</th></tr></thead>
+        <tbody id="suspTbody"><tr><td colspan="4" class="empty">No suspicious hits in window.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ ANNOUNCEMENT ============================ -->
+<section id="panel-announcement" class="panel">
+  <div class="grid">
+    <div class="card">
+      <h2>Banner editor</h2>
+      <p style="color:var(--muted);font-size:0.86rem;margin-bottom:0.7rem;">
+        Drives the top banner on <span class="mono">/attendance/console</span>. Pick a preset (BETA / Maintenance / Info / Warning / Success) or write your own text. Save publishes it instantly.
+      </p>
+      <div class="row">
+        <div class="field">
+          <label>Preset</label>
+          <select id="annPreset">
+            <option value="">(custom)</option>
+            <option value="beta">BETA — amber</option>
+            <option value="maintenance">MAINTENANCE — red</option>
+            <option value="info">INFO — blue</option>
+            <option value="success">OK — green</option>
+            <option value="warning">WARNING — amber</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Color</label>
+          <select id="annColor">
+            <option value="amber">● amber</option>
+            <option value="red">● red</option>
+            <option value="blue">● blue</option>
+            <option value="green">● green</option>
+            <option value="gray">● gray</option>
+            <option value="purple">● purple</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Badge</label>
+          <input id="annBadge" type="text" maxlength="24" placeholder="BETA"/>
+        </div>
+      </div>
+      <div class="field">
+        <label>English text</label>
+        <textarea id="annTextEn" placeholder="This app is currently under test…"></textarea>
+      </div>
+      <div class="field">
+        <label>Japanese text</label>
+        <textarea id="annTextJa" placeholder="本アプリは現在…"></textarea>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Ends at (YYYY-MM-DD, optional)</label>
+          <input id="annEndsAt" type="date"/>
+        </div>
+        <div class="field">
+          <label>Enabled</label>
+          <select id="annEnabled"><option value="true">yes — show banner</option><option value="false">no — hide banner</option></select>
+        </div>
+        <div class="field">
+          <label>Dismissible</label>
+          <select id="annDismissible"><option value="true">yes — user can ✕</option><option value="false">no — sticky</option></select>
+        </div>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button class="button primary" id="btnAnnSave">Save & publish</button>
+        <button class="button" id="btnAnnReset">Reload from server</button>
+        <span id="annStatus" class="mono" style="color:var(--muted);font-size:0.8rem;align-self:center;"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Live preview</h2>
+      <div id="annPreview" class="ban amber"><span class="badge">BETA</span><span id="annPreviewText">—</span></div>
+      <div style="margin-top:0.6rem;color:var(--muted);font-size:0.78rem;">
+        Last published: <span id="annUpdatedAt" class="mono">—</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ BRIDGE ============================ -->
+<section id="panel-bridge" class="panel">
+  <div class="card">
+    <h2>File Upload Bridge — /upload/ <span class="right"><a href="/upload/" target="_blank">open in new tab ↗</a></span></h2>
+    <iframe class="bridge" src="/upload/" loading="lazy" title="File upload bridge"></iframe>
+  </div>
+</section>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = {
+  /* "3m ago" / "yesterday 14:32" / "2026-04-25 14:32" */
+  rel(iso){
+    if (!iso) return "—";
+    const d = new Date(iso); if (isNaN(d)) return iso;
+    const s = (Date.now() - d.getTime()) / 1000;
+    if (s < 5)    return "just now";
+    if (s < 60)   return `${Math.floor(s)}s ago`;
+    if (s < 3600) return `${Math.floor(s/60)}m ago`;
+    if (s < 86400){
+      const h = Math.floor(s/3600); return `${h}h ago`;
+    }
+    if (s < 86400*2) return "yesterday " + d.toTimeString().slice(0,5);
+    if (s < 86400*7) return Math.floor(s/86400) + "d ago";
+    return iso.replace("T", " ").slice(0, 16);
+  },
+  esc(s){ return String(s ?? "").replace(/[<>&"']/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c])); },
+};
+
+function pill(ok, label){ return `<span class="pill ${ok?'ok':'bad'}">${label}</span>`; }
+function setKV(el, rows){ el.innerHTML = rows.map(([k,v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(""); }
+
+/* ----------- Tab routing (hash-based) ----------- */
+const PANELS = ["overview","access","visitors","alerts","security","announcement","bridge"];
+function showTab(name){
+  if (!PANELS.includes(name)) name = "overview";
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === `panel-${name}`));
+  if (location.hash !== `#/${name}`) history.replaceState(null,"",`#/${name}`);
+  /* fire panel-specific refresh */
+  if (name === "access")        refreshLog();
+  else if (name === "visitors") refreshVisitors();
+  else if (name === "alerts")   refreshAlerts();
+  else if (name === "security") refreshSecurity();
+  else if (name === "announcement") loadAnnouncement();
+  else if (name === "overview") refreshOverview();
+}
+document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+window.addEventListener("hashchange", () => showTab((location.hash || "#/overview").slice(2)));
+
+/* ----------- Overview ----------- */
+function barClass(pct){ return pct > 90 ? "danger" : pct > 70 ? "warn" : "good"; }
+function setBar(id, pct){
+  const el = $(id); if (!el) return;
+  el.className = "bar " + barClass(pct);
+  const span = el.querySelector("span"); if (span) span.style.width = Math.min(100, Math.max(0, pct)) + "%";
+}
+function setText(id, v){ const el = $(id); if (el) el.textContent = v; }
+function fmtUptime(secs){
+  if (!secs) return "--";
+  const d = Math.floor(secs / 86400), h = Math.floor((secs % 86400) / 3600), m = Math.floor((secs % 3600) / 60);
+  return d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m`;
+}
+function classifyLogLine(s){
+  const t = s.toLowerCase();
+  if (t.includes("[ok]") || t.includes(" ok "))      return "ok";
+  if (t.includes("action"))                          return "action";
+  if (t.includes("warn"))                            return "warn";
+  if (t.includes("err") || t.includes("fail"))       return "err";
+  return "";
+}
+
+async function loadSystemKpis(){
+  try{
+    const data = await fetch("/api/status").then(r => r.json());
+    const cpu = data.cpu?.percent ?? 0;
+    const mem = data.memory?.percent ?? 0;
+    const disk = data.disk?.percent ?? 0;
+    const swap = data.swap?.percent ?? 0;
+    setText("cpuValue", `${cpu}%`);
+    setText("memValue", `${mem}%`);
+    setText("diskValue", `${disk}%`);
+    setText("swapValue", `${swap}%`);
+    setText("loadValue", data.cpu?.load_avg?.["1m"]?.toFixed?.(2) ?? "--");
+    setText("loadDetail",
+      `${(data.cpu?.load_avg?.["1m"]??0).toFixed(2)} / ${(data.cpu?.load_avg?.["5m"]??0).toFixed(2)} / ${(data.cpu?.load_avg?.["15m"]??0).toFixed(2)}`);
+    setText("memDetail",  `${data.memory?.used_gb ?? "--"} GB / ${data.memory?.total_gb ?? "--"} GB`);
+    setText("diskDetail", `${data.disk?.free_gb ?? "--"} GB free`);
+    setText("uptimeDetail", `Uptime: ${fmtUptime(data.uptime_seconds || 0)}`);
+    setBar("cpuBar", cpu); setBar("memBar", mem); setBar("diskBar", disk); setBar("swapBar", swap);
+    renderServices(data.services || {});
+  } catch(e){}
+  try{
+    const t = await fetch("/api/temp").then(r => r.json());
+    setText("tempValue", t.temp != null ? `${t.temp}°C` : "--");
+  } catch(e){ setText("tempValue", "--"); }
+}
+
+function renderServices(services){
+  const grid = $("servicesGrid");
+  const entries = Object.entries(services || {});
+  if (!entries.length){ grid.innerHTML = `<div class="empty">No service data.</div>`; return; }
+  grid.innerHTML = entries.map(([name, d]) => {
+    const det = (typeof d === "string") ? { status: d, cpu_percent: 0, mem_percent: 0, processes: 0 } : {
+      status: d.status || "unknown",
+      cpu_percent: Number(d.cpu_percent || 0),
+      mem_percent: Number(d.mem_percent || 0),
+      processes: Number(d.processes || 0),
+    };
+    const ok = det.status === "active";
+    return `<div class="svc">
+      <span class="dot ${ok?'':'bad'}"></span>
+      <div>
+        <div class="name">${fmt.esc(name)}</div>
+        <div class="meta">${fmt.esc(det.status)} · ${det.processes} proc</div>
+      </div>
+      <div class="mini-bars">
+        <div class="mini-bar-row"><span>CPU</span><div class="mini-bar"><span style="width:${Math.min(100,det.cpu_percent)}%"></span></div><span>${det.cpu_percent.toFixed(1)}%</span></div>
+        <div class="mini-bar-row"><span>RAM</span><div class="mini-bar"><span style="width:${Math.min(100,det.mem_percent)}%"></span></div><span>${det.mem_percent.toFixed(1)}%</span></div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function loadHealthMonitor(){
+  try{
+    const data = await fetch("/api/maintenance/status").then(r => r.json());
+    const lines = $("logLines");
+    if (!data.log_exists){
+      $("hmStatus").innerHTML = `<span class="pill warn">no log</span>`;
+      lines.innerHTML = `<div class="log-line">No health monitor log yet.</div>`;
+      return;
+    }
+    $("hmStatus").innerHTML = data.running
+      ? `<span class="pill warn">running</span>`
+      : `<span class="pill ok">ready</span>`;
+    const recent = (data.entries || []).slice(-30).reverse();
+    lines.innerHTML = recent.length
+      ? recent.map(s => `<div class="log-line ${classifyLogLine(s)}">${fmt.esc(s)}</div>`).join("")
+      : `<div class="log-line">No recent entries.</div>`;
+  } catch(e){
+    $("hmStatus").innerHTML = `<span class="pill bad">unreachable</span>`;
+  }
+}
+
+async function refreshOverview(){
+  $("ohRefresh").textContent = "fetching…";
+  await Promise.all([loadSystemKpis(), loadHealthMonitor(), loadAdminStatus(), loadProcesses()]);
+  $("ohRefresh").textContent = fmt.rel(new Date().toISOString());
+}
+
+async function loadAdminStatus(){
+  try{
+    const r = await fetch("/admin/api/status", {credentials:"same-origin"});
+    if (r.status === 401){ location.href = "/admin"; return; }
+    const j = await r.json();
+    $("serverTime").textContent = j.server_time;
+    setKV($("kvDb"), [
+      ["Status",  pill(j.db.ok, j.db.ok ? "connected" : "down")],
+      ["Host",    j.db.host],
+      ["Name",    j.db.name],
+      ["Error",   j.db.error || "—"],
+    ]);
+    setKV($("kvAuto"), [
+      ["Path",       j.auto_upload.path],
+      ["Reachable",  pill(j.auto_upload.exists, j.auto_upload.exists ? "yes" : "no")],
+      ["Updated",    fmt.rel(j.auto_upload.updated_at)],
+    ]);
+  } catch(e){}
+  try{
+    const r = await fetch("/admin/api/api-keys", {credentials:"same-origin"});
+    const j = await r.json();
+    setKV($("kvKeys"), Object.entries(j.keys).map(([k,v]) => [k, `<span class="mono">${v}</span>`]));
+  } catch(e){}
+}
+
+async function loadProcesses(){
+  try{
+    const r = await fetch("/admin/api/processes?top=10", {credentials:"same-origin"});
+    const j = await r.json();
+    if (j.self){
+      $("selfPid").textContent = "PID " + j.self.pid;
+      setKV($("kvSelf"), [
+        ["Name",    j.self.name],
+        ["CPU",     `${j.self.cpu}%`],
+        ["Memory",  `${j.self.mem_mb} MB`],
+        ["Threads", j.self.threads],
+        ["Started", fmt.rel(j.self.started)],
+      ]);
+    }
+    $("byCpuTbody").innerHTML = (j.by_cpu||[]).map(p => `<tr>
+      <td class="mono">${p.pid}</td><td>${fmt.esc(p.name)}</td><td class="mono">${fmt.esc(p.user)}</td>
+      <td class="num">${p.cpu}</td><td class="num">${p.mem_mb}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No data</td></tr>`;
+    $("byMemTbody").innerHTML = (j.by_mem||[]).map(p => `<tr>
+      <td class="mono">${p.pid}</td><td>${fmt.esc(p.name)}</td><td class="mono">${fmt.esc(p.user)}</td>
+      <td class="num">${p.mem_mb}</td><td class="num">${p.cpu}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No data</td></tr>`;
+  } catch(e){}
+}
+
+$("btnOhRefresh").addEventListener("click", refreshOverview);
+$("btnRunHealth").addEventListener("click", async () => {
+  const b = $("btnRunHealth");
+  b.disabled = true; const old = b.textContent; b.textContent = "⚕ running…";
+  try{
+    const r = await fetch("/api/maintenance/run-health-monitor", {method:"POST"});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+    /* poll the log for ~10s so the user sees the new entries land */
+    for (let i = 0; i < 5; i++){
+      await new Promise(res => setTimeout(res, 2000));
+      await loadHealthMonitor();
+    }
+  } catch(e){
+    $("hmStatus").innerHTML = `<span class="pill bad">error: ${fmt.esc(e.message)}</span>`;
+  } finally {
+    b.disabled = false; b.textContent = old;
+  }
+});
+
+/* ----------- IP labels (cached for log/visitor coloring) ----------- */
+let IP_LABELS = {};
+async function reloadIpLabels(){
+  try{
+    const r = await fetch("/admin/api/ip-labels", {credentials:"same-origin"});
+    const j = await r.json();
+    IP_LABELS = j.items || {};
+  } catch(e){}
+}
+function ipBadge(ip){
+  const lbl = IP_LABELS[ip];
+  if (!lbl) return `<span class="pill">untagged</span>`;
+  const cls = ["amber","red","blue","green","gray","purple"].includes(lbl.color) ? "" : "";
+  return `<span class="pill brand"><span class="swatch ${lbl.color||'blue'}"></span>${fmt.esc(lbl.label)}</span>`;
+}
+
+/* ----------- Access Log ----------- */
+async function refreshLog(){
+  await reloadIpLabels();
+  try{
+    const r = await fetch("/admin/api/access-log?limit=300", {credentials:"same-origin"});
+    const j = await r.json();
+    const filter = ($("logFilter").value || "").toLowerCase();
+    const items = filter ? j.items.filter(it => (it.ip||"").includes(filter) || (it.path||"").toLowerCase().includes(filter)) : j.items;
+    if (!items.length){ $("logTbody").innerHTML = `<tr><td colspan="8" class="empty">—</td></tr>`; return; }
+    $("logTbody").innerHTML = items.map(it => `<tr class="${it.new_client?'new':''}">
+      <td title="${fmt.esc(it.ts)}">${fmt.rel(it.ts)}</td>
+      <td class="mono">${fmt.esc(it.ip)}</td>
+      <td>${ipBadge(it.ip)}</td>
+      <td>${fmt.esc(it.device)}</td>
+      <td class="mono">${fmt.esc(it.method)}</td>
+      <td class="mono">${fmt.esc(it.path)}</td>
+      <td class="num">${it.status}</td>
+      <td class="num">${it.duration_ms}</td></tr>`).join("");
+  } catch(e){}
+}
+$("btnRefreshLog").addEventListener("click", refreshLog);
+$("logFilter").addEventListener("input", () => refreshLog());
+
+/* ----------- Visitors ----------- */
+async function refreshVisitors(){
+  await reloadIpLabels();
+  try{
+    const r = await fetch("/admin/api/visitors", {credentials:"same-origin"});
+    const j = await r.json();
+    if (!j.items.length){ $("visTbody").innerHTML = `<tr><td colspan="11" class="empty">No visitors yet.</td></tr>`; return; }
+    $("visTbody").innerHTML = j.items.map(v => {
+      const lbl = IP_LABELS[v.ip] || {};
+      const colorOpts = ["amber","red","blue","green","gray","purple"]
+        .map(c => `<option value="${c}" ${ (lbl.color||v.color||'blue')===c?'selected':'' }>${c}</option>`).join("");
+      return `<tr data-ip="${fmt.esc(v.ip)}">
+        <td class="mono">${fmt.esc(v.ip)}</td>
+        <td><input class="vlbl" data-f="label" type="text" value="${fmt.esc(lbl.label||v.label||'')}" placeholder="Office / Home / …"></td>
+        <td><input class="vlbl" data-f="owner" type="text" value="${fmt.esc(lbl.owner||v.owner||'')}" placeholder="who"></td>
+        <td><select class="vlbl" data-f="color">${colorOpts}</select></td>
+        <td title="${fmt.esc(v.first_seen)}">${fmt.rel(v.first_seen)}</td>
+        <td title="${fmt.esc(v.last_seen)}">${fmt.rel(v.last_seen)}</td>
+        <td class="num">${v.hits}</td>
+        <td class="num">${v.errors_4xx}</td>
+        <td class="num">${v.errors_5xx}</td>
+        <td>${(v.devices||[]).map(d => fmt.esc(d)).join(", ")}</td>
+        <td><button class="button" data-act="save">Save</button>
+            <button class="button danger" data-act="del">×</button></td></tr>`;
+    }).join("");
+    document.querySelectorAll("#visTbody [data-act=save]").forEach(b => b.addEventListener("click", saveVisitorLabel));
+    document.querySelectorAll("#visTbody [data-act=del]").forEach(b => b.addEventListener("click", deleteVisitorLabel));
+    document.querySelectorAll("#visTbody .vlbl").forEach(el => el.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") { ev.preventDefault(); ev.target.closest("tr").querySelector("[data-act=save]").click(); }
+    }));
+  } catch(e){}
+}
+async function saveVisitorLabel(ev){
+  const tr = ev.target.closest("tr");
+  const ip = tr.dataset.ip;
+  const payload = { ip,
+    label: tr.querySelector('[data-f=label]').value,
+    owner: tr.querySelector('[data-f=owner]').value,
+    color: tr.querySelector('[data-f=color]').value,
+  };
+  await fetch("/admin/api/ip-labels", {method:"POST", headers:{"Content-Type":"application/json"}, credentials:"same-origin", body: JSON.stringify(payload)});
+  await refreshVisitors();
+}
+async function deleteVisitorLabel(ev){
+  const tr = ev.target.closest("tr");
+  await fetch("/admin/api/ip-labels", {method:"POST", headers:{"Content-Type":"application/json"}, credentials:"same-origin", body: JSON.stringify({ip: tr.dataset.ip, delete: true})});
+  await refreshVisitors();
+}
+$("btnRefreshVisitors").addEventListener("click", refreshVisitors);
+
+/* ----------- Alerts ----------- */
+async function refreshAlerts(){
+  await reloadIpLabels();
+  try{
+    const r = await fetch("/admin/api/alerts", {credentials:"same-origin"});
+    const j = await r.json();
+    const banner = $("alertBanner");
+    if (!j.items.length){
+      $("alertsTbody").innerHTML = `<tr><td colspan="5" class="empty">No alerts.</td></tr>`;
+      banner.classList.add("hidden"); return;
+    }
+    banner.textContent = `⚠ ${j.count} new login alert${j.count>1?'s':''} — review the Alerts tab.`;
+    banner.classList.remove("hidden");
+    $("alertsTbody").innerHTML = j.items.map(it => `<tr class="alert">
+      <td title="${fmt.esc(it.ts)}">${fmt.rel(it.ts)}</td>
+      <td class="mono">${fmt.esc(it.ip)}</td>
+      <td>${ipBadge(it.ip)}</td>
+      <td>${fmt.esc(it.device)}</td>
+      <td class="mono">${fmt.esc(it.path)}</td></tr>`).join("");
+  } catch(e){}
+}
+$("btnClearAlerts").addEventListener("click", async () => {
+  await fetch("/admin/api/alerts/clear", {method:"POST", credentials:"same-origin"});
+  refreshAlerts();
+});
+
+/* ----------- Security ----------- */
+async function refreshSecurity(){
+  await reloadIpLabels();
+  try{
+    const r = await fetch("/admin/api/security", {credentials:"same-origin"});
+    const j = await r.json();
+    setKV($("kvSec"), [
+      ["Window size",   j.window_size],
+      ["Hits — 5 min",  j.hits_5m],
+      ["Hits — 15 min", j.hits_15m],
+      ["Hits — 60 min", j.hits_60m],
+    ]);
+    $("topIpsTbody").innerHTML = (j.top_ips_5m||[]).map(x => `<tr>
+      <td class="mono">${fmt.esc(x.ip)}</td><td>${ipBadge(x.ip)}</td><td class="num">${x.hits}</td></tr>`).join("") || `<tr><td colspan="3" class="empty">—</td></tr>`;
+    $("top4xxTbody").innerHTML = (j.top_4xx_60m||[]).map(x => `<tr>
+      <td class="mono">${fmt.esc(x.ip)}</td><td>${ipBadge(x.ip)}</td><td class="num">${x.errors}</td></tr>`).join("") || `<tr><td colspan="3" class="empty">—</td></tr>`;
+    $("suspTbody").innerHTML = (j.suspicious_paths||[]).reverse().map(x => `<tr>
+      <td title="${fmt.esc(x.ts)}">${fmt.rel(x.ts)}</td>
+      <td class="mono">${fmt.esc(x.ip)}</td>
+      <td class="mono">${fmt.esc(x.path)}</td>
+      <td class="num">${x.status}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">No suspicious hits in window.</td></tr>`;
+  } catch(e){}
+}
+
+/* ----------- Announcement editor ----------- */
+const PRESET_DEFAULTS = {
+  beta:        { color:"amber", badge:"BETA",        text_en:"This app is currently under test and data verification. Please double-check results before relying on them.", text_ja:"本アプリは現在テスト・データ検証中です。ご利用の際は結果をご確認ください。" },
+  maintenance: { color:"red",   badge:"MAINTENANCE", text_en:"Scheduled maintenance in progress. Some features may be temporarily unavailable.", text_ja:"メンテナンス作業中です。一部機能を一時的に停止しています。" },
+  info:        { color:"blue",  badge:"INFO",        text_en:"", text_ja:"" },
+  success:     { color:"green", badge:"OK",          text_en:"", text_ja:"" },
+  warning:     { color:"amber", badge:"WARNING",     text_en:"", text_ja:"" },
+};
+function applyPresetToForm(name){
+  const p = PRESET_DEFAULTS[name]; if (!p) return;
+  $("annColor").value = p.color;
+  $("annBadge").value = p.badge;
+  if (p.text_en) $("annTextEn").value = p.text_en;
+  if (p.text_ja) $("annTextJa").value = p.text_ja;
+  refreshAnnPreview();
+}
+function refreshAnnPreview(){
+  const color = $("annColor").value || "amber";
+  const badge = $("annBadge").value || "INFO";
+  const en = $("annTextEn").value;
+  const ja = $("annTextJa").value;
+  const el = $("annPreview");
+  el.className = "ban " + color;
+  el.innerHTML = `<span class="badge">${fmt.esc(badge)}</span><span>${fmt.esc(en)} ${ja ? '<span style="opacity:.85">'+fmt.esc(ja)+'</span>' : ''}</span>`;
+}
+async function loadAnnouncement(){
+  try{
+    const r = await fetch("/api/announcement");
+    const j = await r.json();
+    $("annColor").value      = j.color || "amber";
+    $("annBadge").value      = j.badge || "BETA";
+    $("annTextEn").value     = j.text_en || "";
+    $("annTextJa").value     = j.text_ja || "";
+    $("annEndsAt").value     = j.ends_at || "";
+    $("annEnabled").value    = String(j.enabled !== false);
+    $("annDismissible").value= String(j.dismissible !== false);
+    $("annUpdatedAt").textContent = j.updated_at || "—";
+    refreshAnnPreview();
+  } catch(e){}
+}
+$("annPreset").addEventListener("change", e => { if (e.target.value) applyPresetToForm(e.target.value); });
+["annColor","annBadge","annTextEn","annTextJa"].forEach(id => $(id).addEventListener("input", refreshAnnPreview));
+$("btnAnnReset").addEventListener("click", loadAnnouncement);
+$("btnAnnSave").addEventListener("click", async () => {
+  $("annStatus").textContent = "saving…";
+  const payload = {
+    enabled:     $("annEnabled").value === "true",
+    type:        ($("annPreset").value || "custom"),
+    color:       $("annColor").value,
+    badge:       $("annBadge").value,
+    text_en:     $("annTextEn").value,
+    text_ja:     $("annTextJa").value,
+    ends_at:     $("annEndsAt").value || null,
+    dismissible: $("annDismissible").value === "true",
+  };
+  try{
+    const r = await fetch("/admin/api/announcement", {method:"POST", headers:{"Content-Type":"application/json"}, credentials:"same-origin", body: JSON.stringify(payload)});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || "save failed");
+    $("annStatus").textContent = "✓ published " + (j.announcement?.updated_at || "");
+    $("annUpdatedAt").textContent = j.announcement?.updated_at || "—";
+  } catch(e){ $("annStatus").textContent = "✗ " + e.message; }
+});
+
+/* ----------- Logout & boot ----------- */
+$("btnLogout").addEventListener("click", async () => {
+  await fetch("/admin/logout", {method:"POST", credentials:"same-origin"});
+  location.href = "/admin";
+});
+
+showTab((location.hash || "#/overview").slice(2));
+setInterval(() => {
+  /* lightweight live ticks: clock + active panel only */
+  const active = (location.hash || "#/overview").slice(2);
+  if (active === "overview") refreshOverview();
+  if (active === "access")   refreshLog();
+  if (active === "security") refreshSecurity();
+  refreshAlerts(); /* always check alerts so the top banner stays accurate */
+}, 8000);
+</script>
+</body>
+</html>

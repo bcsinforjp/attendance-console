@@ -1,4 +1,4 @@
-# V3 Attendance Console
+# V3 Attendance Console — v3.2
 
 Live app:
 
@@ -18,6 +18,7 @@ It uploads attendance PDFs, parses rostered employee rows, previews extracted da
 - Save converted attendance records to PostgreSQL
 - Serve summary and employee dashboard APIs
 - Provide a plain-text employee-code endpoint for automation
+- **(v3.2)** Push attendance reports to LINE — webhook auto-registers recipients who message the bot; the Gantt page renders a PDF in the browser and the server sends a tap-to-open link to all recipients
 
 ## Main files
 

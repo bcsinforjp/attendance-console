@@ -6,3 +6,22 @@ attendance.sqlite3-wal
 attendance.sqlite3-journal
 venv/
 *.log
+
+# Secrets / credentials — never commit
+line_config.json
+api_keys.json
+admin_config.json
+known_clients.json
+known_ips.json
+
+# Mutable per-instance state
+announcement.json
+auto_upload_config.json
+auto_uploads/
+logs/
+
+# Generated outputs
+static/line_pdfs/
+
+# Local backups (kept on disk, not in repo)
+*.bak

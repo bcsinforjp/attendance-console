@@ -20,6 +20,7 @@ If this file conflicts with the live code, treat the live code as the source of 
 
 - Project name: Attendance Operations Console
 - Live path: `https://rnd.asiakawaii.com/attendance/`
+- App version: **3.2** (FastAPI `app.version` in `main.py`)
 - App type: FastAPI backend + single-file HTML/CSS/JS frontend
 - Primary job:
   - upload Japanese attendance PDFs
@@ -29,6 +30,24 @@ If this file conflicts with the live code, treat the live code as the source of 
   - export Excel files
   - store attendance records in PostgreSQL
   - provide dashboard APIs for reporting
+  - **(v3.2)** push reports to LINE — webhook self-registers
+    recipients, browser-rendered PDFs are uploaded back and pushed
+    to all recipients as tap-to-open links
+
+### LINE integration (v3.2)
+
+- Credentials live in `line_config.json` (chmod 600, gitignored).
+- Endpoints (all under `/api/line/`): `webhook` (LINE → us; verifies
+  `X-Line-Signature`, registers `userId`/`groupId`/`roomId`),
+  `send` (browser → us → LINE; pushes a report-page URL),
+  `upload-and-send` (multipart PDF upload → saved under
+  `static/line_pdfs/<type>_<date>.pdf` → push URL),
+  `test-hi` and `recipients` (helpers for the Reports page).
+- LINE Developers Console webhook URL:
+  `https://rnd.asiakawaii.com/attendance/api/line/webhook`.
+- Auto-reply / Greeting messages must stay **OFF** in
+  `manager.line.biz`, otherwise the LINE platform intercepts user
+  messages before they reach the webhook.
 
 ---
 

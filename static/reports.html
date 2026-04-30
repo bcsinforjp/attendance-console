@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reports · V3 Attendance Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #eef3f5;
+    --ink: #132026;
+    --muted: #5a6b73;
+    --surface: #ffffff;
+    --surface-soft: #f7fbfc;
+    --brand: #0d8f71;
+    --brand-strong: #0b6f58;
+    --accent: #125e91;
+    --warn: #9b640f;
+    --danger: #b42318;
+    --line: #d4e2e8;
+    --shadow: 0 10px 32px rgba(11, 35, 46, 0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 10% 15%, rgba(18, 94, 145, 0.09), transparent 35%),
+      radial-gradient(circle at 90% 20%, rgba(13, 143, 113, 0.11), transparent 40%),
+      var(--bg);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(8px);
+    gap: 0.9rem;
+  }
+  .brand { font-weight: 700; letter-spacing: 0.03em; color: var(--brand-strong); font-size: 0.95rem; }
+  .brand small { font-family: "IBM Plex Mono", monospace; font-weight: 500; color: var(--muted); margin-left: 0.4rem; font-size: 0.72rem; }
+  .topnav { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+  .topnav a {
+    text-decoration: none; color: var(--muted);
+    font-size: 0.9rem; font-weight: 500;
+    border: 1px solid transparent;
+    padding: 0.35rem 0.55rem; border-radius: 8px;
+    transition: all 0.2s ease;
+  }
+  .topnav a:hover { color: var(--brand-strong); border-color: var(--line); background: var(--surface-soft); }
+  .topnav a.active { color: var(--brand-strong); border-color: #b8e4d8; background: #ecfaf4; }
+
+  .page { width: min(1200px, 100%); margin: 1.2rem auto 2.5rem; padding: 0 0.9rem; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+  }
+  .panel { padding: 1.1rem 1.15rem; margin-bottom: 0.9rem; }
+  .panel h2 { font-size: 1.1rem; margin-bottom: 0.25rem; letter-spacing: -0.01em; }
+  .panel .lede { color: var(--muted); font-size: 0.88rem; margin-bottom: 0.9rem; }
+
+  .fields { display: grid; grid-template-columns: 1fr 2fr; gap: 0.75rem; margin-top: 0.2rem; }
+  .field { display: flex; flex-direction: column; gap: 0.25rem; }
+  .field label {
+    color: var(--muted); font-size: 0.76rem;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    font-family: "IBM Plex Mono", monospace;
+  }
+  .field input {
+    font: inherit;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--line); border-radius: 9px;
+    background: #fff; color: var(--ink);
+  }
+  .field input:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(18, 94, 145, 0.15);
+  }
+  .field .hint { color: var(--muted); font-size: 0.74rem; margin-top: 0.1rem; }
+  .field .latest-db {
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--surface-soft);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.9rem;
+    color: var(--ink);
+  }
+
+  .reports-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0.9rem; margin-top: 0.8rem;
+  }
+  @media (max-width: 700px) { .reports-grid { grid-template-columns: 1fr; } .fields { grid-template-columns: 1fr; } }
+  .report-card {
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: linear-gradient(160deg, #fafdff 0%, #f3f9fb 100%);
+  }
+  .report-card h3 { font-size: 1.02rem; margin-bottom: 0.25rem; }
+  .report-card p { color: var(--muted); font-size: 0.84rem; margin-bottom: 0.6rem; }
+  .report-card .datebadge {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-family: "IBM Plex Mono", monospace; font-size: 0.8rem;
+    color: var(--accent);
+    background: #ecf5fb;
+    border: 1px solid #c6e1f4;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    margin-bottom: 0.55rem;
+  }
+  .report-card.pending .datebadge { color: var(--warn); background: #fff8ea; border-color: #f0dbb8; }
+
+  .button {
+    border: 1px solid transparent; border-radius: 10px;
+    padding: 0.58rem 0.95rem;
+    font-family: inherit; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
+  }
+  .button-accent  { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(18, 94, 145, 0.25); }
+  .button-accent:hover  { transform: translateY(-1px); }
+  .button-outline { background: #fff; border: 1px solid var(--line); color: var(--ink); }
+  .button-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  .message {
+    margin-top: 0.8rem;
+    border-radius: 10px;
+    padding: 0.65rem 0.75rem;
+    font-size: 0.88rem;
+    border: 1px solid var(--line);
+    display: none;
+  }
+  .message.show { display: block; }
+  .message.info    { color: var(--accent);       background: #ecf5fb; border-color: #c6e1f4; }
+  .message.success { color: var(--brand-strong); background: #eaf9f3; border-color: #b8e4d8; }
+  .message.error   { color: var(--danger);       background: #fff2f1; border-color: #f0c8c4; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">V3 Attendance Console <small>· Reports</small></div>
+  <nav class="topnav">
+    <a href="./console">← Upload</a>
+    <a href="./management">Management</a>
+    <a href="./reports" class="active">Reports</a>
+    <a href="./logs">Logs</a>
+    <a href="/grafana/" target="_blank" rel="noopener">Dashboard ↗</a>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="card panel">
+    <h2>Reports</h2>
+    <p class="lede">Report date defaults to the latest PDF date saved in the database. You can override below.</p>
+
+    <div class="fields">
+      <div class="field">
+        <label for="reportDate">Report date</label>
+        <input type="date" id="reportDate" />
+        <span class="hint" id="reportDateSource">source: —</span>
+      </div>
+      <div class="field">
+        <label>Latest PDF date in DB</label>
+        <div class="latest-db" id="latestDbDate">loading…</div>
+      </div>
+    </div>
+
+    <div class="reports-grid">
+      <div class="report-card">
+        <span class="datebadge" id="badgeAttendance">—</span>
+        <h3>Attendance Report</h3>
+        <p>Per-employee Gantt chart grouped by department (製造１課 / 製造２課). A4 portrait print layout.</p>
+        <button type="button" class="button button-accent" id="btnReportAttendance">Open in new tab ↗</button>
+        <button type="button" class="button button-outline" id="btnLineAttendance" title="Send report link to LINE" style="margin-left:0.4rem">💬 Send to LINE</button>
+      </div>
+      <div class="report-card pending">
+        <span class="datebadge" id="badgeSummary">—</span>
+        <h3>Summarizing Report</h3>
+        <p>Per-department productivity, company-wide efficiency, target line. B4 portrait print. <em>Page is pending — backend tables are ready.</em></p>
+        <button type="button" class="button button-outline" id="btnReportSummary">Open in new tab ↗</button>
+        <button type="button" class="button button-outline" id="btnLineSummary" title="Send report link to LINE" style="margin-left:0.4rem">💬 Send to LINE</button>
+      </div>
+    </div>
+
+    <div class="report-card" style="margin-top:1rem">
+      <h3>LINE bot</h3>
+      <p>Send a one-off "Hi 👋" to all registered LINE recipients (test only — does not include a report link). Recipients self-register by messaging the bot first.</p>
+      <button type="button" class="button button-outline" id="btnLineHi">💬 Send Hi (test)</button>
+      <button type="button" class="button button-outline" id="btnLineList" style="margin-left:0.4rem">List recipients</button>
+      <pre id="lineRecipientsOut" class="mono" style="margin-top:0.6rem;max-height:140px;overflow:auto;font-size:0.78rem;color:var(--muted);"></pre>
+    </div>
+
+    <div id="msgReports" class="message"></div>
+  </section>
+</main>
+
+<script>
+const BASE = (() => {
+  const m = location.pathname.match(/^(\/.*)\/reports\/?$/);
+  return (m && m[1]) ? m[1] : "";
+})();
+const api = (p) => BASE + (p.startsWith("/") ? p : "/" + p);
+
+const $reportDate = document.getElementById("reportDate");
+const $reportDateSource = document.getElementById("reportDateSource");
+const $latestDbDate = document.getElementById("latestDbDate");
+const $badgeA = document.getElementById("badgeAttendance");
+const $badgeS = document.getElementById("badgeSummary");
+const $msg = document.getElementById("msgReports");
+
+function showMsg(kind, text){ $msg.className = "message show " + kind; $msg.textContent = text; }
+
+async function loadLatestDbDate() {
+  try {
+    const res = await fetch(api("/api/gantt/latest-date"));
+    if (!res.ok) throw new Error(await res.text());
+    const j = await res.json();
+    $latestDbDate.textContent = j.date || "no data yet";
+    if (!$reportDate.value && j.date) {
+      $reportDate.value = j.date;
+      $reportDateSource.textContent = "source: latest PDF date saved in DB";
+      $badgeA.textContent = j.date;
+      $badgeS.textContent = j.date;
+    }
+  } catch (err) {
+    $latestDbDate.textContent = "error";
+  }
+}
+
+$reportDate.addEventListener("input", () => {
+  $badgeA.textContent = $reportDate.value || "—";
+  $badgeS.textContent = $reportDate.value || "—";
+  $reportDateSource.textContent = "source: manually selected";
+});
+
+document.getElementById("btnReportAttendance").addEventListener("click", () => {
+  const d = $reportDate.value;
+  if (!d) { showMsg("error", "Pick a report date."); return; }
+  window.open(api("/gantt") + `?date=${d}`, "_blank");
+});
+document.getElementById("btnReportSummary").addEventListener("click", () => {
+  const d = $reportDate.value;
+  if (!d) { showMsg("error", "Pick a report date."); return; }
+  window.open(api("/summary") + `?date=${d}`, "_blank");
+  showMsg("info", "Summarizing Report opened in a new tab — page is still pending.");
+});
+
+async function sendToLine(type) {
+  const d = $reportDate.value;
+  if (!d) { showMsg("error", "Pick a report date."); return; }
+  showMsg("info", "Sending to LINE…");
+  try {
+    const res = await fetch(api("/api/line/send"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report_date: d, type }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.ok) {
+      showMsg("error", "LINE send failed: " + (j.detail || JSON.stringify(j)));
+      return;
+    }
+    showMsg("success", `Sent to ${j.results.length} recipient(s) on LINE.`);
+  } catch (err) {
+    showMsg("error", "LINE send error: " + err.message);
+  }
+}
+document.getElementById("btnLineAttendance").addEventListener("click", () => sendToLine("attendance"));
+document.getElementById("btnLineSummary").addEventListener("click", () => sendToLine("summary"));
+
+document.getElementById("btnLineHi").addEventListener("click", async () => {
+  showMsg("info", "Sending Hi to LINE…");
+  try {
+    const res = await fetch(api("/api/line/test-hi"), { method: "POST" });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) { showMsg("error", "Hi failed: " + (j.detail || JSON.stringify(j))); return; }
+    const okCount = (j.results || []).filter(r => r.status >= 200 && r.status < 300).length;
+    showMsg(okCount ? "success" : "error", `Hi delivered to ${okCount}/${(j.results||[]).length} recipient(s).`);
+  } catch (err) { showMsg("error", "Hi error: " + err.message); }
+});
+
+document.getElementById("btnLineList").addEventListener("click", async () => {
+  const out = document.getElementById("lineRecipientsOut");
+  out.textContent = "loading…";
+  try {
+    const res = await fetch(api("/api/line/recipients"));
+    const j = await res.json();
+    const list = j.recipients || [];
+    out.textContent = list.length
+      ? list.map(r => `${r.kind}\t${r.id}\t${r.registered_at || ""}`).join("\n")
+      : "(no recipients yet — have the test phone send a message to the bot first)";
+  } catch (err) { out.textContent = "error: " + err.message; }
+});
+
+loadLatestDbDate();
+</script>
+</body>
+</html>
