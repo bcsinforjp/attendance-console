@@ -1,4 +1,4 @@
-# V3 Attendance Console — v3.3
+# V3 Attendance Console — v3.4
 
 Live app:
 
@@ -20,6 +20,8 @@ It uploads attendance PDFs, parses rostered employee rows, previews extracted da
 - Provide a plain-text employee-code endpoint for automation
 - **(v3.2)** Push attendance reports to LINE — webhook auto-registers recipients who message the bot; the Gantt page renders a PDF in the browser and the server sends a tap-to-open link to all recipients
 - **(v3.3)** Unified site header on every page; new `🌐 Dashboard` placeholder tab; Reports is a read-only popup launcher with `?report=1` flag that hides the top nav for focused viewing; Management page reorganised into 3 tabs (📋 Roster · 📅 Day-off Schedule · 💬 LINE Recipients) with a new day-off grid persisted to `dayoff_schedule.json`
+- **(v3.4)** Day-off Schedule got: 定休表 `.xlsx` importer with auto-suggesting nickname-mapping wizard (persists to `nickname_map.json`), section sub-tabs (📋 製造1課 / 📋 製造2課, default 製造2課), 21-to-20 fiscal-cycle preset, daily totals strip + per-day P/h trend rows (前日比 ▲/▼ Δ% and 対目標 ▲/▼ %). A global `🚨 Highlight unauthorized absence` toggle next to the Save button drives gantt rendering — absent rows whose date is in the saved day-off list get a calm `休 scheduled` pill; absent rows that aren't in the list get a red `🚨 Unauthorized` highlight when the toggle is on.
+- **(v3.4)** Two-flow Auto-update for the desktop client: new `POST /api/v1/xlsx/upload` endpoint companions `/api/v1/pdf/upload` so daily-packs Excel files get pushed into their own watched folder; the bundled `upload_latest.bat` was rewritten with two clearly-separated subroutines (`:upload_pdf` and `:upload_xlsx`) and a CLI mode argument (`pdf | xlsx | all`); the Electron IPC recipe in the API guide now exposes three distinct `kind` values (`attendance` / `daily_packs_pdf` / `daily_packs_xlsx`) matching the three console Auto-update buttons.
 
 ## Main files
 

@@ -801,6 +801,49 @@
     background:#eef3f5; font-weight:700; color:var(--brand-strong); padding:.4rem .55rem;
     text-align:left; font-size:.76rem; letter-spacing:.04em; text-transform:uppercase;
   }
+  /* Day-off section sub-tabs (above the toolbar) */
+  .do-sect-tabs { display:flex; gap:.4rem; align-items:center; margin:.2rem 0 .6rem; }
+  .do-sect-tab {
+    padding:.45rem .9rem; border:1px solid var(--line); background:var(--surface);
+    border-radius:8px 8px 0 0; font-weight:600; font-size:.85rem; color:var(--muted);
+    cursor:pointer; transition:all .15s;
+  }
+  .do-sect-tab[data-do-sect="1"].active { color:#fff; background:#125e91; border-color:#125e91; }
+  .do-sect-tab[data-do-sect="2"].active { color:#fff; background:#1d7a4e; border-color:#1d7a4e; }
+  .do-sect-tab:hover:not(.active) { background:var(--surface-soft); color:var(--ink); }
+
+  /* Toggle for unauthorized-absence highlighting */
+  label.do-toggle {
+    display:inline-flex; align-items:center; gap:.4rem; padding:.35rem .65rem;
+    border:1px solid var(--line); border-radius:8px; background:var(--surface);
+    font-size:.78rem; color:var(--muted); cursor:pointer;
+  }
+  label.do-toggle input[type=checkbox] { margin:0; }
+  label.do-toggle:has(input:checked) { border-color:#b42318; background:#fff2f1; color:#b42318; font-weight:600; }
+
+  /* Per-date count rows that sit at the top of the grid (under the date header) */
+  table.dayoff-grid tbody tr.summary-row td {
+    font-size:.66rem; padding:.18rem 2px; line-height:1.05; text-align:center;
+    background:#f5f9fa; color:var(--muted); font-variant-numeric:tabular-nums;
+  }
+  table.dayoff-grid tbody tr.summary-row td.emp-col {
+    text-align:right; padding-right:.5rem; font-weight:600; color:var(--ink); background:#eef3f5;
+    font-size:.7rem; text-transform:none; letter-spacing:0;
+  }
+  table.dayoff-grid tbody tr.summary-rate td.day-cell.warn { background:#fff5e8; color:#9b640f; font-weight:700; }
+  table.dayoff-grid tbody tr.summary-rate td.day-cell.hot  { background:#fde9e6; color:#b42318; font-weight:700; }
+
+  /* Import-mapping table */
+  #doImportMapTable table { width:100%; border-collapse:collapse; font-size:.8rem; }
+  #doImportMapTable th { position:sticky; top:0; background:#eef3f5; padding:.4rem .5rem; text-align:left; border-bottom:1px solid var(--line); font-weight:700; }
+  #doImportMapTable td { padding:.3rem .5rem; border-bottom:1px solid #e8edf0; vertical-align:middle; }
+  #doImportMapTable tr.has-suggestion { background: #f0f7f4; }
+  #doImportMapTable .nick { font-family:'IBM Plex Mono',monospace; font-weight:600; color:var(--ink); }
+  #doImportMapTable .cnt { color:var(--muted); font-variant-numeric:tabular-nums; }
+  #doImportMapTable select { width:100%; padding:.25rem .4rem; border:1px solid var(--line); border-radius:5px; font:inherit; background:var(--surface); }
+  #doImportMapTable select.skipped { color:var(--muted); }
+  #doImportMapTable .auto { font-size:.7rem; padding:1px 6px; border-radius:6px; background:#dcefe6; color:#0b6f58; margin-left:.4rem; }
+
   .dayoff-legend { display:flex; gap:.8rem; font-size:.75rem; color:var(--muted); margin-top:.6rem; flex-wrap:wrap; }
   .dayoff-legend .lb { display:inline-flex; align-items:center; gap:.3rem; }
   .dayoff-legend .sw { width:14px; height:14px; border-radius:3px; border:1px solid var(--line); display:inline-block; }
@@ -1011,15 +1054,75 @@
         <p style="color:var(--muted);font-size:.85rem;margin:.3rem 0 .6rem;">Click a cell to toggle a planned day off (vacation, AL, fixed off-day). Changes are kept in draft until you press <strong>Save</strong>.<br>
         <small>各セルをタップすると、その日が休み（休暇・公休など）として登録されます。<strong>保存</strong>を押すまでは下書き状態のままです。</small></p>
 
+        <!-- Section sub-tabs (default 製造2課) -->
+        <div class="do-sect-tabs" role="tablist" aria-label="Section">
+          <button type="button" class="do-sect-tab" data-do-sect="1">📋 製造1課</button>
+          <button type="button" class="do-sect-tab active" data-do-sect="2">📋 製造2課</button>
+          <span style="margin-left:auto;font-size:.78rem;color:var(--muted);" id="doCycleLabel">—</span>
+        </div>
+
         <div class="dayoff-toolbar">
           <label>From <input type="date" id="doFrom"></label>
           <label>To <input type="date" id="doTo"></label>
-          <button type="button" class="button" id="doRangeMonth">This month</button>
+          <button type="button" class="button" id="doRangeCycle">📆 This cycle (21–20)</button>
+          <button type="button" class="button" id="doRangeMonth">Calendar month</button>
           <button type="button" class="button" id="doRangeNext30">Next 30 days</button>
+          <button type="button" class="button" id="doImportBtn">📤 Import 定休表 (.xlsx)</button>
           <span class="spacer"></span>
+          <label class="do-toggle" title="When ON, the daily gantt highlights absent employees in red if the absence is NOT in their day-off list (= unauthorized).">
+            <input type="checkbox" id="doHighlightToggle">
+            🚨 Highlight unauthorized absence on report
+          </label>
           <span class="pill" id="doStatusPill">Saved</span>
           <button type="button" class="button primary" id="doSave" disabled>💾 Save</button>
           <button type="button" class="button" id="doReset" disabled>Reset</button>
+        </div>
+
+        <!-- Import workflow panel — hidden until "Import" is clicked -->
+        <section id="doImportPanel" class="card" style="display:none;margin:.4rem 0 .8rem;padding:1rem 1.2rem;background:#f0f7f4;border:1px solid #b8e4d8;">
+          <h3 style="font-size:1rem;margin-bottom:.5rem;">📤 Import from 定休表 Excel · 既存の定休表をインポート</h3>
+          <p style="font-size:.8rem;color:var(--muted);margin-bottom:.6rem;">
+            Upload the existing yearly 定休表 .xlsx — names will be matched against the attendance roster. Map any unmatched nicknames once, then Apply. Mappings are saved so future imports auto-match.<br>
+            <small>既存の年間「定休表」(.xlsx) をアップロードすると、名簿と自動でマッチングします。一致しなかった愛称は 1 度マッピングするだけで、次回以降は自動でマッチします。</small>
+          </p>
+          <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;">
+            <input type="file" id="doImportFile" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="font-size:.85rem;">
+            <button type="button" class="button primary" id="doImportRun">🔍 Parse + match</button>
+            <button type="button" class="button" id="doImportCancel">Cancel</button>
+            <span id="doImportStatus" style="font-size:.78rem;color:var(--muted);"></span>
+          </div>
+
+          <div id="doImportResult" style="display:none;margin-top:.8rem;">
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:.8rem;margin-bottom:.4rem;">
+              <span><strong id="diRange">—</strong></span>
+              <span style="color:#0b6f58;"><strong id="diMatched">0</strong> matched</span>
+              <span style="color:#9b640f;"><strong id="diUnmatched">0</strong> unmatched</span>
+              <span style="color:var(--muted);">(<span id="diUnmatchedNames">0</span> distinct nicknames)</span>
+            </div>
+            <p style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem;">
+              For each unmatched nickname pick the matching employee from the dropdown (or leave as <em>— skip —</em> if they're not in the attendance roster, e.g. office / part-time staff).
+            </p>
+            <div id="doImportMapTable" style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface);"></div>
+            <div style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem;flex-wrap:wrap;">
+              <label style="font-size:.78rem;color:var(--muted);">
+                <input type="radio" name="doImportMode" value="merge" checked> Merge with existing schedule
+              </label>
+              <label style="font-size:.78rem;color:var(--muted);">
+                <input type="radio" name="doImportMode" value="replace_range"> Replace existing entries in the imported window
+              </label>
+              <span class="spacer" style="flex:1;"></span>
+              <button type="button" class="button primary" id="doImportApply">✅ Apply to schedule</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Daily summary strip — totals across the visible window -->
+        <div id="doSummaryStrip" style="display:flex;gap:1rem;font-size:.8rem;margin:.4rem 0 .6rem;color:var(--muted);flex-wrap:wrap;">
+          <span><strong id="doSumRoster">—</strong> roster</span>
+          <span><strong id="doSumDays">—</strong> days in view</span>
+          <span><strong id="doSumOffTotal">—</strong> off-cells</span>
+          <span>avg <strong id="doSumOffPerDay">—</strong> off / day</span>
+          <span>avg <strong id="doSumRate">—</strong> off-rate</span>
         </div>
 
         <div class="dayoff-grid-wrap">
@@ -1924,42 +2027,135 @@ const _DOW_JA = ["日","月","火","水","木","金","土"];
 const dayoff = {
   saved: {},      // server-side schedule (employee_code -> Set of dates)
   draft: {},      // working copy with toggles
-  rosterBySection: [],  // [{label, rows:[{code,name}]}]
+  rosterBySection: [],  // [{id, label, rows:[{code,name}]}]
   from: null, to: null,
   updatedAt: null,
   dirty: false,
+  activeSection: 2,   // 1 or 2 — default 製造2課
+  highlightUnauthorized: false,
+  efficiency: {},  // { "YYYY-MM-DD": { s1: {lp,packs}, s2: {...}, combined: {...} } }
 };
+
+/* Targets — kept in sync with summary.html */
+const DO_TARGETS = { s1: 85, s2: 35, combined: 25 };
+
+/* Compute the 21-to-20 cycle window for a given date.
+   The fiscal-style cycle the office uses: month "March" runs from 2/21 to 3/20,
+   "April" runs from 3/21 to 4/20, and so on. */
+function _doCycleFor(d) {
+  const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  let start, end;
+  if (dt.getDate() >= 21) {
+    start = new Date(dt.getFullYear(), dt.getMonth(), 21);
+    end   = new Date(dt.getFullYear(), dt.getMonth() + 1, 20);
+  } else {
+    start = new Date(dt.getFullYear(), dt.getMonth() - 1, 21);
+    end   = new Date(dt.getFullYear(), dt.getMonth(), 20);
+  }
+  // Cycle is named after the END month (e.g., 2/21–3/20 = "March cycle")
+  const cycleLabel = `${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,"0")} cycle (${start.getMonth()+1}/${start.getDate()}–${end.getMonth()+1}/${end.getDate()})`;
+  return { start, end, label: cycleLabel };
+}
 
 function _doToSet(arr) { return new Set(arr || []); }
 function _doFromSet(s) { return [...s].sort(); }
 
 async function initDayoff() {
-  // Default range: this month
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const last  = new Date(now.getFullYear(), now.getMonth()+1, 0);
-  document.getElementById("doFrom").value = _doFmtISO(first);
-  document.getElementById("doTo").value   = _doFmtISO(last);
+  // Default range: current 21-to-20 cycle
+  const cyc = _doCycleFor(new Date());
+  document.getElementById("doFrom").value = _doFmtISO(cyc.start);
+  document.getElementById("doTo").value   = _doFmtISO(cyc.end);
+  document.getElementById("doCycleLabel").textContent = cyc.label;
 
-  document.getElementById("doFrom").addEventListener("change", _doRender);
-  document.getElementById("doTo").addEventListener("change", _doRender);
+  document.getElementById("doFrom").addEventListener("change", _doRefresh);
+  document.getElementById("doTo").addEventListener("change", _doRefresh);
+  document.getElementById("doRangeCycle").addEventListener("click", () => {
+    const c = _doCycleFor(new Date());
+    document.getElementById("doFrom").value = _doFmtISO(c.start);
+    document.getElementById("doTo").value   = _doFmtISO(c.end);
+    document.getElementById("doCycleLabel").textContent = c.label;
+    _doRefresh();
+  });
   document.getElementById("doRangeMonth").addEventListener("click", () => {
     const n = new Date();
     document.getElementById("doFrom").value = _doFmtISO(new Date(n.getFullYear(), n.getMonth(), 1));
     document.getElementById("doTo").value   = _doFmtISO(new Date(n.getFullYear(), n.getMonth()+1, 0));
-    _doRender();
+    _doRefresh();
   });
   document.getElementById("doRangeNext30").addEventListener("click", () => {
     const n = new Date(); const e = new Date(n); e.setDate(e.getDate()+29);
     document.getElementById("doFrom").value = _doFmtISO(n);
     document.getElementById("doTo").value   = _doFmtISO(e);
-    _doRender();
+    _doRefresh();
   });
   document.getElementById("doSave").addEventListener("click", _doSave);
   document.getElementById("doReset").addEventListener("click", () => { _doReset(); });
 
+  // Section sub-tabs (default 2)
+  document.querySelectorAll(".do-sect-tab").forEach(t => t.addEventListener("click", () => {
+    const sid = parseInt(t.dataset.doSect, 10);
+    dayoff.activeSection = sid;
+    document.querySelectorAll(".do-sect-tab").forEach(tt => tt.classList.toggle("active", parseInt(tt.dataset.doSect,10) === sid));
+    _doRender();
+  }));
+
+  // Toggle: Highlight unauthorized absence
+  document.getElementById("doHighlightToggle").addEventListener("change", async e => {
+    const enabled = e.target.checked;
+    try {
+      const r = await fetch(_doApi("/api/dayoff/highlight-unauthorized"), {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ enabled }),
+      });
+      if (!r.ok) { e.target.checked = !enabled; alert("Toggle failed: " + await r.text()); return; }
+      dayoff.highlightUnauthorized = enabled;
+    } catch (err) { e.target.checked = !enabled; alert("Toggle error: " + err.message); }
+  });
+
+  // Import workflow
+  document.getElementById("doImportBtn").addEventListener("click", () => {
+    document.getElementById("doImportPanel").style.display = "block";
+    document.getElementById("doImportResult").style.display = "none";
+    document.getElementById("doImportFile").value = "";
+    document.getElementById("doImportStatus").textContent = "";
+  });
+  document.getElementById("doImportCancel").addEventListener("click", () => {
+    document.getElementById("doImportPanel").style.display = "none";
+  });
+  document.getElementById("doImportRun").addEventListener("click", _doImportRun);
+  document.getElementById("doImportApply").addEventListener("click", _doImportApply);
+
   await Promise.all([_doFetchRoster(), _doFetchSchedule()]);
+  await _doRefresh();
+}
+
+/* Re-fetch the per-day efficiency series for the current window AND re-render. */
+async function _doRefresh() {
+  await _doFetchEfficiency();
   _doRender();
+}
+
+async function _doFetchEfficiency() {
+  const from = document.getElementById("doFrom").value;
+  const to   = document.getElementById("doTo").value;
+  if (!from || !to) return;
+  const days = Math.max(1, Math.min(184, Math.round((new Date(to)-new Date(from))/86400000) + 1));
+  try {
+    const r = await fetch(_doApi(`/api/m/summary?date=${to}&days=${days}`));
+    if (!r.ok) { dayoff.efficiency = {}; return; }
+    const j = await r.json();
+    const map = {};
+    (j.rows || []).forEach(row => {
+      const lp_co = (row.s1_hours + row.s2_hours) > 0 ? row.packs / (row.s1_hours + row.s2_hours) : 0;
+      map[row.date] = {
+        s1: { lp: row.s1_lp || 0 },
+        s2: { lp: row.s2_lp || 0 },
+        combined: { lp: lp_co || 0 },
+        packs: row.packs || 0,
+      };
+    });
+    dayoff.efficiency = map;
+  } catch { dayoff.efficiency = {}; }
 }
 
 async function _doFetchRoster() {
@@ -1988,6 +2184,8 @@ async function _doFetchSchedule() {
     dayoff.saved = {};
     Object.entries(j.schedule || {}).forEach(([code, dates]) => { dayoff.saved[code] = _doToSet(dates); });
     dayoff.updatedAt = j.updated_at;
+    dayoff.highlightUnauthorized = !!j.highlight_unauthorized;
+    document.getElementById("doHighlightToggle").checked = dayoff.highlightUnauthorized;
     dayoff.draft = {};
     Object.entries(dayoff.saved).forEach(([code, s]) => { dayoff.draft[code] = new Set(s); });
     dayoff.dirty = false;
@@ -2025,22 +2223,108 @@ function _doRender() {
     head += `<th class="${isWk ? 'weekend' : ''}">${String(dt.getDate())}<span class="dow">${_DOW_JA[dow]}</span></th>`;
   });
   head += `</tr>`;
-  // Body rows grouped by section
-  let body = "";
-  dayoff.rosterBySection.forEach(sect => {
-    body += `<tr class="section-row"><td class="emp-col" colspan="${dates.length+1}">${escapeHtmlDO(sect.label)} (${sect.rows.length})</td></tr>`;
-    sect.rows.forEach(emp => {
-      body += `<tr data-code="${emp.code}">`;
-      body += `<td class="emp-col">${escapeHtmlDO(emp.name || "—")}<small>${emp.code}</small></td>`;
-      const offSet = dayoff.draft[emp.code] || new Set();
-      dates.forEach(d => {
-        const dt = new Date(d + "T00:00:00");
-        const isWk = (dt.getDay() === 0 || dt.getDay() === 6);
-        const off = offSet.has(d);
-        body += `<td class="day-cell ${isWk ? 'weekend' : ''} ${off ? 'off' : ''}" data-date="${d}">${off ? "OFF" : ""}</td>`;
-      });
-      body += `</tr>`;
+
+  // Filter to active section only — sub-tabs default to 製造2課
+  const activeSect = dayoff.rosterBySection.find(s => s.id === dayoff.activeSection)
+                   || dayoff.rosterBySection[0]
+                   || { id:0, label:"—", rows:[] };
+  const targetKey = activeSect.id === 1 ? "s1" : "s2";
+  const targetVal = activeSect.id === 1 ? DO_TARGETS.s1 : DO_TARGETS.s2;
+
+  // Per-date counts for summary rows (computed against active section only)
+  const totalRoster = activeSect.rows.length;
+  const offCountByDate = {};
+  dates.forEach(d => offCountByDate[d] = 0);
+  activeSect.rows.forEach(emp => {
+    const set = dayoff.draft[emp.code] || new Set();
+    dates.forEach(d => { if (set.has(d)) offCountByDate[d]++; });
+  });
+
+  // Build summary rows: Present / Off / Off% / P/h / arrow vs prev / vs target %
+  let summary = "";
+  // Row: 出勤 (Present)
+  summary += `<tr class="summary-row"><td class="emp-col">出勤 · Present</td>`;
+  dates.forEach(d => { summary += `<td>${totalRoster - offCountByDate[d]}</td>`; });
+  summary += `</tr>`;
+  // Row: 休 (Off)
+  summary += `<tr class="summary-row"><td class="emp-col">休 · Off</td>`;
+  dates.forEach(d => { summary += `<td>${offCountByDate[d]}</td>`; });
+  summary += `</tr>`;
+  // Row: 休率 (Off %)
+  summary += `<tr class="summary-row summary-rate"><td class="emp-col">休率 · Off %</td>`;
+  dates.forEach(d => {
+    const r = totalRoster ? (offCountByDate[d] / totalRoster) * 100 : 0;
+    const cls = r >= 30 ? "hot" : r >= 15 ? "warn" : "";
+    summary += `<td class="day-cell ${cls}">${r.toFixed(0)}</td>`;
+  });
+  summary += `</tr>`;
+  // Row: P/h (efficiency)
+  summary += `<tr class="summary-row"><td class="emp-col">人時 · P/h</td>`;
+  dates.forEach(d => {
+    const e = dayoff.efficiency[d];
+    const lp = e ? (e[targetKey] && e[targetKey].lp) || 0 : 0;
+    summary += `<td>${lp ? lp.toFixed(0) : "—"}</td>`;
+  });
+  summary += `</tr>`;
+  // Row: vs prev day (arrow + Δ%)
+  summary += `<tr class="summary-row"><td class="emp-col">前日比 · vs prev</td>`;
+  let lastLp = null;
+  dates.forEach(d => {
+    const e = dayoff.efficiency[d];
+    const lp = e ? (e[targetKey] && e[targetKey].lp) || 0 : 0;
+    let cell = "—";
+    let style = "";
+    if (lp > 0 && lastLp != null && lastLp > 0) {
+      const delta = ((lp - lastLp) / lastLp) * 100;
+      const arrow = delta > 0.5 ? "▲" : delta < -0.5 ? "▼" : "→";
+      const color = delta > 0.5 ? "#0b6f58" : delta < -0.5 ? "#b42318" : "#5a6b73";
+      cell = `${arrow}${Math.abs(delta).toFixed(0)}%`;
+      style = `color:${color};font-weight:700;`;
+    }
+    summary += `<td style="${style}">${cell}</td>`;
+    if (lp > 0) lastLp = lp;
+  });
+  summary += `</tr>`;
+  // Row: vs target % (deviation)
+  summary += `<tr class="summary-row"><td class="emp-col">対目標 · vs target</td>`;
+  dates.forEach(d => {
+    const e = dayoff.efficiency[d];
+    const lp = e ? (e[targetKey] && e[targetKey].lp) || 0 : 0;
+    let cell = "—"; let style = "";
+    if (lp > 0 && targetVal > 0) {
+      const dev = ((lp - targetVal) / targetVal) * 100;
+      const arrow = dev > 1 ? "▲" : dev < -1 ? "▼" : "→";
+      const color = dev > 1 ? "#0b6f58" : dev < -1 ? "#b42318" : "#5a6b73";
+      cell = `${arrow}${Math.abs(dev).toFixed(0)}%`;
+      style = `color:${color};font-weight:700;`;
+    }
+    summary += `<td style="${style}">${cell}</td>`;
+  });
+  summary += `</tr>`;
+
+  // Top summary strip values
+  const totalOffCells = Object.values(offCountByDate).reduce((a,b)=>a+b,0);
+  document.getElementById("doSumRoster").textContent = totalRoster + ` (${activeSect.label})`;
+  document.getElementById("doSumDays").textContent = dates.length;
+  document.getElementById("doSumOffTotal").textContent = totalOffCells;
+  document.getElementById("doSumOffPerDay").textContent = (totalOffCells / Math.max(1, dates.length)).toFixed(1);
+  document.getElementById("doSumRate").textContent = totalRoster && dates.length
+    ? ((totalOffCells / (totalRoster * dates.length)) * 100).toFixed(1) + "%" : "—";
+
+  // Body rows — only active section's employees
+  let body = summary;
+  body += `<tr class="section-row"><td class="emp-col" colspan="${dates.length+1}">${escapeHtmlDO(activeSect.label)} (${activeSect.rows.length})  · target ${targetVal} P/h</td></tr>`;
+  activeSect.rows.forEach(emp => {
+    body += `<tr data-code="${emp.code}">`;
+    body += `<td class="emp-col">${escapeHtmlDO(emp.name || "—")}<small>${emp.code}</small></td>`;
+    const offSet = dayoff.draft[emp.code] || new Set();
+    dates.forEach(d => {
+      const dt = new Date(d + "T00:00:00");
+      const isWk = (dt.getDay() === 0 || dt.getDay() === 6);
+      const off = offSet.has(d);
+      body += `<td class="day-cell ${isWk ? 'weekend' : ''} ${off ? 'off' : ''}" data-date="${d}">${off ? "OFF" : ""}</td>`;
     });
+    body += `</tr>`;
   });
   tbl.innerHTML = `<thead>${head}</thead><tbody>${body}</tbody>`;
   tbl.querySelectorAll("td.day-cell").forEach(cell => {
@@ -2076,6 +2360,132 @@ function _doReset() {
   dayoff.dirty = false;
   _doUpdateStatus();
   _doRender();
+}
+
+/* ----------------- Import 定休表 Excel ----------------- */
+let _doImportPreview = null;  // last preview from the server (matched + unmatched)
+
+async function _doImportRun() {
+  const file = document.getElementById("doImportFile").files[0];
+  const status = document.getElementById("doImportStatus");
+  if (!file) { status.textContent = "Pick a .xlsx file first."; return; }
+  status.textContent = "uploading + parsing…";
+  const fd = new FormData();
+  fd.append("file", file, file.name);
+  try {
+    const r = await fetch(_doApi("/api/dayoff/import-excel"), { method:"POST", body: fd });
+    if (!r.ok) { status.textContent = "Parse failed: " + await r.text(); return; }
+    const j = await r.json();
+    _doImportPreview = j;
+    status.textContent = `parsed ${j.total_off_cells} cells across ${Object.keys(j.sheets||{}).length} sheets`;
+    _doRenderImportResult(j);
+  } catch (e) { status.textContent = "error: " + e.message; }
+}
+
+function _doRenderImportResult(j) {
+  document.getElementById("doImportResult").style.display = "block";
+  document.getElementById("diRange").textContent = `${j.date_min} → ${j.date_max}`;
+  document.getElementById("diMatched").textContent = j.matched_count;
+  document.getElementById("diUnmatched").textContent = j.unmatched_count;
+  document.getElementById("diUnmatchedNames").textContent = (j.unmatched || []).length;
+
+  // Build the mapping table — one row per distinct unmatched nickname
+  const rosterOptions = dayoff.rosterBySection.flatMap(s => s.rows.map(r => `<option value="${r.code}" data-section="${s.label}">${r.code} · ${escapeHtmlDO(r.name)} · ${escapeHtmlDO(s.label)}</option>`));
+  let html = `<table>
+    <thead><tr><th>Nickname (Excel)</th><th>Count</th><th>First date</th><th style="min-width:280px;">Map to roster employee</th></tr></thead>
+    <tbody>`;
+  (j.unmatched || []).forEach(u => {
+    const auto = u.suggestions && u.suggestions.length === 1 ? u.suggestions[0].code : "";
+    const trCls = auto ? "has-suggestion" : "";
+    html += `<tr class="${trCls}" data-nick="${escapeHtmlDO(u.raw)}">
+      <td><span class="nick">${escapeHtmlDO(u.raw)}</span>${auto ? '<span class="auto">auto</span>' : ''}</td>
+      <td class="cnt">${u.count}</td>
+      <td class="cnt">${u.first_date || ''}</td>
+      <td>
+        <select data-nick="${escapeHtmlDO(u.raw)}" class="${auto ? '' : 'skipped'}">
+          <option value="">— skip —</option>`;
+    // Suggestions first (highlighted)
+    if (u.suggestions && u.suggestions.length) {
+      html += `<optgroup label="Suggested">`;
+      u.suggestions.forEach(s => {
+        html += `<option value="${s.code}" ${s.code === auto ? 'selected' : ''}>${s.code} · ${escapeHtmlDO(s.name)} · ${escapeHtmlDO(s.section_label || '')}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+    html += `<optgroup label="All employees">${rosterOptions.join('')}</optgroup>`;
+    html += `</select></td></tr>`;
+  });
+  if (!(j.unmatched || []).length) {
+    html += `<tr><td colspan="4" style="text-align:center;color:var(--muted);">All names matched. Click Apply.</td></tr>`;
+  }
+  html += `</tbody></table>`;
+  document.getElementById("doImportMapTable").innerHTML = html;
+  // Style change on user-select
+  document.querySelectorAll("#doImportMapTable select").forEach(sel => {
+    sel.addEventListener("change", e => {
+      e.target.classList.toggle("skipped", !e.target.value);
+    });
+  });
+}
+
+async function _doImportApply() {
+  if (!_doImportPreview) return;
+  const status = document.getElementById("doImportStatus");
+  // 1. Collect user-confirmed nickname → code mappings
+  const mappings = {};
+  document.querySelectorAll("#doImportMapTable select").forEach(sel => {
+    const nick = sel.dataset.nick;
+    const code = sel.value;
+    if (nick && code) mappings[nick] = code;
+  });
+  // 2. Build entries[]: matched (server-side) + newly mapped (client-side)
+  const entries = (_doImportPreview.matched || []).map(m => ({ code: m.code, date: m.date }));
+  // For unmatched names that got mapped, expand their per-date occurrences
+  // (we kept the raw entries on the server side; for the client we re-derive
+  //  by looking up each unmatched entry's first_date is not enough — we need
+  //  every date. Since the preview only carries first_date, re-call import
+  //  with the saved mappings would be cleanest. But for simplicity here, send
+  //  mappings + entries=matched, and a *second* /import-excel call could
+  //  re-resolve. Simpler: just have the user click Apply; the server's
+  //  apply-import already accepts mappings — but only stores them, doesn't
+  //  re-parse. To actually fold mapped entries in, we re-upload + re-match.)
+  //
+  // Approach: just save the mappings now; trigger one more parse to
+  // re-resolve newly-mapped names; then send the merged entries to apply.
+  try {
+    if (Object.keys(mappings).length) {
+      status.textContent = "saving mappings + re-resolving…";
+      // Save mappings via apply-import with empty entries first
+      await fetch(_doApi("/api/dayoff/apply-import"), {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ entries: [], mappings, mode: "merge" }),
+      });
+      // Re-parse the same file with mappings persisted — resolves the newly mapped names.
+      const file = document.getElementById("doImportFile").files[0];
+      if (file) {
+        const fd = new FormData(); fd.append("file", file, file.name);
+        const r = await fetch(_doApi("/api/dayoff/import-excel"), { method:"POST", body: fd });
+        const j2 = await r.json();
+        _doImportPreview = j2;
+        document.getElementById("diMatched").textContent = j2.matched_count;
+        document.getElementById("diUnmatched").textContent = j2.unmatched_count;
+      }
+    }
+    const finalEntries = (_doImportPreview.matched || []).map(m => ({ code: m.code, date: m.date }));
+    const mode = (document.querySelector('input[name="doImportMode"]:checked') || {value:"merge"}).value;
+    status.textContent = `applying ${finalEntries.length} entries…`;
+    const r2 = await fetch(_doApi("/api/dayoff/apply-import"), {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ entries: finalEntries, mappings: {}, mode }),
+    });
+    if (!r2.ok) { status.textContent = "Apply failed: " + await r2.text(); return; }
+    const j3 = await r2.json();
+    status.textContent = `✅ Applied ${j3.applied_dates_total} off-day entries for ${j3.applied_codes} employees (${j3.date_min} → ${j3.date_max})`;
+    // Refresh saved schedule + grid
+    await _doFetchSchedule();
+    _doRender();
+    setTimeout(() => { document.getElementById("doImportPanel").style.display = "none"; }, 1500);
+  } catch (e) { status.textContent = "error: " + e.message; }
 }
 
 async function _doSave() {

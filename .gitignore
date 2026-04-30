@@ -20,6 +20,7 @@ auto_upload_config.json
 auto_uploads/
 logs/
 dayoff_schedule.json
+nickname_map.json
 
 # Generated outputs
 static/line_pdfs/

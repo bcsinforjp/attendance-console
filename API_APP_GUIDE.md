@@ -67,6 +67,55 @@ curl -s -X POST ^
   https://rnd.asiakawaii.com/attendance/api/v1/pdf/upload
 ```
 
+### Two-flow Auto-update (PDF + Excel) — recommended
+
+The console has **two** Auto-update buttons: one for the attendance PDFs, one for the daily-packs Excel (`btnXlsxAuRun`). The desktop / CMD client must mirror that split — each file type goes to its own upload endpoint, and each flow triggers its own auto-update.
+
+**Flow [A] — Attendance PDF:** drops the PDF into the attendance watched folder, then asks the server to extract it.
+
+```cmd
+:: A1. Upload the latest attendance PDF
+curl -s -X POST ^
+  -H "X-API-Key: YOUR_KEY" ^
+  -F "file=@C:\Company_Data\03_就業日報PDF\就業日報2026.04.30.pdf;type=application/pdf" ^
+  https://rnd.asiakawaii.com/attendance/api/v1/pdf/upload
+
+:: A2. Trigger attendance auto-update (preview + save to DB)
+curl -s -X POST -H "X-API-Key: YOUR_KEY" ^
+  "https://rnd.asiakawaii.com/attendance/api/v1/pdf/auto-upload?save=true"
+```
+
+**Flow [B] — Daily-packs Excel:** drops the .xlsx into the daily-packs watched folder, then asks the server to parse the latest .xlsx and return preview + start-time + prediction (same response the **Auto-update →** button on the Daily Packs Excel tab gets).
+
+```cmd
+:: B1. Upload the latest daily-packs Excel
+curl -s -X POST ^
+  -H "X-API-Key: YOUR_KEY" ^
+  -F "file=@C:\Company_Data\07_FullCast\２６.０４.３０.xlsx" ^
+  https://rnd.asiakawaii.com/attendance/api/v1/xlsx/upload
+
+:: B2. Trigger daily-packs Excel auto-extract (no save flag — preview only;
+::     the console-side workflow saves via /api/daily-packs/save-excel-batch
+::     after the operator confirms in the UI)
+curl -s -X POST -H "X-API-Key: YOUR_KEY" ^
+  https://rnd.asiakawaii.com/attendance/api/daily-packs/auto-extract-excel
+```
+
+The bundled `upload_latest.bat` ships both flows as separate subroutines (`:upload_pdf` and `:upload_xlsx`) and accepts a CLI mode:
+
+```cmd
+upload_latest.bat              :: both flows (default)
+upload_latest.bat pdf          :: only flow [A]
+upload_latest.bat xlsx         :: only flow [B]
+```
+
+It also has separate watch folders so the two file types never collide:
+
+```
+.\watch\pdf\    ← attendance PDFs
+.\watch\xlsx\   ← daily-packs Excel
+```
+
 ### Push the whole folder (PowerShell)
 ```powershell
 $key = $env:ATTENDANCE_API_KEY
@@ -153,15 +202,52 @@ function createWindow () {
   win.loadURL(`${SERVER}/console`);
 }
 
-ipcMain.handle('auto-update', async (_e, kind /* 'attendance' | 'daily_packs' */) => {
-  const url = kind === 'daily_packs'
-    ? `${SERVER}/api/daily-packs/auto-extract`
-    : `${SERVER}/api/v1/pdf/auto-upload?save=true`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'X-API-Key': process.env.ATTENDANCE_API_KEY }
-  });
+// Three modes — match the three console buttons:
+//   'attendance'       — Auto-update on the Attendance tab    (PDF flow)
+//   'daily_packs_pdf'  — Auto-update on the Daily Packs PDF tab
+//   'daily_packs_xlsx' — Auto-update on the Daily Packs Excel tab (btnXlsxAuRun)
+ipcMain.handle('auto-update', async (_e, kind) => {
+  const ROUTES = {
+    attendance:        `${SERVER}/api/v1/pdf/auto-upload?save=true`,
+    daily_packs_pdf:   `${SERVER}/api/daily-packs/auto-extract`,
+    daily_packs_xlsx:  `${SERVER}/api/daily-packs/auto-extract-excel`,
+  };
+  const url = ROUTES[kind];
+  if (!url) throw new Error(`unknown auto-update kind: ${kind}`);
+  // Only the v1 endpoint requires the API key; the daily-packs ones are
+  // browser-facing and unauthenticated.
+  const headers = url.includes('/api/v1/')
+    ? { 'X-API-Key': process.env.ATTENDANCE_API_KEY }
+    : {};
+  const res = await fetch(url, { method: 'POST', headers });
   return res.json();
+});
+
+// Two upload IPC handlers — one per file kind — so the Electron renderer
+// can push files into the correct watched folder before triggering the
+// matching auto-update above.
+ipcMain.handle('upload-pdf', async (_e, localPath) => {
+  const fs = require('fs'); const FormData = require('form-data');
+  const fd = new FormData();
+  fd.append('file', fs.createReadStream(localPath), { contentType: 'application/pdf' });
+  const r = await fetch(`${SERVER}/api/v1/pdf/upload`, {
+    method: 'POST',
+    headers: { 'X-API-Key': process.env.ATTENDANCE_API_KEY, ...fd.getHeaders() },
+    body: fd,
+  });
+  return r.json();
+});
+
+ipcMain.handle('upload-xlsx', async (_e, localPath) => {
+  const fs = require('fs'); const FormData = require('form-data');
+  const fd = new FormData();
+  fd.append('file', fs.createReadStream(localPath));
+  const r = await fetch(`${SERVER}/api/v1/xlsx/upload`, {
+    method: 'POST',
+    headers: { 'X-API-Key': process.env.ATTENDANCE_API_KEY, ...fd.getHeaders() },
+    body: fd,
+  });
+  return r.json();
 });
 
 app.whenReady().then(() => {
@@ -174,9 +260,24 @@ app.whenReady().then(() => {
 ```js
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
-  autoUpdate: (kind) => ipcRenderer.invoke('auto-update', kind),
+  autoUpdate:  (kind)      => ipcRenderer.invoke('auto-update', kind),
+  uploadPdf:   (localPath) => ipcRenderer.invoke('upload-pdf', localPath),
+  uploadXlsx:  (localPath) => ipcRenderer.invoke('upload-xlsx', localPath),
 });
 ```
+
+Renderer use:
+```js
+// Push the latest attendance PDF then trigger attendance auto-update
+await window.desktop.uploadPdf('C:/Company_Data/03_就業日報PDF/就業日報2026.04.30.pdf');
+const r1 = await window.desktop.autoUpdate('attendance');
+
+// Push the latest daily-packs Excel then trigger Excel auto-extract
+await window.desktop.uploadXlsx('C:/Company_Data/07_FullCast/２６.０４.３０.xlsx');
+const r2 = await window.desktop.autoUpdate('daily_packs_xlsx');
+```
+
+The two flows are independent — never mix endpoints across them or you'll see the wrong response shape (e.g., the attendance flow returns `{ saved, records_processed, batch_id, mismatches, … }` while the Excel flow returns `{ source_filename, meta, products, start, prediction }`).
 
 ### 4.5 `watch.js` — watch a Windows folder, mirror to server
 ```js
@@ -356,4 +457,74 @@ curl -s -X POST %BASE%/api/line/test-hi
 curl -s -X POST -H "Content-Type: application/json" ^
   -d "{\"id\":\"Ube67de00fe2a3e138cc46e34ae46914f\",\"display_name\":\"creator\"}" ^
   %BASE%/api/line/recipients/rename
+```
+
+---
+
+## 9. Day-off Schedule (v3.3+)
+
+The Day-off Schedule tab on `/management` lets an operator plan everyone's planned absences (vacation, fixed off-days, AL) in one grid, persists them to `dayoff_schedule.json`, and feeds those dates back into the daily gantt so the report can distinguish *scheduled* from *unauthorized* absences.
+
+### 9.1 Storage
+
+- `attendance_app/dayoff_schedule.json` (gitignored). Shape:
+  ```json
+  {
+    "schedule": {
+      "00000320": ["2026-02-25", "2026-02-26", "2026-03-04", ...],
+      "00000401": ["2026-03-08", ...]
+    },
+    "updated_at": "2026-04-30T05:23:54Z",
+    "highlight_unauthorized": false
+  }
+  ```
+- `attendance_app/nickname_map.json` (gitignored). Excel nicknames → 8-digit employee codes, populated by the import wizard so future imports auto-match.
+
+### 9.2 Endpoints (all unauthenticated, browser-facing)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/dayoff/schedule` | Returns the full schedule + `highlight_unauthorized` flag. |
+| `PUT` | `/api/dayoff/schedule` | Replaces the schedule. Validates each date matches `^\d{4}-\d{2}-\d{2}$`; silently drops codes not in `EMPLOYEE_ROSTER`. Preserves `highlight_unauthorized` if not in body. |
+| `POST` | `/api/dayoff/highlight-unauthorized` | Body `{enabled: bool}`. Flips just the toggle. The gantt page picks this up on next load and renders absent-not-on-list rows in red. |
+| `POST` | `/api/dayoff/import-excel` | Multipart `file` (.xlsx, ≤25 MB, must start with `PK\x03\x04`). Parses every monthly sheet (`初期設定` skipped), drops 30 known column-header strings (工場長 / 昼社員 / 2課役職 / 製造1課 / 製麺社員 / 行事・備考 / 祝日 / …), resolves each remaining name via saved nickname map → exact normalized match. Returns `{matched:[{code,name,raw,date,sheet}], unmatched:[{raw,norm,count,first_date,suggestions:[{code,name,section_label}]}]}`. |
+| `POST` | `/api/dayoff/apply-import` | Body `{entries:[{code,date}], mappings:{nickname:code}, mode:"merge"\|"replace_range"}`. Persists mappings into `nickname_map.json`, then folds entries into `dayoff_schedule.json` (merge = union; replace_range = wipe affected codes' entries within `[date_min..date_max]` first). |
+
+### 9.3 Excel import workflow (UI on `/management` → 📅 Day-off Schedule)
+
+1. Click **`📤 Import 定休表 (.xlsx)`** in the toolbar.
+2. Pick the file, click **🔍 Parse + match**. Server returns matched + unmatched stats.
+3. The unmatched table lists each distinct nickname with: count, first-seen date, and a `<select>` dropdown grouped into **Suggested** (auto-suggestions, single-suggestion case is preselected with an "auto" pill) and **All employees**. Pick the right person for each, or leave as **— skip —** for office/admin staff that aren't in the attendance roster.
+4. Pick **Merge** (union onto existing schedule) or **Replace existing entries in window** (wipe the imported window first).
+5. Click **✅ Apply to schedule**. The wizard saves your nickname mappings, re-parses with mappings, and folds the matched (code, date) entries into `dayoff_schedule.json`. Subsequent imports auto-resolve those nicknames.
+
+### 9.4 Gantt highlighting (read-only consumer)
+
+`/gantt`, `/m/report`, and the `?report=1` popup all do `fetch('api/dayoff/schedule')` on each load. Inside `renderRow()` the `cls === 'absent'` branch:
+
+- date ∈ employee's day-off list → calm green **`休 scheduled`** pill (always shown, regardless of toggle);
+- toggle ON + date ∉ list → red **`🚨 Unauthorized`** pill + `#fff2f1` row background + `#b42318` left border;
+- toggle OFF + date ∉ list → existing faint "Absent" label.
+
+Sections that don't run the daily packs line (製造1課) are unaffected.
+
+### 9.5 Day-off quick-test (copy-paste)
+
+```cmd
+set BASE=https://rnd.asiakawaii.com/attendance
+
+:: Read schedule + flag
+curl -s %BASE%/api/dayoff/schedule
+
+:: Flip the global toggle ON / OFF (drives all gantt views)
+curl -s -X POST -H "Content-Type: application/json" -d "{\"enabled\":true}"  %BASE%/api/dayoff/highlight-unauthorized
+curl -s -X POST -H "Content-Type: application/json" -d "{\"enabled\":false}" %BASE%/api/dayoff/highlight-unauthorized
+
+:: Save schedule (merge with what's already there)
+curl -s -X PUT -H "Content-Type: application/json" ^
+  -d "{\"schedule\":{\"00000320\":[\"2026-05-01\",\"2026-05-02\"]}}" ^
+  %BASE%/api/dayoff/schedule
+
+:: Import a 定休表 Excel and inspect the matched / unmatched preview
+curl -s -X POST -F "file=@C:\path\to\定休表.xlsx" %BASE%/api/dayoff/import-excel
 ```

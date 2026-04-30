@@ -3,9 +3,195 @@
 
 **Date / 日付:** 2026-04-30
 
-**Version / バージョン:** 3.2
+**Version / バージョン:** 3.4
 
-**Latest update / 最新更新 (2026-04-30 — Management has 3 clean tabs: Roster / Day-off / LINE)**
+**Latest update / 最新更新 (2026-04-30 — v3.4: two-flow Auto-update + bat dispatch fix)**
+
+The desktop / CMD upload flow was split into two clearly-separate
+pipelines so an operator can push the daily PDFs and the daily-packs
+Excel file independently, without one accidentally triggering the
+other:
+
+1. **Two server endpoints, two destinations.** Attendance PDFs still
+   go to `POST /api/v1/pdf/upload` and land in
+   `auto_uploads/attendance/`. The new
+   `POST /api/v1/xlsx/upload` accepts daily-packs `.xlsx` files and
+   lands them in `auto_uploads/daily_packs/`. Each upload is
+   followed by its own auto-update endpoint —
+   `/api/v1/pdf/auto-upload?save=true` for attendance,
+   `/api/daily-packs/auto-extract-excel` for the daily-packs Excel.
+2. **`upload_latest.bat` rewritten with two subroutines.** Now has
+   `:upload_pdf` and `:upload_xlsx` as clearly-labelled functions,
+   plus a CLI mode argument: `upload_latest.bat pdf | xlsx | all`.
+   The watched folders are separated (`.\watch\pdf\` and
+   `.\watch\xlsx\`) so the two file types can never collide. The
+   previous version had a CMD-syntax bug where `goto :done` ran
+   unconditionally after the first conditional check — that's been
+   fixed by wrapping each branch in parentheses.
+3. **Electron IPC handler updated in the API guide.** The desktop
+   client now exposes three distinct `kind` values for Auto-update
+   (`attendance` / `daily_packs_pdf` / `daily_packs_xlsx`) plus
+   two upload helpers (`window.desktop.uploadPdf`,
+   `window.desktop.uploadXlsx`) so renderer code stays clean.
+
+This fixes the symptom where running the Excel command from CMD
+returned an attendance auto-update response — the old `.bat`
+dispatch silently fell through to the wrong flow.
+
+デスクトップ / CMD のアップロードフローを 2 系統に明確に
+分離しました。日次の PDF とフルキャスト Excel を、互いに
+干渉せずに独立して送信できます：
+
+1. **サーバー側エンドポイントを 2 系統に。** 勤怠 PDF は
+   従来通り `POST /api/v1/pdf/upload` でアップロードし、
+   `auto_uploads/attendance/` に配置されます。新規追加した
+   `POST /api/v1/xlsx/upload` はフルキャスト Excel
+   (.xlsx / .xlsm) を受け取り、`auto_uploads/daily_packs/` に
+   配置します。アップロードに続けて、それぞれ専用の自動更新
+   エンドポイント（勤怠 = `/api/v1/pdf/auto-upload?save=true`、
+   Excel = `/api/daily-packs/auto-extract-excel`）を呼び出します。
+2. **`upload_latest.bat` を 2 つのサブルーチンに書き直し。**
+   `:upload_pdf` と `:upload_xlsx` というラベル付きの関数に分け、
+   CLI 引数 `upload_latest.bat pdf | xlsx | all` で実行する
+   フローを選べます（既定値は `all`）。ウォッチフォルダーも
+   `.\watch\pdf\` / `.\watch\xlsx\` に分離し、ファイルタイプの
+   混在を防ぎます。旧版にあった CMD 構文の不具合（`goto :done`
+   が if 判定後に無条件で実行されてしまう問題）は、各分岐を
+   括弧で囲むことで修正しました。
+3. **API ガイドの Electron IPC ハンドラーを更新。** デスクトップ
+   クライアントから 3 種類の Auto-update（`attendance` /
+   `daily_packs_pdf` / `daily_packs_xlsx`）と、2 種類のアップ
+   ロードヘルパー（`window.desktop.uploadPdf` /
+   `window.desktop.uploadXlsx`）を明示的に呼び出せるように
+   しました。
+
+これで、CMD から Excel の自動更新を実行したときに勤怠用の
+レスポンスが返ってきていた症状（旧 .bat の分岐が誤って
+別フローに合流していた問題）が解消されます。
+
+---
+
+**Previous update / 前回の更新 (2026-04-30 — Day-off: section tabs, 21–20 cycle, efficiency rows, unauthorized-absence highlight)**
+
+The Day-off Schedule tab and the daily gantt now work together so an
+operator can plan, see, and audit absences in one flow:
+
+1. **Section sub-tabs.** The Day-off grid is split into 製造1課 and
+   製造2課 tabs, defaulting to 製造2課 (the larger roster). Each
+   tab's grid + summary counts now show only that section's people,
+   so the screen is no longer crowded with the other section's rows.
+2. **21-to-20 fiscal-month cycle.** A new "This cycle (21–20)" preset
+   snaps the date range to the office's 21st-to-20th month boundary
+   (matches the existing 定休表 Excel format). The cycle label
+   (e.g., "2026-05 cycle (4/21–5/20)") is displayed next to the
+   sub-tabs. The standard calendar-month preset is kept too.
+3. **Efficiency rows on top.** Three new rows above the editable
+   cells now show per-day **人時 (P/h)**, **前日比 (▲/▼ vs previous
+   day in %)**, and **対目標 (▲/▼ vs target P/h in %)** for the
+   currently selected section, so the operator can spot whether a
+   heavy-leave day correlates with a productivity dip. Up arrows
+   render green, down arrows red, near-zero deltas gray.
+4. **Highlight unauthorized absence.** A toggle next to the Save
+   button — once turned on, every gantt view (desktop, mobile, the
+   popup window from Reports) marks absent employees whose absence
+   is **not** in the saved day-off list as a red **🚨 Unauthorized**
+   row. Absences that **are** in the list always render as a calm
+   green **休 scheduled** pill regardless of the toggle, so the
+   distinction is always visible.
+
+Day-off Schedule タブと日次ガントを連動させ、計画・確認・監査
+を 1 つの流れで行えるようにしました：
+
+1. **課のサブタブ。** Day-off グリッドを 製造1課 / 製造2課 の
+   サブタブに分け、初期表示は 製造2課（人数の多い方）にしました。
+   各タブではその課の従業員だけを表示し、画面が混雑しません。
+2. **21–20 のサイクル。** 「This cycle (21–20)」ボタンで日付範囲
+   を会社の 21 日〜翌月 20 日のサイクルに合わせます（既存の
+   定休表 Excel と一致）。サブタブの右側にサイクル名
+   （例：2026-05 cycle (4/21–5/20)）を表示しています。従来の
+   「Calendar month」プリセットも残してあります。
+3. **上部の効率行。** 編集可能なセルの上に 3 行が並びます：
+   各日の **人時 (P/h)**、**前日比（前日と比べての ▲/▼ と %）**、
+   **対目標（目標 P/h と比べての ▲/▼ と %）**。選択中の課の値
+   を表示し、休みの多い日と生産性の落ち込みが連動しているかを
+   一目で見られます。上向きは緑、下向きは赤、変化が小さい場合
+   はグレーです。
+4. **不在の警告ハイライト。** Save ボタンの隣にトグルがあり、
+   ON にすると、登録済みの休み予定にない欠勤を **🚨 Unauthorized**
+   として赤色で表示します（デスクトップ・モバイル・Reports
+   からのポップアップすべて）。休み予定に登録されている欠勤は
+   トグルの状態に関わらず常に **休 scheduled** の緑色ピル
+   で表示されるため、両者の区別が常に明確になります。
+
+---
+
+**Previous update / 前回の更新 (2026-04-30 — Day-off Schedule: import 定休表 Excel + daily totals strip)**
+
+The Day-off Schedule tab gained two big things so existing 定休表 data
+can be brought in once and the operator can see at a glance how the
+month is shaping up:
+
+1. **Import from 定休表 Excel.** A new button on the Day-off toolbar
+   uploads the yearly 定休表 spreadsheet. The server parses every
+   monthly sheet, picks each "off person" name out of the role
+   columns, and tries to match each name against the attendance
+   roster. Names in the Excel are short forms (just a surname or a
+   katakana nickname) so a mapping wizard appears: each unmatched
+   nickname shows in a table with a dropdown of likely roster
+   employees. Confirm the matches, click Apply, and the system
+   stores the off-day entries against each matched employee. The
+   wizard also remembers the nickname → employee_code mappings, so
+   re-importing the file next time auto-resolves them.
+2. **Daily totals at the top of the grid.** Three rows now sit
+   above the editable cells: **出勤 / Present**, **休 / Off** and
+   **休率 / Off %**. Each column shows the count for that date, with
+   the off-rate cells gently colour-graded (amber ≥15 %, red
+   ≥30 %) so a heavy-leave day is obvious. A separate strip above
+   the grid shows the totals across the visible window — roster
+   size, days in view, total off-cells, average off per day, and
+   average off-rate. All numbers update live as cells are toggled,
+   without needing to save first.
+
+The first end-to-end test against the real
+"2026年度（2.21～6.20）定休表.xlsx" parsed cleanly: 8 monthly sheets,
+2,238 off-cells across 2026-02-21 → 2026-06-20, 77 distinct
+nicknames. About 9 of those auto-suggested a single roster
+candidate; the remaining ~68 names are office / admin / contract
+staff that aren't in the production attendance roster, so the
+mapping UI lets the operator skip them in one click.
+
+Day-off Schedule タブに 2 つの大きな機能を追加し、既存の
+「定休表」を取り込みつつ、月の状況を一目で把握できるように
+しました：
+
+1. **定休表 Excel のインポート。** Day-off ツールバーに新しい
+   ボタンを追加し、年間の定休表 (.xlsx) をアップロードします。
+   サーバーは各月シートを解析し、役職列から「休みの人」の
+   名前を抽出し、勤怠名簿と自動でマッチングします。Excel の
+   名前は苗字だけ・愛称だけなどの短い形式が多いため、未マッチの
+   名前を一覧表示し、各行のドロップダウンから候補を選ぶ
+   ウィザード形式にしました。確認後 Apply を押すと、各社員に
+   休み日が登録されます。愛称→社員コードのマッピングは保存
+   されるため、次回以降の再インポートでは自動で解決されます。
+2. **グリッド上部の日別集計。** データ行の上に
+   **出勤 / Present**、**休 / Off**、**休率 / Off %** の 3 行が
+   並びます。各日付列に件数が表示され、休率セルは穏やかに
+   色分けされます（15 % 以上で琥珀、30 % 以上で赤）。グリッド
+   上のサマリーバーには表示中の期間内の合計（名簿サイズ、表示
+   日数、合計休日セル数、1 日あたりの平均休日、平均休率）が
+   表示されます。すべてセルを切り替えるたびにリアルタイムで
+   更新され、保存前でも反映されます。
+
+実ファイル「2026年度（2.21～6.20）定休表.xlsx」での実機
+テスト：8 つの月シートが正常に解析され、2026-02-21 ～
+2026-06-20 で 2,238 件の休みセル、77 個の異なる愛称を確認。
+うち 9 件は 1 候補に自動絞り込み、残り約 68 件は事務 / 管理
+/ 契約スタッフで勤怠名簿に存在しないため、ウィザードで
+ワンクリック「skip」できるようにしています。
+
+---
+
+**Previous update / 前回の更新 (2026-04-30 — Management has 3 clean tabs: Roster / Day-off / LINE)**
 
 The Management page is now organised into three clear tabs so all
 operator data lives in one place:

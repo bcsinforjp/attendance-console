@@ -20,7 +20,7 @@ If this file conflicts with the live code, treat the live code as the source of 
 
 - Project name: Attendance Operations Console
 - Live path: `https://rnd.asiakawaii.com/attendance/`
-- App version: **3.3** (FastAPI `app.version` in `main.py`)
+- App version: **3.4** (FastAPI `app.version` in `main.py`)
 - App type: FastAPI backend + single-file HTML/CSS/JS frontend
 - Primary job:
   - upload Japanese attendance PDFs
@@ -33,6 +33,30 @@ If this file conflicts with the live code, treat the live code as the source of 
   - **(v3.2)** push reports to LINE — webhook self-registers
     recipients, browser-rendered PDFs are uploaded back and pushed
     to all recipients as tap-to-open links
+
+### Day-off Schedule (v3.3+, post-tag work on `dev`)
+
+- File: `dayoff_schedule.json` (chmod-friendly atomic write, `_DAYOFF_LOCK`, **gitignored**). Shape:
+  ```json
+  {
+    "schedule": { "<employee_code>": ["YYYY-MM-DD", ...] },
+    "updated_at": "ISO-8601",
+    "highlight_unauthorized": false
+  }
+  ```
+- File: `nickname_map.json` (gitignored). One-way map from Excel nickname → 8-digit employee code, populated by the import wizard. Subsequent imports auto-resolve previously-mapped names.
+- Endpoints (all under `/api/dayoff/`):
+  - `GET /schedule` — returns the schedule + the toggle flag.
+  - `PUT /schedule` — replaces schedule (validates dates, drops unknown codes, preserves the toggle).
+  - `POST /highlight-unauthorized` — body `{enabled: bool}`, flips the toggle without touching the schedule.
+  - `POST /import-excel` — multipart `file` (.xlsx, ≤25 MB, magic-byte `PK\x03\x04`). Skips `初期設定`. Iterates row 5+ on every monthly sheet, picks names from column 11+ unless they match a built-in 30-entry header blocklist. Resolves each name via (1) saved nickname map, (2) exact normalized match against `EMPLOYEE_ROSTER`. Returns matched + unmatched arrays; each unmatched entry has up to 8 substring-based roster suggestions.
+  - `POST /apply-import` — body `{entries:[{code,date}], mappings:{nickname:code}, mode:"merge"|"replace_range"}`. Persists mappings to `nickname_map.json`, then folds entries into `dayoff_schedule.json`.
+- Frontend lives on **Management → 📅 Day-off Schedule**. Section sub-tabs (📋 製造1課 / 📋 製造2課, default = 製造2課); 21-to-20 fiscal-cycle preset; the grid has employees as rows, dates as columns; the **6 summary rows** above the data are 出勤 / 休 / 休 % / 人時 P/h / 前日比 / 対目標 (the latter three are read from the `/api/m/summary` rolling endpoint and compared against `DO_TARGETS = {s1:85, s2:35, combined:25}`).
+- The **🚨 Highlight unauthorized absence** toggle next to the Save button drives a global setting. The gantt page (`/gantt`, `/m/report`, popup `?report=1`) fetches `/api/dayoff/schedule` on every load; when an employee row classifies as `absent`:
+  - If the date is in their day-off list → calm green `休 scheduled` pill (always, regardless of toggle);
+  - Else if the toggle is ON → red `🚨 Unauthorized` row + tinted background + left border;
+  - Else → faint "Absent" label (existing behaviour).
+- Targets file is the single source of truth in [summary.html](attendance_app/static/summary.html) (`const TARGETS`); changes there must also be mirrored in `DO_TARGETS` inside [management.html](attendance_app/static/management.html).
 
 ### LINE integration (v3.2)
 

@@ -526,11 +526,26 @@ function renderRow(emp, sectionLabel){
   };
 
   if(cls==='absent'){
+    // Day-off overlay: distinguish scheduled day-off vs unauthorized absence.
+    const isScheduled = _isScheduledOff(emp.code, _GanttDayoff.currentDate);
+    const showRedFlag = _GanttDayoff.highlight && !isScheduled;
     const ab=document.createElement('div');
     ab.style.cssText='position:absolute;inset:0;display:flex;align-items:center;padding-left:6px;';
-    ab.innerHTML='<span style="font-size:7px;color:#8a9ba3;">Absent</span>';
+    if (isScheduled) {
+      // Calm "scheduled off" pill — even when the toggle is off
+      ab.innerHTML='<span style="font-size:7px;color:#0b6f58;background:#ecfaf4;border:1px solid #b8e4d8;padding:1px 5px;border-radius:6px;font-weight:700;">休 scheduled</span>';
+      tc.innerHTML='<span style="font-size:7px;color:#0b6f58;font-weight:700;">休</span>';
+    } else if (showRedFlag) {
+      // Unauthorized absence — red highlight on whole row
+      block.style.background='#fff2f1';
+      block.style.borderLeft='3px solid #b42318';
+      ab.innerHTML='<span style="font-size:7px;color:#b42318;background:#fde9e6;border:1px solid #f0c8c4;padding:1px 5px;border-radius:6px;font-weight:700;">🚨 Unauthorized</span>';
+      tc.innerHTML='<span style="font-size:7px;color:#b42318;font-weight:700;">!</span>';
+    } else {
+      ab.innerHTML='<span style="font-size:7px;color:#8a9ba3;">Absent</span>';
+      tc.innerHTML='<span style="font-size:7px;color:#8a9ba3;">—</span>';
+    }
     track.appendChild(ab);
-    tc.innerHTML='<span style="font-size:7px;color:#8a9ba3;">—</span>';
   }else if(cls==='dnr'){
     track.style.background='#e8f0fe';
     const t=emp.in||emp.out||'';
@@ -760,12 +775,32 @@ async function loadPackTimes(date){
   }catch(_){ /* silent — gantt still renders without pack lines */ }
 }
 
+/* Day-off overlay — when the operator toggles "Highlight unauthorized
+   absence" on Management → Day-off Schedule, this state drives a red
+   highlight on absent rows whose absence is NOT in the saved list. */
+const _GanttDayoff = { schedule: {}, highlight: false, currentDate: null };
+async function _loadDayoffOverlay(){
+  try{
+    const r = await fetch(`api/dayoff/schedule?_=${Date.now()}`,{cache:'no-store'});
+    if(!r.ok) return;
+    const j = await r.json();
+    _GanttDayoff.schedule = j.schedule || {};
+    _GanttDayoff.highlight = !!j.highlight_unauthorized;
+  }catch{}
+}
+function _isScheduledOff(code, date){
+  const dates = _GanttDayoff.schedule[code];
+  return Array.isArray(dates) && dates.indexOf(date) >= 0;
+}
+
 async function load(date){
+  _GanttDayoff.currentDate = date;
   try{
     // cache-bust so refresh always shows the latest data + latest design
     const [r] = await Promise.all([
       fetch(`api/gantt/${date}?_=${Date.now()}`,{cache:'no-store'}),
       loadPackTimes(date),
+      _loadDayoffOverlay(),
     ]);
     if(!r.ok)throw new Error(r.statusText);
     const data=await r.json();

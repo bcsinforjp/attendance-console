@@ -37,7 +37,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 # Create app
-app = FastAPI(title="V3 Attendance Console", version="3.3")
+app = FastAPI(title="V3 Attendance Console", version="3.4")
 
 BASE_DIR = Path(__file__).resolve().parent
 EMPLOYEE_ROSTER_PATH = BASE_DIR / "employee_roster.json"
@@ -1611,22 +1611,307 @@ _DAYOFF_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 def _dayoff_load() -> dict:
     if not DAYOFF_PATH.exists():
-        return {"schedule": {}, "updated_at": None}
+        return {"schedule": {}, "updated_at": None, "highlight_unauthorized": False}
     try:
         d = json.loads(DAYOFF_PATH.read_text(encoding="utf-8"))
         if not isinstance(d, dict):
-            return {"schedule": {}, "updated_at": None}
+            return {"schedule": {}, "updated_at": None, "highlight_unauthorized": False}
         d.setdefault("schedule", {})
         d.setdefault("updated_at", None)
+        d.setdefault("highlight_unauthorized", False)
         return d
     except Exception:
-        return {"schedule": {}, "updated_at": None}
+        return {"schedule": {}, "updated_at": None, "highlight_unauthorized": False}
 
 
 def _dayoff_save(payload: dict) -> None:
     tmp = DAYOFF_PATH.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(DAYOFF_PATH)
+
+
+NICKNAME_MAP_PATH = BASE_DIR / "nickname_map.json"
+_NICKNAME_LOCK = threading.Lock()
+
+
+def _nickname_load() -> dict:
+    """Returns {nickname_lower: employee_code}. File shape: {nickname: code}."""
+    if not NICKNAME_MAP_PATH.exists():
+        return {}
+    try:
+        d = json.loads(NICKNAME_MAP_PATH.read_text(encoding="utf-8"))
+        return {str(k).strip(): str(v).strip() for k, v in d.items() if k and v}
+    except Exception:
+        return {}
+
+
+def _nickname_save(mapping: dict) -> None:
+    tmp = NICKNAME_MAP_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(mapping, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(NICKNAME_MAP_PATH)
+
+
+def _norm_name(s: str) -> str:
+    """Normalize a Japanese display name for matching:
+    - strip whitespace, ideographic space, half/full-width spaces
+    - drop the inner space between family / given name in roster names
+      ("青山 京子" → "青山京子")
+    """
+    if not isinstance(s, str):
+        return ""
+    return s.replace("　", "").replace(" ", "").strip()
+
+
+def _build_roster_index() -> tuple[dict, dict]:
+    """Returns (by_name, by_code) for the current roster.
+    by_name: normalized name → {code, name, section_id, section_label}
+    by_code: code → same dict (for reverse lookups)"""
+    by_name: dict[str, dict] = {}
+    by_code: dict[str, dict] = {}
+    section_lookup = {section["id"]: section["label"] for section in SECTIONS}
+    for emp in EMPLOYEE_ROSTER:
+        info = {
+            "code": emp["employee_code"],
+            "name": emp["name"],
+            "section_id": SECTION_OF_CODE.get(emp["employee_code"]),
+        }
+        info["section_label"] = section_lookup.get(info["section_id"])
+        by_name[_norm_name(emp["name"])] = info
+        by_code[emp["employee_code"]] = info
+    return by_name, by_code
+
+
+# Strings that appear as column headers / role labels in the 定休表 Excel and
+# must NOT be treated as employee names when scanning data rows.
+_DAYOFF_HEADER_BLOCKLIST = {
+    "PB昼間製造", "工場長", "昼社員", "２課昼製造", "２課　昼製造", "2課昼製造", "2課　昼製造",
+    "製造１課", "役職", "加熱・加社員", "加熱・加 社員", "１課製造", "1課製造", "1F製麺社員", "２課班長", "2課班長",
+    "製造３課", "製麺社員", "1F\n製麺社員", "2F\n製麺社員", "1F製麺社員", "2F製麺社員", "3課昼", "3課 昼",
+    "営業", "パート", "事務・資材", "資材技能実習", "開発", "品質管理", "行事・備考",
+    "夜2課", "2課役職", "N・N社員", "N・Y社員",
+    "祝日",
+}
+_DAYOFF_HEADER_BLOCKLIST_NORM = {_norm_name(s) for s in _DAYOFF_HEADER_BLOCKLIST}
+
+
+@app.post("/api/dayoff/import-excel")
+async def dayoff_import_excel(file: UploadFile = File(...)):
+    """Parse an uploaded 定休表 .xlsx, match each off-day cell against the
+    employee roster (by full name + saved nickname map), and return a preview
+    payload the UI can use to:
+      • see how many entries matched / didn't match
+      • collect manual mappings for unmatched names
+      • apply the matched entries to the dayoff schedule
+
+    The actual save to dayoff_schedule.json happens via /api/dayoff/apply-import
+    so the UI can preview + edit mappings first.
+    """
+    raw = await file.read()
+    if len(raw) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="file too large (>25 MB)")
+    if not raw[:4] == b"PK\x03\x04":
+        raise HTTPException(status_code=400, detail="upload is not a .xlsx file")
+    tmp_path = Path("/tmp") / f"dayoff_import_{uuid4().hex}.xlsx"
+    tmp_path.write_bytes(raw)
+    try:
+        wb = load_workbook(tmp_path, data_only=True, read_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"openpyxl could not parse: {e}")
+
+    by_name, _ = _build_roster_index()
+    nick_map = _nickname_load()  # nickname (raw) → employee_code
+
+    # entries collected from the Excel: (employee_match_key, date_iso, sheet, raw_excel_name)
+    raw_entries: list[dict] = []
+    unmatched_counts: dict[str, int] = {}
+    sheet_stats: dict[str, dict] = {}
+    date_min = None
+    date_max = None
+
+    for sh_name in wb.sheetnames:
+        if sh_name.strip() == "初期設定":
+            continue
+        ws = wb[sh_name]
+        n_rows = 0
+        n_cells = 0
+        for row_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
+            if row_idx < 5:
+                continue
+            if not row:
+                continue
+            date_v = row[0]
+            if not isinstance(date_v, datetime):
+                continue
+            n_rows += 1
+            iso = date_v.strftime("%Y-%m-%d")
+            if date_min is None or date_v < date_min:
+                date_min = date_v
+            if date_max is None or date_v > date_max:
+                date_max = date_v
+            for v in row[10:]:
+                if not isinstance(v, str):
+                    continue
+                norm = _norm_name(v)
+                if not norm or len(norm) < 2:
+                    continue
+                if norm in _DAYOFF_HEADER_BLOCKLIST_NORM:
+                    continue
+                # Also skip pure-numeric or weekday-only cells
+                if norm.isdigit() or norm in {"日", "月", "火", "水", "木", "金", "土"}:
+                    continue
+                n_cells += 1
+                raw_entries.append({"raw": v, "norm": norm, "date": iso, "sheet": sh_name.strip()})
+        sheet_stats[sh_name.strip()] = {"date_rows": n_rows, "off_cells": n_cells}
+
+    # Resolve each entry → employee_code
+    matched: list[dict] = []
+    unmatched_by_name: dict[str, dict] = {}  # norm_name → {raw, count, dates: set}
+    for ent in raw_entries:
+        norm = ent["norm"]
+        # 1. saved nickname map (case-sensitive on the raw value first, then the normalized one)
+        code = nick_map.get(ent["raw"]) or nick_map.get(norm)
+        info = None
+        if code:
+            for emp in EMPLOYEE_ROSTER:
+                if emp["employee_code"] == code:
+                    info = {"code": emp["employee_code"], "name": emp["name"]}
+                    break
+        # 2. exact match against roster full name (normalized)
+        if not info and norm in by_name:
+            info = {"code": by_name[norm]["code"], "name": by_name[norm]["name"]}
+        if info:
+            matched.append({
+                "code": info["code"], "name": info["name"],
+                "raw": ent["raw"], "date": ent["date"], "sheet": ent["sheet"],
+            })
+        else:
+            slot = unmatched_by_name.setdefault(norm, {"raw": ent["raw"], "count": 0, "dates": set()})
+            slot["count"] += 1
+            slot["dates"].add(ent["date"])
+            unmatched_counts[norm] = unmatched_counts.get(norm, 0) + 1
+
+    # For each unmatched normalized name, suggest roster candidates whose
+    # normalized full-name CONTAINS the unmatched string (surname-only or
+    # given-name-only forms typical in 定休表). One candidate → auto-suggest.
+    def _suggest(norm_excel: str) -> list[dict]:
+        if not norm_excel:
+            return []
+        cands = []
+        for nm, info in by_name.items():
+            if norm_excel and (norm_excel in nm or nm.startswith(norm_excel) or nm.endswith(norm_excel)):
+                cands.append({
+                    "code": info["code"],
+                    "name": info["name"],
+                    "section_label": info["section_label"] or "",
+                })
+        return cands[:8]  # cap so the UI stays compact
+
+    unmatched_list = sorted(
+        [
+            {
+                "raw": s["raw"],
+                "norm": k,
+                "count": s["count"],
+                "first_date": min(s["dates"]) if s["dates"] else "",
+                "suggestions": _suggest(k),
+            }
+            for k, s in unmatched_by_name.items()
+        ],
+        key=lambda r: (-r["count"], r["raw"]),
+    )
+
+    return {
+        "ok": True,
+        "date_min": date_min.strftime("%Y-%m-%d") if date_min else None,
+        "date_max": date_max.strftime("%Y-%m-%d") if date_max else None,
+        "sheets": sheet_stats,
+        "total_off_cells": len(raw_entries),
+        "matched_count": len(matched),
+        "unmatched_count": sum(s["count"] for s in unmatched_by_name.values()),
+        "matched": matched,
+        "unmatched": unmatched_list,
+        "saved_nickname_map_size": len(nick_map),
+    }
+
+
+@app.post("/api/dayoff/apply-import")
+async def dayoff_apply_import(payload: dict = Body(...)):
+    """Take a list of resolved {code, date} entries from the import preview,
+    fold them into the existing dayoff schedule, optionally save any user-
+    supplied nickname mappings ({nickname: employee_code}) to nickname_map.json.
+
+    Body:
+      entries:    [ {code, date}, … ]      – matched entries to fold in
+      mappings:   { nickname: code, … }    – user-confirmed nickname → code (saved)
+      mode:       "replace_range" | "merge"
+                  - replace_range: clear all dayoff entries for any code that
+                    appears in `entries` over [date_min..date_max], then add.
+                    Use when re-importing the same date window.
+                  - merge: just union the new entries on top of existing.
+    """
+    entries = payload.get("entries") or []
+    mappings = payload.get("mappings") or {}
+    mode = payload.get("mode", "merge")
+    if not isinstance(entries, list):
+        raise HTTPException(status_code=400, detail="entries must be a list")
+    if not isinstance(mappings, dict):
+        raise HTTPException(status_code=400, detail="mappings must be an object")
+
+    valid_codes = {e["employee_code"] for e in EMPLOYEE_ROSTER}
+
+    # 1. persist nickname mappings (skip empty/invalid)
+    if mappings:
+        with _NICKNAME_LOCK:
+            cur = _nickname_load()
+            for nick, code in mappings.items():
+                if isinstance(nick, str) and isinstance(code, str) and code.strip() in valid_codes:
+                    cur[nick.strip()] = code.strip()
+            _nickname_save(cur)
+
+    # 2. validate entries + collect by code
+    new_dates_by_code: dict[str, set] = {}
+    date_min, date_max = None, None
+    for ent in entries:
+        code = str(ent.get("code", "")).strip()
+        date = str(ent.get("date", "")).strip()
+        if code not in valid_codes:
+            continue
+        if not _DAYOFF_DATE_RE.match(date):
+            raise HTTPException(status_code=400, detail=f"bad date '{date}'")
+        new_dates_by_code.setdefault(code, set()).add(date)
+        if date_min is None or date < date_min:
+            date_min = date
+        if date_max is None or date > date_max:
+            date_max = date
+
+    # 3. fold into existing schedule
+    with _DAYOFF_LOCK:
+        cur = _dayoff_load()
+        sched = cur.get("schedule") or {}
+        if mode == "replace_range" and date_min and date_max:
+            # Drop existing entries that fall in the imported window for affected codes
+            for code in new_dates_by_code:
+                old = set(sched.get(code, []))
+                kept = {d for d in old if not (date_min <= d <= date_max)}
+                sched[code] = sorted(kept)
+        for code, dates in new_dates_by_code.items():
+            existing = set(sched.get(code, []))
+            existing.update(dates)
+            sched[code] = sorted(existing)
+        # prune any code that ended up empty
+        sched = {c: ds for c, ds in sched.items() if ds}
+        out = {"schedule": sched, "updated_at": datetime.utcnow().isoformat() + "Z"}
+        _dayoff_save(out)
+
+    return {
+        "ok": True,
+        "applied_codes": len(new_dates_by_code),
+        "applied_dates_total": sum(len(v) for v in new_dates_by_code.values()),
+        "date_min": date_min,
+        "date_max": date_max,
+        "updated_at": out["updated_at"],
+        "saved_mappings": len(mappings),
+    }
 
 
 @app.get("/api/dayoff/schedule")
@@ -1639,7 +1924,8 @@ async def dayoff_get():
 @app.put("/api/dayoff/schedule")
 async def dayoff_save(payload: dict = Body(...)):
     """Replace the saved schedule. Validates each date is YYYY-MM-DD and that
-    employee codes are 8-digit strings present in EMPLOYEE_ROSTER."""
+    employee codes are 8-digit strings present in EMPLOYEE_ROSTER. Preserves
+    the `highlight_unauthorized` flag if not explicitly set in the payload."""
     raw = payload.get("schedule")
     if not isinstance(raw, dict):
         raise HTTPException(status_code=400, detail="schedule must be an object {code: [dates]}")
@@ -1648,7 +1934,7 @@ async def dayoff_save(payload: dict = Body(...)):
     for code, dates in raw.items():
         code_s = str(code).strip()
         if code_s not in valid_codes:
-            continue  # silently drop unknown codes rather than 400 — keeps UI lenient
+            continue
         if not isinstance(dates, list):
             raise HTTPException(status_code=400, detail=f"dates for {code_s} must be a list")
         seen = []
@@ -1660,10 +1946,30 @@ async def dayoff_save(payload: dict = Body(...)):
                 seen.append(ds)
         if seen:
             cleaned[code_s] = sorted(seen)
-    out = {"schedule": cleaned, "updated_at": datetime.utcnow().isoformat() + "Z"}
     with _DAYOFF_LOCK:
+        prev = _dayoff_load()
+        flag = bool(payload.get("highlight_unauthorized", prev.get("highlight_unauthorized", False)))
+        out = {
+            "schedule": cleaned,
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+            "highlight_unauthorized": flag,
+        }
         _dayoff_save(out)
     return {"ok": True, **out}
+
+
+@app.post("/api/dayoff/highlight-unauthorized")
+async def dayoff_set_highlight(payload: dict = Body(...)):
+    """Toggle the global 'highlight unauthorized absence' flag without touching
+    the schedule. When ON, the gantt page renders absent employees in red when
+    their absence is NOT in the saved day-off list."""
+    flag = bool(payload.get("enabled"))
+    with _DAYOFF_LOCK:
+        cur = _dayoff_load()
+        cur["highlight_unauthorized"] = flag
+        cur["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        _dayoff_save(cur)
+    return {"ok": True, "enabled": flag, "updated_at": cur["updated_at"]}
 
 
 @app.get("/api/management/bootstrap")
@@ -2696,6 +3002,46 @@ def _resolve_upload_target_dir() -> Path:
     if not cfg.is_absolute():
         return PI_FALLBACK_UPLOAD_DIR
     return cfg
+
+def _resolve_packs_target_dir() -> Path:
+    """Pick the directory to write incoming daily-packs files into. Mirrors
+    `_resolve_upload_target_dir` but for the daily-packs watched folder."""
+    cfg = DAILY_PACKS_AUTO_UPLOAD_DIR
+    cfg_str = str(cfg)
+    if _looks_like_windows_path(cfg_str):
+        return BASE_DIR / "auto_uploads" / "daily_packs"
+    if cfg.is_file():
+        cfg = cfg.parent
+    if not cfg.is_absolute():
+        return BASE_DIR / "auto_uploads" / "daily_packs"
+    return cfg
+
+
+@app.post("/api/v1/xlsx/upload")
+async def v1_xlsx_upload(file: UploadFile = File(...), key_label: str = Depends(require_api_key)):
+    """Save an .xlsx into the daily-packs watched folder. Idempotent by filename.
+    Companion to /api/v1/pdf/upload — used by the desktop client to push the
+    daily フルキャスト Excel up so /api/daily-packs/auto-extract-excel can find it."""
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="filename must end in .xlsx or .xlsm")
+    target_dir = _resolve_packs_target_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(file.filename).name
+    dest = target_dir / safe_name
+    content = await file.read()
+    if not content[:4] == b"PK\x03\x04":
+        raise HTTPException(status_code=400, detail="upload is not a valid .xlsx (zip magic missing)")
+    if len(content) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="file too large (>50 MB)")
+    dest.write_bytes(content)
+    return {
+        "ok": True,
+        "filename": safe_name,
+        "size": len(content),
+        "stored_in": str(target_dir),
+        "received_from_key": key_label,
+    }
+
 
 @app.post("/api/v1/pdf/upload")
 async def v1_pdf_upload(file: UploadFile = File(...), key_label: str = Depends(require_api_key)):
