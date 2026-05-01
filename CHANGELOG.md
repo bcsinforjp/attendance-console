@@ -7,6 +7,91 @@ Format: `YYYY-MM-DD — [area] what changed (why) → files`
 
 ---
 
+## 2026-05-02 — Retrievable move-to-done warnings (key-protected)
+
+The move-to-done step that runs after a successful DB save is best-effort —
+filesystem errors there must never roll back the just-committed save. Until
+now those warnings only went to stdout, where the desktop client couldn't see
+them. Now they are also persisted to a log file and exposed over an API.
+
+- **[api]** New `GET /api/v1/done-files/warnings` (key-protected, X-API-Key).
+  Query params: `limit` (1..2000, default 200) and optional `kind` filter
+  (`attendance` | `daily_packs`). Returns `{path, exists, count, warnings:[{ts, kind, filename, src_path, error}, …]}`. → `main.py`
+- **[helpers]** New `_log_done_warning()` helper appends one JSON line per
+  failure to `attendance_app/logs/done_warnings.log`. The append itself is
+  best-effort: a logging failure is swallowed (printed once to stdout) so the
+  DB save is never compromised by a logger I/O issue. → `main.py`
+- **[behavior]** `_move_to_done()` still returns `None` on failure (response
+  carries `moved_to_done: false` as before) and additionally writes the
+  warning to disk. No change to success path. → `main.py`
+- **[docs]** API_APP_GUIDE: new §6.6 with response shape, `kind`/`limit`
+  query params, and recommended desktop-client polling pattern. → `API_APP_GUIDE.md`
+
+→ `main.py`, `API_APP_GUIDE.md`
+
+## 2026-05-02 — Done folder + Restore/Delete in Management
+
+After a successful DB save, the source file used by the import (PDF or Excel)
+is moved into a per-kind `done/` subfolder so the next Auto-update doesn't
+re-pick it. The Management → 🗑 Data Cleanup tab grew a new "✅ Processed
+Files (Done)" card that lists those files and exposes ↩ Restore / 🗑 Delete.
+
+- **[api]** `attendance_auto_upload(save=True)` now moves the picked PDF into
+  `<watched-folder>/done/` after the DB save succeeds. Best-effort: any move
+  failure is logged and swallowed so the just-committed save is never rolled
+  back. Response gains `moved_to_done` (bool) and `done_path` (string|null). → `main.py`
+- **[api]** `POST /api/daily-packs/save-excel-batch` does the same after its
+  commit, looking up the source by basename in the daily-packs watched folder.
+  Response gains `moved_to_done` and `done_path`. → `main.py`
+- **[api]** Three new browser-facing endpoints (no API key):
+  - `GET  /api/done-files/list` — `{attendance: {path, files[]}, daily_packs: {path, files[]}}` with `{filename, size, modified, extracted_date}` per file.
+  - `POST /api/done-files/restore` — `{kind, filename}` → moves the file back to the parent watched folder so the next Auto-update picks it up again.
+  - `POST /api/done-files/delete`  — `{kind, filename}` → unlinks the file. Two-step confirm lives in the UI; no soft-delete on the server side.
+  Both mutating endpoints validate `kind ∈ {attendance, daily_packs}` and
+  reject any path-traversal attempt (`filename` must be a plain basename
+  whose resolved path stays inside the Done folder). → `main.py`
+- **[helpers]** New `_done_dir_for()`, `_parent_dir_for()`, `_move_to_done()`,
+  `_list_done_files()`, `_validate_done_kind()`, `_safe_done_path()`. Done
+  folders are auto-created lazily — no manual mkdir step needed. → `main.py`
+- **[ui]** Management → 🗑 Data Cleanup tab gains a green "✅ Processed Files
+  (Done)" card after the existing "📦 Old uploaded files" section. Two-column
+  layout (Attendance / Daily Packs). Each row shows filename, parsed date,
+  size, modified time + ↩ Restore / 🗑 Delete buttons. Both actions confirm
+  before firing. Loads on first tab open and on Refresh click. → `static/management.html`
+- **[safety]** Existing iteration helpers (`_pick_latest_*`, `_pick_*_for_date`, `v1_pdf_list`, `v1_xlsx_list`) already filter on `is_file()` so the new Done subfolders are naturally excluded — no list endpoint surfaces them as pending work.
+
+→ `main.py`, `static/management.html`
+
+## 2026-05-02 — Back-fill any date with files already on the server
+
+Desktop client (`watch.js`) needs to fix a missing day even when the local
+file on the office PC is gone but the file is still sitting in the server's
+watched folder from a previous upload. To support this:
+
+- **[api]** `POST /api/v1/pdf/auto-upload` accepts a new optional
+  `?date=YYYY-MM-DD` query parameter. Without it, behaves exactly as before
+  (picks latest PDF — fully backward-compatible). With it, picks the PDF whose
+  filename encodes that date and ingests only that file. → `main.py`
+- **[api]** `POST /api/daily-packs/auto-extract-excel` gains the same
+  `?date=YYYY-MM-DD` optional parameter with identical semantics. → `main.py`
+- **[api]** Both endpoints return a structured 404 when the requested date
+  has no matching file: `{detail: {error:"file_not_available", kind, requested_date, watched_folder, message}}` — desktop client can now render
+  "PDF for 2026-04-23 is not on the server, please upload first" instead of
+  guessing from a free-text 404. → `main.py`
+- **[api]** New `GET /api/v1/xlsx/list` (key-protected) — companion to the
+  existing `/api/v1/pdf/list`. Returns every Excel in the daily-packs watched
+  folder with `extracted_date` parsed from the filename so the desktop client
+  can decide whether the date is already on the server before deciding to
+  upload again. → `main.py`
+- **[helpers]** Added `_pick_pdf_for_date()` and `_pick_xlsx_for_date()` next
+  to the existing `_pick_latest_*` helpers. Both reuse `_extract_date_from_filename` (NFKC-normalized, full-width digits already supported). → `main.py`
+- **[docs]** API_APP_GUIDE: new §6.5 "Desktop-client update guide — back-fill
+  any date (v3.4)" with a decision tree, drop-in `watch.js` patch, and a
+  copy-paste smoke test for back-filling 2026-04-23. List/retrieve §3 also
+  documents `/api/v1/xlsx/list` and the `?date=` parameter. → `API_APP_GUIDE.md`
+
+→ `main.py`, `API_APP_GUIDE.md`
+
 ## 2026-05-01 — v3.5 release tag
 
 Bump `app.version` 3.4 → 3.5. Coherent batch shipped on top of v3.4:
@@ -22,6 +107,94 @@ Bump `app.version` 3.4 → 3.5. Coherent batch shipped on top of v3.4:
 Detailed per-feature entries follow below.
 
 → `main.py`, `README.md`, `PROJECT_INSIDE_AI_BLUEPRINT.md`
+
+## 2026-05-01 — Site-wide announcement banner + Admin API Status tab
+
+- **[ui]** Announcement banner consolidated into `site_header.js`: the same banner driven by `GET /api/announcement` (and edited from `/admin#/announcement`) now renders on **every** full page (Console, Gantt, Summary, Reports, Management, Dashboard) directly under the unified topbar — previously it only showed on Console. Per-browser dismiss is preserved (a "show notice" pill returns it). Hidden on mobile viewers / `?report=1` popups / print. → `static/site_header.js`
+- **[ui/cleanup]** Removed the page-local copy of the announcement markup + script from `console.html` and the static `BETA Test period ends 2026-04-30` strip from `management.html` so the banner only renders once. → `static/console.html`, `static/management.html`
+- **[admin]** New **Admin → API Status** tab: live view of every `/api/*` and `/admin/api/*` request captured by the access middleware. Top KPI strip (total / 4xx / 5xx / avg / p50 / p95 / endpoint count). Endpoint roll-up table (path, hits, 4xx, 5xx, avg ms, max ms, last status, last seen). Recent requests table colour-coded by status. Path filter + optional 5-second auto-refresh. Backed by new `GET /admin/api/api-status` (admin-session-gated). → `main.py`, `static/admin.html`
+- **[admin/copy]** Announcement editor description updated to say "drives the site-wide banner shown on every /attendance/* page" instead of just /console. → `static/admin.html`
+- **[verify]** `curl /admin/api/api-status` → 401 (gated, correct). `curl /api/announcement` → 200. site_header.js syntax OK. Cache-bust bumped to `?v=2026050104` on all 6 HTML pages. → live test.
+
+## 2026-05-01 — Feedback FAB rendering fix: defensive inline `display:none`
+
+- **[bug/ui]** Fixed: the feedback modal markup was rendering as visible inline content at the bottom of pages — the FAB worked but the modal contents leaked into the page flow. Root cause: the modal relied solely on a CSS rule in `bannerCss` to be hidden; in the broken state `display:none` wasn't being applied. Made it defensive — the modal element now ships with inline `style="display:none;"` so it is hidden regardless of CSS load order or any external override, and the `.show` class flips it open with `!important`. Cache-bust bumped `?v=2026050102` → `?v=2026050103` on all 6 HTML pages so Cloudflare/browsers pick up the fixed script. → `static/site_header.js`, `static/{console,dashboard,gantt,summary,reports,management}.html`
+
+## 2026-05-01 — Feedback flow polished: floating action button + reader tab in Management
+- **[ui]** The "Send feedback" button **moved off the demo banner** into a **floating action button (FAB)** at the bottom-right of every full page (hidden on mobile viewers / report popups / print, same rules as the banner). The FAB is a green pill with a 💬 icon + "Feedback" label; on screens ≤540 px it collapses to just the icon. Hover lifts it slightly with a deeper shadow. The amber demo banner stays under the top nav as a passive notice. → `static/site_header.js`
+- **[ui]** **Polished feedback modal**: added a sticky header with title + close (✕) button; bigger card (540 px max width); larger inputs with green focus ring; per-field uppercase eyebrow labels; **live character counter** (`N / 4000`, turns amber at 3,000+, red at 3,900+); a `📍 /current/page/path` line so the operator sees which page the message is being sent from. **Ctrl/⌘ + Enter** sends from inside the textarea. Backdrop blurs slightly; close on Esc / outside-click / ✕. → `static/site_header.js`
+- **[ui/admin]** New **Management → 💬 Feedback · ご意見** tab (5th tab, next to 🗑 Data Cleanup). Read-only viewer of the feedback log. Threshold input (1..500, default 50), Refresh button, and a card-per-entry list showing: name (or *anonymous*), UTC timestamp, page path, IP, full multiline message. Calls `GET /api/feedback/recent` server-side; no DB hit. → `static/management.html`
+- **[verify]** Live: `GET /api/feedback/recent?limit=5` returns the existing test entry; FAB click on any full page (Console / Gantt / Summary / Reports / Management / Dashboard) opens the polished modal; Management → 💬 Feedback tab renders the entry as a card. → live test.
+- **[ops]** Round-15 backups (`*.bak15`) of `site_header.js` and `management.html` taken before edits.
+
+## 2026-05-01 — Data Cleanup tab: From/To range pickers (per-date deletion + Old-uploaded-files sweep)
+- **[ui]** Per-date deletion section gained an alternative input mode: From + To date pickers and a **`+ Add range`** button. Clicking expands the inclusive `[from..to]` window into individual dates and merges them into the existing chip selection (deduped, capped at the same 31-date max). Out-of-range / inverted ranges are caught with explicit alerts. The single-date `+ Add to list` button is still there for one-off picks. → `static/management.html`
+- **[ui+backend]** Old-uploaded-files retention sweep also accepts an optional **From / To** range:
+  - **UI** — two new date inputs next to the days threshold; when set, the scan filters files to those whose `extracted_date` is in the range, drops the threshold check, and recomputes `safe_to_delete = data_in_db`. The status pill includes the range (`… · range 2026-04-15 → 2026-04-22 · 1 safe to delete`). The delete confirmation message becomes `Delete every file in range … → … …` so the operator knows exactly what scope is about to be applied.
+  - **Server** — `GET /api/cleanup/old-files` and `POST /api/cleanup/old-files/delete` both accept new optional `range_from` / `range_to` parameters (or body fields). When set: `_apply_range_filter` keeps only files inside the range and recomputes `safe_to_delete = data_in_db`; the days threshold is ignored. Invalid dates / inverted ranges return 400. → `main.py`, `static/management.html`
+- **[verify]** Live: `GET /api/cleanup/old-files?range_from=2026-04-15&range_to=2026-04-22` returned `attendance: 1` (the only attendance file with a date in that window — `就業日報2026.04.18.pdf`, `safe_to_delete: true` because the DB has rows). Inverted range (`2026-04-05 → 2026-04-01`) and malformed dates both correctly return 400. → live test.
+
+## 2026-05-01 — Demo-preview banner + feedback flow appended to logs/feedback.txt
+- **[backend]** New `POST /api/feedback` body `{message, name?, page?}` validates message presence + 4 KB cap, writes one NDJSON line per submission to `logs/feedback.txt` (auto-creates the directory). Each entry carries timestamp, client IP, user-agent, the page path the message was sent from, optional name, and the message itself. Atomic-write under `_FEEDBACK_LOCK`. → `main.py`
+- **[backend]** New `GET /api/feedback/recent?limit=N` (1..500) returns the last N entries newest-first as JSON. Useful for an admin viewer; meanwhile any operator can `tail -f /var/www/attendance_app/logs/feedback.txt` for live tailing. → `main.py`
+- **[ui]** `static/site_header.js` extended to inject:
+  1. A thin amber **🚧 Demo preview** banner directly below the unified header on every page, with bilingual copy: *"This is a demo preview — your feedback is valuable and helps us improve. / これはデモ版です。ご意見・ご要望はぜひ送信してください。"*
+  2. A green **💬 Send feedback** button at the right end of the banner.
+  3. A modal that opens on click — name (optional, max 60 chars), message textarea (max 4000 chars), Send / Cancel. Inline status line shows `sending… / ✅ Thanks! / Send error: …`. Escape closes; click outside the card closes.
+- The banner is hidden on `body.mobile` (mobile viewer) and `body.report-mode` (report popups) and on print so the focused views stay clean. → `static/site_header.js`
+- **[verify]** Round-trip live: `POST /api/feedback {"message":"test from operator"}` → `{"ok": true, "stored_at": "2026-05-01T07:52:14Z", "log_path": "/var/www/attendance_app/logs/feedback.txt"}`. `GET /api/feedback/recent?limit=5` returned the entry. File content is one NDJSON line per submission. → live test.
+
+## 2026-05-01 — Branded LINE card thumbnails + data-status API + 31-day cleanup cap + USER_GUIDE.md
+- **[ui/line]** LINE Buttons-Template card now uses operator-supplied **branded thumbnails** instead of the per-day numbers snapshot. The static images live at `static/line_card_default/attendance_card.jpg` and `summary_card.jpg`. The per-day snapshot is still saved to `static/line_images/<type>_<date>.<ext>` as an audit record (and surfaced on the save response as `snapshot_url`) but no longer appears in chat. Memory file `feedback_line_flow_locked.md` updated to record this is the operator-approved final state — **don't go back to using the snapshot as the thumbnail without explicit permission**. → `main.py`, `feedback_line_flow_locked.md`
+- **[backend/api]** New `GET /api/data-status/<YYYY-MM-DD>` returns a single-glance health check across every date-keyed data source for that report date. Honours the date-rules memory: attendance + temp_staff lookups go to `shift_date = date − 1`, daily_packs / pack_items / production_plan go to `date`. Response shape: `{report_date, shift_date, all_present, missing[], blocks: {attendance, daily_packs, fullcast, production_plan}}` where each block carries `keyed_on`, `lookup_date`, row counts, and `present`. Use case: a future "📋 Verify before sending" UI pill, or a precondition check inside any report-generation flow. → `main.py`
+- **[backend]** `_CLEANUP_MAX_DATES` raised from `5` to `31` per operator request (demo / testing window — covers a full month per request). The matching frontend constant `CLEANUP_MAX_DATES` and the bilingual help copy on Management → 🗑 Data Cleanup were updated to match (`0 / 31 dates selected`, `1 回の操作で 最大 31 日付（1 ヶ月）まで`). The "no delete-all mode" rule and the consent-checkbox safety rail are unchanged. → `main.py`, `static/management.html`
+- **[docs]** New top-level `USER_GUIDE.md` (~360 lines) — covers every operator-visible feature in one place: the four-date relationship, top nav, daily workflow, manual fullcast, Reports → LINE flow, mobile viewers, four management tabs (Roster / Day-off / LINE Recipients / Cleanup), data-status endpoint, the desktop `.bat` client, an 8-row troubleshooting cheatsheet, and a "where to look for what" file index. Bilingual snippets where it counts. → `USER_GUIDE.md`
+- **[verify]** Live: `GET /api/data-status/2026-04-19` → `all_present: true` (156 attendance / 1 daily_packs summary + 16 items / 2 fullcast / 17 plan rows). `GET /api/data-status/2026-04-29` → `all_present: false, missing: ["attendance","fullcast"]` (only daily_packs + plan, no shift-date attendance or temp_staff). Cleanup cap: 31 dates passes (200), 32 rejects (`too many dates: maximum 31 per request (got 32)`). → live test.
+
+## 2026-05-01 — Gantt page Send-to-LINE button rewired: now uses the card flow (was: PDF + plain-text URL)
+- **[ui/bug-fix]** The `💬 Send PDF to LINE` button on `/gantt` was still calling the old `/api/line/upload-and-send` endpoint — it generated a real PDF via `html2pdf.js` and sent a plain-text message with a PDF link. That bypassed the new card flow entirely, so messages from the gantt page didn't match the Summary card style.
+- The handler now: (1) loads `html2canvas`, (2) captures the productivity 4-box (`#summary`) on the gantt page as a PNG, (3) posts it to `POST /api/line/send-mobile-link` with `type=attendance`. The server sends one Buttons Template card per recipient → image + title + tap button → `/attendance/m/report?date=…`. Identical card to what the Summary page sends, just with the attendance link.
+- Button label changed from `💬 Send PDF to LINE` to `💬 Send to LINE` to reflect the new behaviour. → `static/gantt.html`
+
+## 2026-05-01 — Attendance LINE card link reverted: same shape as Summary (/m/report) — un-revert
+- **[backend/un-revert]** Reverted the previous "attendance → /gantt?report=1" change. Both card types now use the symmetric `/m/<page>?date=YYYY-MM-DD` pattern: attendance → `/m/report?date=…`, summary → `/m/summary?date=…`. Operator wants both cards to open the trimmed mobile viewer pages so neither shows admin buttons / PDF prompts. Card layout (image + title + body + tap button), button label, alt text — all unchanged. → `main.py`
+
+## 2026-05-01 — Attendance LINE card links to full /gantt?date=…&report=1 instead of /m/report
+- **[backend]** `POST /api/line/send-mobile-link` for `type="attendance"` now builds `link_url = "{base}/gantt?date={date}&report=1"` instead of `{base}/m/report?date={date}`. The `?report=1` flag is honoured by `site_header.js` (added during the toolbar refactor) — it skips the unified header injection so the popup view is focused on the gantt content while keeping the in-page toolbar (date picker, legend) untouched.
+- **[backend]** `type="summary"` link is unchanged — still goes to `/m/summary?date={date}` (the rotation-aware mobile chart viewer the operator confirmed works well).
+- The card thumbnail, title, body, and `📊 View Report` / `📈 View Summary` button labels are unchanged. Only the URL behind the button changed for the attendance flow. → `main.py`
+
+## 2026-05-01 — LINE send back to Buttons Template card (link hidden behind tap button) — un-revert
+- **[backend/un-revert]** The earlier same-day revert (image + plain-text URL) was rolled back at the operator's request. `POST /api/line/send-mobile-link` again sends a **single Buttons Template card** per recipient: snapshot image as the thumbnail, `prefix + date` body, single tap button labelled `📊 View Report` / `📈 View Summary` whose URI = `/m/report?date=…` or `/m/summary?date=…`. `defaultAction` makes the whole card tappable. The raw URL is **not** rendered as plain text in the chat — that's the desired behaviour (clean card, no long URL line).
+- Response shape returns to `card_status` per recipient. Helper unchanged. `image_url` and `link_url` are still in the response body for the console UI's success toast / log. → `main.py`
+- **[note]** `_line_push` and `_line_push_image` remain available — a future flow can use them if a different message style is needed.
+
+## 2026-05-01 — Reverted LINE send to image + plain-text link (was: Buttons Template card, hid the URL)
+- **[backend/revert]** `POST /api/line/send-mobile-link` now sends **two separate messages** per recipient — an `image` message (the 4-box snapshot) followed by a `text` message containing the mobile-viewer URL — instead of a single Buttons Template card. Reason: the card layout hid the URL behind a button label and the operator wants the `/attendance/m/report?date=…` / `/attendance/m/summary?date=…` link to be visible as plain text in the chat thread.
+- The text body is the original three-line format:
+  ```
+  📋 勤怠記録 / Attendance Report
+  📅 2026-04-19
+  👉 https://rnd.asiakawaii.com/attendance/m/report?date=2026-04-19
+  ```
+- Response shape unchanged structurally — each recipient now reports both `image_status` and `text_status` (not a single `card_status`). `ok` is true only when both messages reached LINE successfully. → `main.py`
+- **[note]** `_line_push_button_template` helper is left in place (unused by `send-mobile-link` now) so a future flow can opt into card output without adding new code. The old card behaviour can be restored by swapping the two `_line_push_*` calls back for one `_line_push_button_template`. → `main.py`
+
+## 2026-05-01 — File retention: one-file-per-day on upload + 30-day retention sweep gated on DB-data presence
+- **[backend]** New helpers in `main.py`:
+  - `_extract_date_from_filename(name)` — pulls `YYYY-MM-DD` (or `YY.MM.DD`) out of an arbitrary filename. NFKC-folds first so full-width digits like `２６.０４.２９` parse the same as `26.04.29`. Two-digit years interpret as 2000s.
+  - `_delete_same_date_older_files(folder, keep, target_date)` — walks the folder and removes every file (except the just-uploaded one) whose extracted date matches `target_date`. Tolerates OS errors so a stale handle doesn't fail the upload.
+  - `_db_has_data_for_date(d, kind)` — cheap DB-presence check used by the retention sweep so we never delete a file whose data hasn't actually been ingested yet. `kind = "attendance"` checks `attendance_records`; `kind = "daily_packs"` checks `daily_pack_items` ∪ `daily_packs`.
+  - `_scan_old_files(folder, kind, days)` — returns each file with its extracted date, byte size, `is_older_than_threshold`, `data_in_db`, and `safe_to_delete = (old AND in_db)`. Files with no parseable date fall back to the file's mtime so nothing slips through. → `main.py`
+- **[backend/upload]** Both `POST /api/v1/pdf/upload` and `POST /api/v1/xlsx/upload` now apply the **one-file-per-day** rule: after a successful save, any other file in the same target folder whose filename encodes the same date is removed. The response gained `extracted_date` and `removed_same_date_files: [...]` so the desktop client can confirm the cleanup landed. Verified: uploading a 2nd `.xlsx` named `2026-04-19_v2.xlsx` to the daily-packs folder deleted the existing `夜勤用日報２６．０４．１９.xlsm` (same parsed date 2026-04-19). → `main.py`
+- **[backend/retention]** New endpoints under `/api/cleanup/`:
+  - `GET /api/cleanup/old-files?days=N` (1..365, default 30) — returns both watched folders' file lists annotated with `extracted_date / size / is_older_than_threshold / data_in_db / safe_to_delete`. Files with no DB row for their date stay `safe_to_delete: false` regardless of age — operators don't lose unprocessed input.
+  - `POST /api/cleanup/old-files/delete` body `{confirm: true, days?: N}` — re-runs the safety check server-side (so a stale UI list can't trick the server) and deletes every file flagged `safe_to_delete=true`. Returns per-folder `deleted[]` and `skipped[]` arrays with reasons. → `main.py`
+- **[ui]** New "📦 Old uploaded files · 古いアップロードファイル" section inside Management → 🗑 Data Cleanup tab. Operator picks a threshold (default 30 days), clicks **🔍 Scan**, sees two side-by-side lists (attendance + daily_packs) where each file shows its extracted date and a tag — `🗑 safe to delete` (red, will be removed), `⚠ old but no DB data — kept` (amber), or just `kept` (gray). Single big red **🗑 Delete safe-to-delete files** button at the bottom; double-confirm via browser `confirm()` because the action removes filesystem state. → `static/management.html`
+- **[verify]** Live results against the production folders:
+  - `GET /api/cleanup/old-files?days=30` returned 12 attendance files + 17 daily_packs files; correctly flagged `就業日報2026.04.01.pdf` (older than 30 days + DB has rows) as the **only** safe-to-delete file. `就業日報2026.04.10.pdf` and `夜勤用日報２６．０４．１１.xlsm` (no DB data) stayed kept.
+  - `days=999` rejected with 400 (max 365); `POST … /delete` without `confirm: true` rejected with 400.
+  - One-file-per-day round trip (xlsx): same-date upload → `removed_same_date_files: ["夜勤用日報２６．０４．１９.xlsm"]` ✓. → live test.
 
 ## 2026-05-01 — Post-save navigation: Daily Packs Excel save → /reports; フルキャスト ⚡ Auto-update → stays on fullcast tab
 - **[ui]** Save handler in `console.html` now routes the post-save destination based on which button started the flow:

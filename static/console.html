@@ -586,81 +586,14 @@
     font-size: 0.88rem;
   }
 </style>
-<script src="./static/site_header.js" defer></script>
+<script src="./static/site_header.js?v=2026050104" defer></script>
 </head>
 <body>
 
 <!-- Unified header injected by /static/site_header.js -->
 <div id="siteHeader"></div>
 
-<div id="annBanner" class="ann-banner amber hidden" role="status" aria-live="polite">
-  <span id="annBadge" class="ann-banner__badge">BETA</span>
-  <span class="ann-banner__text">
-    <span id="annTextEn"></span>
-    <span id="annTextJa" class="ann-banner__ja"></span>
-  </span>
-  <button id="annClose" class="ann-banner__close" type="button" aria-label="Dismiss" title="Dismiss">✕</button>
-</div>
-<button id="annRestore" class="ann-restore" type="button" title="Show announcement">show notice</button>
-<script>
-(function(){
-  /* Announcement banner: configurable via /admin (Announcement tab),
-     dismissible per browser (localStorage). New publishes (different
-     updated_at) clear the dismiss so users see the new notice. */
-  const $ = (id) => document.getElementById(id);
-  const COLORS = ["amber","red","blue","green","gray","purple"];
-  function dismissedKey(id){ return "annDismissed:" + id; }
-
-  async function loadAnnouncement(){
-    try{
-      const r = await fetch("/attendance/api/announcement", { cache: "no-store" });
-      const a = await r.json();
-      if (!a || a.enabled === false || (!a.text_en && !a.text_ja)) {
-        $("annBanner").classList.add("hidden");
-        $("annRestore").style.display = "none";
-        return;
-      }
-      const id = a.updated_at || (a.badge + "|" + a.text_en);
-      const isDismissed = a.dismissible !== false && localStorage.getItem(dismissedKey(id)) === "1";
-
-      const banner = $("annBanner");
-      banner.classList.remove("hidden", ...COLORS);
-      banner.classList.add(COLORS.includes(a.color) ? a.color : "amber");
-      $("annBadge").textContent = a.badge || "INFO";
-      $("annTextEn").textContent = a.text_en || "";
-      $("annTextJa").textContent = a.text_ja || "";
-      $("annClose").style.display = (a.dismissible !== false) ? "" : "none";
-      banner.dataset.annId = id;
-
-      if (isDismissed){
-        banner.classList.add("hidden");
-        $("annRestore").style.display = "inline-block";
-      } else {
-        $("annRestore").style.display = "none";
-      }
-    } catch(e){ /* silent — banner stays hidden */ }
-  }
-
-  document.addEventListener("click", (ev) => {
-    if (ev.target && ev.target.id === "annClose"){
-      const id = $("annBanner").dataset.annId;
-      if (id) localStorage.setItem(dismissedKey(id), "1");
-      $("annBanner").classList.add("hidden");
-      $("annRestore").style.display = "inline-block";
-    }
-    if (ev.target && ev.target.id === "annRestore"){
-      const id = $("annBanner").dataset.annId;
-      if (id) localStorage.removeItem(dismissedKey(id));
-      $("annBanner").classList.remove("hidden");
-      $("annRestore").style.display = "none";
-    }
-  });
-
-  loadAnnouncement();
-  /* Re-poll every 5 minutes so changes from /admin show up without a reload. */
-  setInterval(loadAnnouncement, 5 * 60 * 1000);
-})();
-</script>
+<!-- Announcement banner is injected by site_header.js on every page. -->
 
 <main class="page">
 
@@ -1861,15 +1794,25 @@ async function _parseOneXlsx(file){
 
 function _applyParsedToPreview(parsed){
   xlsxState.parsed = parsed;
-  document.getElementById("xlsxDate").value     = parsed.meta.production_date || "(missing)";
-  document.getElementById("xlsxInputBy").value  = parsed.meta.input_by || "—";
-  document.getElementById("xlsxWeather").value  = `${parsed.meta.weather || "—"} / ${parsed.meta.temperature ?? "—"}°C`;
-  $xlsxStart.value = parsed.start.start_time || "17:00";
-  document.getElementById("xlsxStartHint").textContent =
-    parsed.start.source === "auto-detected"
-      ? `auto · median IN ${parsed.start.median_in} (n=${parsed.start.n})`
+  document.getElementById("xlsxDate").value = parsed.meta.production_date || "(missing)";
+  // Make sure the dropdown contains the parser-suggested start (e.g. 17:20 / 19:20
+  // from the production plan) — the static options are 17:00 / 19:00 only.
+  const wantStart = parsed.start.start_time || "17:00";
+  if (![...$xlsxStart.options].some(o => o.value === wantStart)) {
+    const o = document.createElement("option"); o.value = wantStart; o.textContent = wantStart; $xlsxStart.appendChild(o);
+  }
+  $xlsxStart.value = wantStart;
+  const hintEl = document.getElementById("xlsxStartHint");
+  if (hintEl) {
+    hintEl.textContent =
+      parsed.start.source === "production_plan" ? `from 製造予定表 plan`
+      : parsed.start.source === "auto-detected" ? `auto · median IN ${parsed.start.median_in} (n=${parsed.start.n})`
       : (parsed.start.note || "default — no attendance data");
+  }
   $xlsxPreview.classList.remove("hidden");
+  // Render the section-totals strip + フルキャスト card + A/B/C plan cards
+  // (parity with the Auto-update flow now that extract-excel returns those fields).
+  if (typeof renderXlsxExtras === "function") renderXlsxExtras(parsed);
   return recomputePrediction();
 }
 

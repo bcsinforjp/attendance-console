@@ -869,7 +869,7 @@
   .line-card .status.ok { color: var(--brand-strong); }
   .line-card .status.err { color: var(--danger); }
 </style>
-<script src="./static/site_header.js" defer></script>
+<script src="./static/site_header.js?v=2026050104" defer></script>
 </head>
 <body>
 <div id="siteHeader"></div>
@@ -881,17 +881,8 @@
   <button id="lockBtn" class="button warn" type="button" hidden>Lock</button>
 </div>
 
-<div class="beta-banner" role="status" aria-live="polite">
-  <span class="beta-banner__badge">BETA</span>
-  <span class="beta-banner__text">
-    <b>This app is currently under test and data verification.</b>
-    <span class="beta-banner__ja">本アプリは現在テスト・データ検証中です。</span>
-    Please double-check results before relying on them.
-    <span class="beta-banner__ja">ご利用の際は結果をご確認ください。</span>
-    <b>Test period ends 2026-04-30.</b>
-    <span class="beta-banner__ja">テスト期間は 2026年4月30日 までです。</span>
-  </span>
-</div>
+<!-- Site-wide announcement banner is injected by site_header.js. -->
+
 
 <main class="page">
   <section id="lockScreen" class="lock-screen card">
@@ -974,6 +965,7 @@
       <button type="button" data-mgmt-tab="dayoff">📅 Day-off Schedule · 休暇予定表</button>
       <button type="button" data-mgmt-tab="line">💬 LINE Recipients · LINE 通知先</button>
       <button type="button" data-mgmt-tab="cleanup" style="border-color:#e8a39c;">🗑 Data Cleanup · データ削除</button>
+      <button type="button" data-mgmt-tab="feedback">💬 Feedback · ご意見</button>
     </nav>
 
     <!-- ============================================================
@@ -1171,15 +1163,19 @@
       <section class="card cleanup-card" style="border:1px solid #e8a39c;background:#fff7f6;padding:1rem 1.2rem;">
         <h2 style="color:#7a1c12;">🗑 Data Cleanup · データ削除</h2>
         <p style="font-size:.84rem;color:#6a2018;margin:.3rem 0 .6rem;">
-          Permanently deletes data for selected dates from all date-keyed tables (attendance / daily_packs / daily_pack_items / temp_staff / production_plan). Maximum <b>5 dates per operation</b> — there is no "delete all" mode by design.<br>
-          <small>選択した日付のデータを attendance / daily_packs / daily_pack_items / temp_staff / production_plan の各テーブルから完全に削除します。1 回の操作で <b>最大 5 日付まで</b>。安全のため「全件削除」モードはありません。</small>
+          Permanently deletes data for selected dates from all date-keyed tables (attendance / daily_packs / daily_pack_items / temp_staff / production_plan). Maximum <b>31 dates per operation</b> (a full month — demo/testing). There is no "delete all" mode by design.<br>
+          <small>選択した日付のデータを attendance / daily_packs / daily_pack_items / temp_staff / production_plan の各テーブルから完全に削除します。1 回の操作で <b>最大 31 日付（1 ヶ月）まで</b>。デモ・テスト中の運用に合わせた上限です。安全のため「全件削除」モードはありません。</small>
         </p>
 
         <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.6rem 0;">
           <label>Pick a date <input type="date" id="clPickDate" style="margin-left:.4rem;"></label>
           <button type="button" class="button" id="clAddDate">+ Add to list</button>
+          <span style="color:var(--muted);font-size:.78rem;">— or —</span>
+          <label>From <input type="date" id="clRangeFrom" style="margin-left:.4rem;"></label>
+          <label>To <input type="date" id="clRangeTo" style="margin-left:.4rem;"></label>
+          <button type="button" class="button" id="clAddRange">+ Add range</button>
           <span class="spacer" style="flex:1;"></span>
-          <span id="clCount" style="font-size:.78rem;color:var(--muted);">0 / 5 dates selected</span>
+          <span id="clCount" style="font-size:.78rem;color:var(--muted);">0 / 31 dates selected</span>
         </div>
 
         <div id="clDateChips" style="display:flex;gap:.4rem;flex-wrap:wrap;min-height:30px;margin-bottom:.4rem;"></div>
@@ -1219,7 +1215,96 @@
 
         <div id="clResultBox" style="display:none;border:1px solid #b8e4d8;background:#ecfaf4;color:#0b6f58;border-radius:8px;padding:.6rem .8rem;font-size:.85rem;"></div>
       </section>
+
+      <!-- ============ Old-files retention sweep ============ -->
+      <section class="card" style="margin-top:1rem;border:1px solid #d4e2e8;background:var(--surface);padding:1rem 1.2rem;">
+        <h2>📦 Old uploaded files · 古いアップロードファイル</h2>
+        <p style="font-size:.84rem;color:var(--muted);margin:.3rem 0 .6rem;">
+          Files older than the threshold get marked <b>safe to delete</b> only if their date's data is confirmed saved in the database. Files with no DB data are kept regardless of age — the operator never loses unprocessed input.<br>
+          <small>しきい値より古いファイルは、対応する日付のデータがデータベースに保存されている場合のみ「削除可能」と判定されます。DB にデータが無いファイルは古くても残ります（未処理の入力を失わないため）。</small>
+        </p>
+        <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.4rem 0;">
+          <label>Threshold (days) <input type="number" id="rtDays" min="1" max="365" value="30" style="width:80px;margin-left:.4rem;"></label>
+          <span style="color:var(--muted);font-size:.78rem;">— or scope to a range —</span>
+          <label>From <input type="date" id="rtRangeFrom" style="margin-left:.4rem;"></label>
+          <label>To <input type="date" id="rtRangeTo" style="margin-left:.4rem;"></label>
+          <button type="button" class="button" id="rtPreviewBtn">🔍 Scan</button>
+          <span class="spacer" style="flex:1;"></span>
+          <span id="rtSummary" style="font-size:.78rem;color:var(--muted);"></span>
+        </div>
+        <p style="font-size:.72rem;color:var(--muted);margin:.1rem 0 .4rem;">
+          When a range is set, files outside [From..To] are filtered out before the threshold check. Files inside the range whose data is in the database become <b>safe to delete</b>.<br>
+          <small>範囲を指定すると、その期間外のファイルはまず除外され、期間内かつ DB にデータがあるファイルのみ「削除可能」となります。</small>
+        </p>
+
+        <div id="rtResultBox" style="display:none;margin-top:.6rem;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
+            <div>
+              <h3 style="font-size:.82rem;color:var(--ink);margin-bottom:.3rem;">Attendance · 勤怠</h3>
+              <div id="rtAttendanceList" class="rt-list" style="max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface-soft);padding:.3rem;font-size:.74rem;"></div>
+            </div>
+            <div>
+              <h3 style="font-size:.82rem;color:var(--ink);margin-bottom:.3rem;">Daily Packs · デイリーパック</h3>
+              <div id="rtDailyPacksList" class="rt-list" style="max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface-soft);padding:.3rem;font-size:.74rem;"></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:.6rem;align-items:center;margin-top:.6rem;">
+            <button type="button" class="button" style="background:#b42318;color:#fff;border-color:#b42318;font-weight:700;" id="rtDeleteBtn" disabled>🗑 Delete safe-to-delete files</button>
+            <span id="rtStatus" style="font-size:.8rem;"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Processed Files (Done) ============ -->
+      <section class="card" style="margin-top:1rem;border:1px solid #b8e4d8;background:#f3fbf7;padding:1rem 1.2rem;">
+        <h2 style="color:#0b6f58;">✅ Processed Files (Done) · 処理済みファイル</h2>
+        <p style="font-size:.84rem;color:#0b6f58;margin:.3rem 0 .6rem;">
+          Files moved here automatically after their data was successfully saved into the database (PDFs after Confirm &amp; Save on Attendance, Excel files after Confirm &amp; Save on Daily Packs). Use <b>↩ Restore</b> to move a file back to its watched folder so the next Auto-update re-processes it. Use <b>🗑 Delete</b> to permanently remove the file from disk — this does <b>not</b> touch any DB data.<br>
+          <small>「保存」処理が成功したファイルは自動的にこのフォルダへ移動します。<b>↩ 復元</b> でアップロード監視フォルダに戻し、次の Auto-update で再処理できます。<b>🗑 削除</b> はファイルをディスクから完全に削除します（DB のデータには影響しません）。</small>
+        </p>
+        <div style="display:flex;gap:.6rem;align-items:center;margin:.4rem 0;">
+          <button type="button" class="button" id="dnRefreshBtn">🔄 Refresh</button>
+          <span class="spacer" style="flex:1;"></span>
+          <span id="dnSummary" style="font-size:.78rem;color:var(--muted);"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
+          <div>
+            <h3 style="font-size:.82rem;color:var(--ink);margin-bottom:.3rem;">Attendance · 勤怠 PDF</h3>
+            <div id="dnAttendancePath" style="font-size:.7rem;color:var(--muted);margin-bottom:.2rem;"></div>
+            <div id="dnAttendanceList" class="dn-list" style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:.3rem;font-size:.78rem;"></div>
+          </div>
+          <div>
+            <h3 style="font-size:.82rem;color:var(--ink);margin-bottom:.3rem;">Daily Packs · Excel</h3>
+            <div id="dnDailyPacksPath" style="font-size:.7rem;color:var(--muted);margin-bottom:.2rem;"></div>
+            <div id="dnDailyPacksList" class="dn-list" style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:.3rem;font-size:.78rem;"></div>
+          </div>
+        </div>
+        <div id="dnStatus" style="font-size:.8rem;margin-top:.5rem;"></div>
+      </section>
     </div><!-- /panel:cleanup -->
+
+    <!-- ============================================================
+         Tab 5: Feedback · ご意見 — read submissions from logs/feedback.txt
+         ============================================================ -->
+    <div data-mgmt-panel="feedback" hidden>
+      <section class="card" style="padding:1rem 1.2rem;">
+        <h2>💬 Feedback · ご意見・ご要望</h2>
+        <p style="font-size:.84rem;color:var(--muted);margin:.3rem 0 .6rem;">
+          Recent submissions from the feedback button (the 💬 floating
+          action button in the bottom-right of every page). Stored as one
+          JSON line per entry in <span class="mono">logs/feedback.txt</span>.<br>
+          <small>各ページ右下の 💬 フィードバックボタンから送信された
+          メッセージを新しい順に表示します。</small>
+        </p>
+        <div style="display:flex;gap:.6rem;align-items:center;margin:.5rem 0;flex-wrap:wrap;">
+          <label>Show <input type="number" id="fbViewLimit" min="1" max="500" value="50" style="width:70px;margin-left:.4rem;"></label>
+          <button type="button" class="button" id="fbViewRefresh">🔄 Refresh</button>
+          <span class="spacer" style="flex:1;"></span>
+          <span id="fbViewCount" style="font-size:.78rem;color:var(--muted);">—</span>
+        </div>
+        <div id="fbViewList" style="border:1px solid var(--line);border-radius:8px;background:var(--surface);max-height:60vh;overflow:auto;"></div>
+      </section>
+    </div><!-- /panel:feedback -->
 
   </section><!-- /#management -->
 </main>
@@ -2063,9 +2148,10 @@
   function show(name) {
     tabs.forEach(t => t.classList.toggle("active", t.dataset.mgmtTab === name));
     panels.forEach(p => p.toggleAttribute("hidden", p.dataset.mgmtPanel !== name));
-    if (name === "dayoff"  && !window.__dayoffInited)  { window.__dayoffInited  = true; initDayoff(); }
-    if (name === "line"    && !window.__lineMgmtInited){ window.__lineMgmtInited= true; initLineMgmt(); }
-    if (name === "cleanup" && !window.__cleanupInited) { window.__cleanupInited = true; initCleanup(); }
+    if (name === "dayoff"   && !window.__dayoffInited)   { window.__dayoffInited   = true; initDayoff(); }
+    if (name === "line"     && !window.__lineMgmtInited) { window.__lineMgmtInited = true; initLineMgmt(); }
+    if (name === "cleanup"  && !window.__cleanupInited)  { window.__cleanupInited  = true; initCleanup(); }
+    if (name === "feedback" && !window.__feedbackInited) { window.__feedbackInited = true; initFeedbackViewer(); }
   }
   tabs.forEach(t => t.addEventListener("click", () => show(t.dataset.mgmtTab)));
 })();
@@ -2074,10 +2160,18 @@
    Data Cleanup — pick up to 5 dates, preview row counts, confirm,
    then delete from every date-keyed table on the server.
    ================================================================ */
-const CLEANUP_MAX_DATES = 5;
+const CLEANUP_MAX_DATES = 31;  // demo/testing window — covers a full month
 const cleanup = { dates: [] };  // selected ISO dates, max 5
 
 function initCleanup() {
+  // --- Retention sweep panel ---
+  document.getElementById("rtPreviewBtn").addEventListener("click", retentionScan);
+  document.getElementById("rtDeleteBtn").addEventListener("click", retentionDelete);
+
+  // --- Done-files panel: load on open and on Refresh click ---
+  document.getElementById("dnRefreshBtn").addEventListener("click", loadDoneFiles);
+  loadDoneFiles();
+
   document.getElementById("clAddDate").addEventListener("click", () => {
     const v = document.getElementById("clPickDate").value;
     if (!v) return;
@@ -2090,6 +2184,34 @@ function initCleanup() {
     cleanup.dates.sort();
     renderCleanupChips();
     document.getElementById("clPickDate").value = "";
+  });
+
+  // ---- Add range button: expand From..To into individual dates ----
+  document.getElementById("clAddRange").addEventListener("click", () => {
+    const from = document.getElementById("clRangeFrom").value;
+    const to   = document.getElementById("clRangeTo").value;
+    if (!from || !to) { alert("Pick both From and To first."); return; }
+    const a = new Date(from + "T00:00:00");
+    const b = new Date(to   + "T00:00:00");
+    if (a > b) { alert("From must be ≤ To."); return; }
+    const want = [];
+    for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
+      want.push(_doFmtISO(d));
+    }
+    if (want.length > CLEANUP_MAX_DATES) {
+      alert(`Range covers ${want.length} day(s) but the maximum per operation is ${CLEANUP_MAX_DATES}. Pick a narrower window.`);
+      return;
+    }
+    // Merge with existing selection (dedup, cap, sort)
+    const merged = Array.from(new Set([...cleanup.dates, ...want])).sort();
+    if (merged.length > CLEANUP_MAX_DATES) {
+      alert(`Adding this range would push the total above ${CLEANUP_MAX_DATES} (currently ${cleanup.dates.length}, range adds ${want.length} new). Remove some chips first.`);
+      return;
+    }
+    cleanup.dates = merged;
+    renderCleanupChips();
+    document.getElementById("clRangeFrom").value = "";
+    document.getElementById("clRangeTo").value   = "";
   });
   document.getElementById("clClearBtn").addEventListener("click", () => {
     cleanup.dates = [];
@@ -2157,6 +2279,110 @@ async function runCleanupPreview() {
   }
 }
 
+async function retentionScan() {
+  const days = Math.max(1, Math.min(365, parseInt(document.getElementById("rtDays").value, 10) || 30));
+  // Optional range filter — files outside [from..to] are excluded before
+  // the threshold check, and the safe_to_delete flag is recomputed locally.
+  const rangeFrom = document.getElementById("rtRangeFrom").value || null;
+  const rangeTo   = document.getElementById("rtRangeTo").value   || null;
+  document.getElementById("rtStatus").textContent = "";
+  try {
+    const r = await fetch(_doApi("/api/cleanup/old-files?days=" + days));
+    if (!r.ok) { alert("Scan failed: " + await r.text()); return; }
+    const j = await r.json();
+
+    // Apply the optional range filter client-side
+    const inRange = (d) => {
+      if (!d) return false;
+      if (rangeFrom && d < rangeFrom) return false;
+      if (rangeTo   && d > rangeTo)   return false;
+      return true;
+    };
+    const useRange = !!(rangeFrom || rangeTo);
+    const filterAndRecompute = (files) => {
+      if (!useRange) return files;
+      return files
+        .filter(f => f.extracted_date && inRange(f.extracted_date))
+        .map(f => ({
+          ...f,
+          // When a range is set, "old enough" = inside the range. The server's
+          // is_older_than_threshold (days-based) is still preserved for reference,
+          // but safe_to_delete now follows: in-range AND data_in_db.
+          safe_to_delete: f.data_in_db === true,
+          range_filtered: true,
+        }));
+    };
+
+    const aFiles = filterAndRecompute(j.attendance.files);
+    const dFiles = filterAndRecompute(j.daily_packs.files);
+
+    const renderList = (host, files) => {
+      if (!files.length) { host.innerHTML = '<div style="color:var(--muted);padding:.4rem;">no files match</div>'; return; }
+      host.innerHTML = files.map(f => {
+        const cls = f.safe_to_delete ? "color:#b42318;font-weight:700;"
+                  : f.is_older_than_threshold && !f.data_in_db ? "color:#9b640f;"
+                  : "color:var(--muted);";
+        const tag = f.safe_to_delete ? "🗑 safe to delete"
+                  : f.is_older_than_threshold && !f.data_in_db ? "⚠ old but no DB data — kept"
+                  : "kept";
+        return `<div style="padding:.2rem .3rem;border-bottom:1px solid #eef3f5;${cls}">
+          <span class="mono" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;">${f.extracted_date || "?"}</span>
+          <span style="margin-left:.5rem;">${escapeHtmlDO(f.filename)}</span>
+          <span style="float:right;font-size:.68rem;">${tag}</span>
+        </div>`;
+      }).join("");
+    };
+
+    renderList(document.getElementById("rtAttendanceList"), aFiles);
+    renderList(document.getElementById("rtDailyPacksList"), dFiles);
+
+    const safeCount = [...aFiles, ...dFiles].filter(f => f.safe_to_delete).length;
+    const rangeLabel = useRange ? ` · range ${rangeFrom || "…"} → ${rangeTo || "…"}` : "";
+    document.getElementById("rtSummary").textContent =
+      `${aFiles.length} attendance + ${dFiles.length} daily-packs files${rangeLabel} · ${safeCount} safe to delete`;
+
+    // Stash the client-filtered list so the delete handler uses the same scope.
+    window.__rtFiltered = useRange ? { attendance: aFiles, daily_packs: dFiles } : null;
+
+    document.getElementById("rtResultBox").style.display = "block";
+    document.getElementById("rtDeleteBtn").disabled = (safeCount === 0);
+  } catch (e) {
+    alert("Scan error: " + e.message);
+  }
+}
+
+async function retentionDelete() {
+  const days = Math.max(1, Math.min(365, parseInt(document.getElementById("rtDays").value, 10) || 30));
+  const rangeFrom = document.getElementById("rtRangeFrom").value || null;
+  const rangeTo   = document.getElementById("rtRangeTo").value   || null;
+  const useRange  = !!(rangeFrom || rangeTo);
+  const scopeLabel = useRange
+    ? `in range ${rangeFrom || "…"} → ${rangeTo || "…"}`
+    : `older than ${days} days`;
+  if (!confirm(`Delete every file ${scopeLabel} whose data is confirmed in the DB?\n\n${useRange
+    ? `期間 ${rangeFrom || "…"}〜${rangeTo || "…"}`
+    : `${days} 日より古く`}、DB にデータがあることが確認できたファイルをすべて削除します。よろしいですか？`)) return;
+  document.getElementById("rtDeleteBtn").disabled = true;
+  document.getElementById("rtStatus").textContent = "deleting…";
+  try {
+    const body = { days, confirm: true };
+    if (rangeFrom) body.range_from = rangeFrom;
+    if (rangeTo)   body.range_to   = rangeTo;
+    const r = await fetch(_doApi("/api/cleanup/old-files/delete"), {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) { document.getElementById("rtStatus").textContent = "❌ " + await r.text(); return; }
+    const j = await r.json();
+    const total = (j.deleted.attendance.length + j.deleted.daily_packs.length);
+    document.getElementById("rtStatus").textContent =
+      `✅ Deleted ${total} file(s) — attendance: ${j.deleted.attendance.length}, daily_packs: ${j.deleted.daily_packs.length}`;
+    setTimeout(retentionScan, 600);  // refresh the list
+  } catch (e) {
+    document.getElementById("rtStatus").textContent = "❌ " + e.message;
+  }
+}
+
 async function runCleanupDelete() {
   document.getElementById("clDeleteBtn").disabled = true;
   document.getElementById("clStatus").textContent = "deleting…";
@@ -2186,6 +2412,99 @@ async function runCleanupDelete() {
   } catch (e) {
     document.getElementById("clStatus").textContent = "❌ " + e.message;
     document.getElementById("clDeleteBtn").disabled = !document.getElementById("clConfirmCheck").checked;
+  }
+}
+
+/* ================================================================
+   Done-files panel — list / restore / delete files in <watched>/done/.
+   Restore moves the file back to the parent watched folder so the next
+   Auto-update re-processes it. Delete unlinks the file (no DB impact).
+   ================================================================ */
+async function loadDoneFiles() {
+  const status = document.getElementById("dnStatus");
+  status.textContent = "Loading…";
+  try {
+    const r = await fetch(_doApi("/api/done-files/list"));
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    _renderDoneList("attendance", data.attendance || { path: "", files: [] });
+    _renderDoneList("daily_packs", data.daily_packs || { path: "", files: [] });
+    const aN = (data.attendance?.files || []).length;
+    const dN = (data.daily_packs?.files || []).length;
+    document.getElementById("dnSummary").textContent =
+      `${aN} attendance · ${dN} daily packs · ${aN + dN} total`;
+    status.textContent = "";
+  } catch (e) {
+    status.textContent = "❌ " + e.message;
+  }
+}
+
+function _renderDoneList(kind, block) {
+  const listEl = document.getElementById(
+    kind === "attendance" ? "dnAttendanceList" : "dnDailyPacksList"
+  );
+  const pathEl = document.getElementById(
+    kind === "attendance" ? "dnAttendancePath" : "dnDailyPacksPath"
+  );
+  pathEl.textContent = block.path || "";
+  const files = block.files || [];
+  if (!files.length) {
+    listEl.innerHTML =
+      '<div style="color:var(--muted);padding:.4rem;">No processed files yet · 処理済みファイルはありません</div>';
+    return;
+  }
+  const fmtBytes = (n) => {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / 1024 / 1024).toFixed(2) + " MB";
+  };
+  listEl.innerHTML = files
+    .map((f) => {
+      const safeName = (f.filename || "").replace(/"/g, "&quot;");
+      const dateTag = f.extracted_date
+        ? `<span class="mono" style="color:#0b6f58;font-weight:600;">${f.extracted_date}</span>`
+        : `<span style="color:var(--muted);">no date</span>`;
+      return `
+        <div style="display:flex;gap:.5rem;align-items:center;padding:.3rem .2rem;border-bottom:1px dashed var(--line);">
+          <div style="flex:1;min-width:0;">
+            <div class="mono" style="font-size:.74rem;color:var(--ink);word-break:break-all;">${safeName}</div>
+            <div style="font-size:.7rem;color:var(--muted);">${dateTag} · ${fmtBytes(f.size)} · ${f.modified || ""}</div>
+          </div>
+          <button type="button" class="button" data-act="restore" data-kind="${kind}" data-name="${safeName}" style="padding:.2rem .5rem;font-size:.74rem;">↩ Restore</button>
+          <button type="button" class="button" data-act="delete" data-kind="${kind}" data-name="${safeName}" style="padding:.2rem .5rem;font-size:.74rem;background:#b42318;color:#fff;border-color:#b42318;">🗑 Delete</button>
+        </div>`;
+    })
+    .join("");
+  // Wire up the freshly rendered buttons.
+  listEl.querySelectorAll('button[data-act]').forEach((b) => {
+    b.addEventListener("click", () => _doneAction(b.dataset.act, b.dataset.kind, b.dataset.name));
+  });
+}
+
+async function _doneAction(act, kind, filename) {
+  const status = document.getElementById("dnStatus");
+  if (act === "delete") {
+    if (!confirm(`Permanently delete "${filename}" from the Done folder?\nこの操作は取り消せません。`)) return;
+  } else if (act === "restore") {
+    if (!confirm(`Move "${filename}" back to the watched folder?\nNext Auto-update will pick it up again.`)) return;
+  }
+  status.textContent = act === "delete" ? "Deleting…" : "Restoring…";
+  try {
+    const r = await fetch(_doApi(`/api/done-files/${act}`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, filename }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.detail || `HTTP ${r.status}`);
+    }
+    status.textContent = act === "delete"
+      ? `✅ Deleted ${filename}`
+      : `✅ Restored ${filename}`;
+    await loadDoneFiles();
+  } catch (e) {
+    status.textContent = "❌ " + e.message;
   }
 }
 
@@ -2768,6 +3087,49 @@ async function lineMgmtSendHi() {
     const ok = (j.results||[]).filter(r => r.status >= 200 && r.status < 300).length;
     lineMgmtStatus(`Hi delivered to ${ok}/${(j.results||[]).length} recipient(s).`, ok ? "ok" : "err");
   } catch (e) { lineMgmtStatus("Hi error: " + e.message, "err"); }
+}
+
+/* ================================================================
+   Feedback viewer — reads /api/feedback/recent and renders one card
+   per entry. Read-only; submissions come from the floating 💬 FAB.
+   ================================================================ */
+function initFeedbackViewer() {
+  document.getElementById("fbViewRefresh").addEventListener("click", loadFeedbackList);
+  loadFeedbackList();
+}
+
+async function loadFeedbackList() {
+  const limit = Math.max(1, Math.min(500, parseInt(document.getElementById("fbViewLimit").value, 10) || 50));
+  const host = document.getElementById("fbViewList");
+  host.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--muted);">loading…</div>';
+  try {
+    const r = await fetch(_doApi("/api/feedback/recent?limit=" + limit));
+    const j = await r.json();
+    const entries = j.entries || [];
+    document.getElementById("fbViewCount").textContent = `${entries.length} of ${j.total ?? entries.length} entries (newest first)`;
+    if (!entries.length) {
+      host.innerHTML = '<div style="padding:1.4rem;text-align:center;color:var(--muted);font-size:.9rem;">No feedback yet. The 💬 floating button on every page sends submissions here.</div>';
+      return;
+    }
+    host.innerHTML = entries.map(e => {
+      if (e.raw) {  // unparsed line
+        return `<div style="padding:.6rem .8rem;border-bottom:1px solid #eef3f5;color:var(--warn);font-family:'IBM Plex Mono',monospace;font-size:.72rem;">unparsed: ${escapeHtmlDO(e.raw)}</div>`;
+      }
+      const ts = (e.ts || "").replace("T", " ").replace("Z", " UTC").slice(0, 19) + " UTC";
+      const name = e.name ? `<b style="color:var(--brand-strong);">${escapeHtmlDO(e.name)}</b>` : `<i style="color:#98a8b1;">anonymous</i>`;
+      const page = e.page ? `<span style="margin-left:.5rem;color:#5a6b73;font-family:'IBM Plex Mono',monospace;font-size:.7rem;">📍 ${escapeHtmlDO(e.page)}</span>` : "";
+      const ip   = e.ip   ? `<span style="margin-left:.5rem;color:#98a8b1;font-family:'IBM Plex Mono',monospace;font-size:.68rem;">${escapeHtmlDO(e.ip)}</span>` : "";
+      const msg  = escapeHtmlDO(e.message || "").replace(/\n/g, "<br>");
+      return `<div style="padding:.7rem .9rem;border-bottom:1px solid #eef3f5;">
+        <div style="display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;font-size:.78rem;color:var(--muted);">
+          ${name}<span class="mono" style="font-size:.72rem;color:#98a8b1;">${ts}</span>${page}${ip}
+        </div>
+        <div style="margin-top:.3rem;color:var(--ink);font-size:.86rem;line-height:1.45;white-space:pre-wrap;">${msg}</div>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    host.innerHTML = `<div style="padding:1rem;color:var(--danger);">error: ${escapeHtmlDO(err.message)}</div>`;
+  }
 }
 </script>
 </body>

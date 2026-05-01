@@ -1354,10 +1354,12 @@ async def reports_page():
 
 
 @app.get("/m/report")
+@app.get("/m/gantt")
 async def mobile_report_page():
     """Mobile attendance viewer — serves the regular gantt page so the graphics
     are 100% identical to /gantt; the page itself detects the /m/ path and
-    hides toolbar admin/print controls."""
+    hides toolbar admin/print controls. `/m/gantt` is an alias for `/m/report`
+    because operators sometimes type the latter when the desktop URL is /gantt."""
     return FileResponse(
         STATIC_DIR / "gantt.html",
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
@@ -2808,6 +2810,122 @@ def _pick_latest_pdf_in(folder: Path) -> Path | None:
     return pdfs[0]
 
 
+def _pick_pdf_for_date(folder: Path, target_date) -> Path | None:
+    """Find the PDF in `folder` whose filename encodes `target_date`.
+    Returns None if the folder has no matching file (caller turns this
+    into a 'file_not_available' 404)."""
+    if folder is None or not folder.exists() or not folder.is_dir() or target_date is None:
+        return None
+    matches = []
+    for p in folder.iterdir():
+        if not (p.is_file() and p.suffix.lower() == ".pdf"):
+            continue
+        d = _extract_date_from_filename(p.name)
+        if d == target_date:
+            matches.append(p)
+    if not matches:
+        return None
+    matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return matches[0]
+
+
+# ============================================================================
+# Done folders — files that have been successfully ingested into the DB.
+# Layout: <watched-folder>/done/<original-filename>. After a successful save
+# the source file is moved here so the watched folder only ever shows pending
+# work; the management UI exposes Restore + Delete for files in Done.
+# ============================================================================
+_DONE_SUBDIR = "done"
+
+
+def _done_dir_for(kind: str) -> Path:
+    """Resolve the Done subfolder for a kind. Creates it on demand."""
+    parent = AUTO_UPLOAD_DIR if kind == "attendance" else DAILY_PACKS_AUTO_UPLOAD_DIR
+    done = parent / _DONE_SUBDIR
+    done.mkdir(parents=True, exist_ok=True)
+    return done
+
+
+def _parent_dir_for(kind: str) -> Path:
+    """Resolve the watched (pending) folder for a kind."""
+    return AUTO_UPLOAD_DIR if kind == "attendance" else DAILY_PACKS_AUTO_UPLOAD_DIR
+
+
+_DONE_WARNINGS_LOG = BASE_DIR / "logs" / "done_warnings.log"
+
+
+def _log_done_warning(kind: str, src: Path | None, exc: Exception) -> None:
+    """Append a one-line JSON warning to logs/done_warnings.log so the
+    desktop client can later retrieve it via GET /api/v1/done-files/warnings.
+    Best-effort: failure to log is itself swallowed (we never want logging
+    to roll back a successful DB save)."""
+    try:
+        _DONE_WARNINGS_LOG.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "ts":       datetime.now().isoformat(timespec="seconds"),
+            "kind":     kind,
+            "filename": src.name if src is not None else None,
+            "src_path": str(src) if src is not None else None,
+            "error":    f"{type(exc).__name__}: {exc}",
+        }
+        with _DONE_WARNINGS_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as log_exc:
+        print(f"[DONE] failed to write done_warnings.log: {log_exc}")
+
+
+def _move_to_done(src: Path, kind: str) -> Path | None:
+    """Move `src` into the Done subfolder for `kind`. Best-effort: any error
+    is logged (stdout + logs/done_warnings.log) and swallowed so a successful
+    DB save is never rolled back by a filesystem hiccup. Overwrites a same-
+    named file in Done if one exists. Returns the destination Path on
+    success, None on failure."""
+    try:
+        if src is None or not src.exists() or not src.is_file():
+            return None
+        done = _done_dir_for(kind)
+        dest = done / src.name
+        if dest.exists():
+            try:
+                dest.unlink()
+            except Exception:
+                pass
+        try:
+            src.rename(dest)
+        except OSError:
+            # Cross-device rename → copy + unlink
+            shutil.copy2(src, dest)
+            src.unlink()
+        return dest
+    except Exception as exc:
+        print(f"[DONE] move_to_done failed for {src} ({kind}): {exc}")
+        _log_done_warning(kind, src, exc)
+        return None
+
+
+def _list_done_files(kind: str) -> list[dict]:
+    """Enumerate files in the Done folder for `kind`, newest filename first."""
+    done = _done_dir_for(kind)
+    rows: list[dict] = []
+    if not done.exists():
+        return rows
+    suffixes = (".pdf",) if kind == "attendance" else (".xlsx", ".xlsm")
+    for p in sorted(done.iterdir(), key=lambda x: x.name, reverse=True):
+        if not (p.is_file() and p.suffix.lower() in suffixes):
+            continue
+        if p.name.startswith("~$"):
+            continue
+        st = p.stat()
+        d = _extract_date_from_filename(p.name)
+        rows.append({
+            "filename": p.name,
+            "size": st.st_size,
+            "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+            "extracted_date": d.isoformat() if d else None,
+        })
+    return rows
+
+
 @app.get("/api/attendance/auto-upload/info")
 async def attendance_auto_upload_info():
     """Return the configured watched folder + contents summary (for display in UI)."""
@@ -2871,8 +2989,14 @@ async def daily_packs_auto_upload_info():
 
 
 @app.post("/api/attendance/auto-upload")
-async def attendance_auto_upload(save: bool = False):
-    """Preview (and optionally save) the most-recent PDF from the watched folder.
+async def attendance_auto_upload(save: bool = False, date: str | None = None):
+    """Preview (and optionally save) a PDF from the watched folder.
+
+    Without `date`: picks the most-recent PDF (legacy behavior).
+    With `date=YYYY-MM-DD`: picks the PDF whose filename encodes that date.
+    If no matching file exists the response is a structured 404 carrying
+    `error="file_not_available"`, the missing date, and the watched folder
+    so the desktop client can show a clear "file not on server" message.
 
     Response mirrors /api/preview-multiple for a single file when save=False,
     and additionally saves the records to the DB when save=True.
@@ -2897,9 +3021,33 @@ async def attendance_auto_upload(save: bool = False):
                    f"Set a valid folder (or single .pdf path) under the Pi's filesystem in /attendance/console.",
         )
 
-    picked = single_file if single_file is not None else _pick_latest_pdf_in(folder)
-    if picked is None:
-        raise HTTPException(status_code=404, detail=f"No PDF files found in {folder}.")
+    target_date = None
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD") from exc
+
+    if target_date is not None:
+        picked = _pick_pdf_for_date(folder, target_date) if single_file is None else (
+            single_file if _extract_date_from_filename(single_file.name) == target_date else None
+        )
+        if picked is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "file_not_available",
+                    "kind": "attendance_pdf",
+                    "requested_date": target_date.isoformat(),
+                    "watched_folder": str(folder),
+                    "message": f"No attendance PDF for {target_date.isoformat()} in {folder}. "
+                               f"Upload the PDF first via POST /api/v1/pdf/upload.",
+                },
+            )
+    else:
+        picked = single_file if single_file is not None else _pick_latest_pdf_in(folder)
+        if picked is None:
+            raise HTTPException(status_code=404, detail=f"No PDF files found in {folder}.")
 
     # Parse from the filesystem path directly — no re-upload needed.
     try:
@@ -2949,6 +3097,13 @@ async def attendance_auto_upload(save: bool = False):
         preview_data["download_url"] = build_download_url(excel_filename)
         preview_data["mismatches"] = mismatches
         preview_data["mismatch_count"] = len(mismatches)
+        # File now lives in DB → move source PDF to <watched>/done/ so the
+        # next Auto-update doesn't re-pick it. Best-effort: failures here are
+        # logged but never roll back a successful DB save.
+        moved = _move_to_done(picked, "attendance")
+        preview_data["moved_to_done"] = bool(moved)
+        if moved is not None:
+            preview_data["done_path"] = str(moved)
     else:
         preview_data["saved"] = False
 
@@ -3029,6 +3184,125 @@ def _resolve_upload_target_dir() -> Path:
         return PI_FALLBACK_UPLOAD_DIR
     return cfg
 
+# ---------------------------------------------------------------------------
+# File-retention helpers (added 2026-05-01)
+#
+# Two rules the operator asked for:
+#   1. ONE FILE PER DAY — when a new file is uploaded, any existing file
+#      whose filename encodes the same production date (older copies, name
+#      variations, etc.) is removed after the new upload succeeds.
+#   2. 30-DAY RETENTION — files in the watched folders older than ~30 days
+#      get cleaned up on demand, BUT only when the corresponding date's
+#      data is confirmed saved in the database. Files for which the DB has
+#      nothing get retained even past the threshold so the operator doesn't
+#      lose unprocessed input.
+# ---------------------------------------------------------------------------
+
+def _extract_date_from_filename(name: str):
+    """Pull YYYY-MM-DD (or YY.MM.DD) out of a filename. Handles full-width
+    digits (２６.０４.２９) by NFKC-folding first, and accepts a few separator
+    variants (`.`, `-`, `_`, `/`). Two-digit years are interpreted as 2000s."""
+    if not name:
+        return None
+    s = unicodedata.normalize("NFKC", name)
+    # Try 4-digit year first, then 2-digit
+    candidates = (
+        re.search(r"(\d{4})[\.\-_\s/]?(\d{1,2})[\.\-_\s/]?(\d{1,2})", s),
+        re.search(r"(\d{2})[\.\-_\s/](\d{1,2})[\.\-_\s/](\d{1,2})", s),
+    )
+    for m in candidates:
+        if not m:
+            continue
+        try:
+            y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if y < 100:
+                y += 2000
+            return datetime(y, mo, d).date()
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def _delete_same_date_older_files(folder: Path, keep_path: Path, target_date) -> list[str]:
+    """Walk `folder`, delete every file (except `keep_path`) whose filename
+    encodes `target_date`. Returns the list of removed filenames so the caller
+    can include it in the upload response."""
+    removed: list[str] = []
+    if folder is None or not folder.exists() or target_date is None:
+        return removed
+    keep_resolved = keep_path.resolve()
+    for f in folder.iterdir():
+        try:
+            if not f.is_file():
+                continue
+            if f.resolve() == keep_resolved:
+                continue
+            d = _extract_date_from_filename(f.name)
+            if d == target_date:
+                f.unlink()
+                removed.append(f.name)
+        except OSError:
+            # don't crash the upload because of a stale handle / perm error
+            continue
+    return removed
+
+
+def _db_has_data_for_date(d, kind: str) -> bool:
+    """Cheap presence check for retention safety. Returns True if at least
+    one row keyed on `d` exists in the relevant tables for `kind`."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            if kind == "attendance":
+                cur.execute("SELECT 1 FROM attendance_records WHERE record_date = %s LIMIT 1", (d,))
+            elif kind == "daily_packs":
+                # Either daily_pack_items or daily_packs proves the day got saved.
+                cur.execute(
+                    "SELECT 1 FROM daily_pack_items WHERE production_date = %s "
+                    "UNION ALL SELECT 1 FROM daily_packs WHERE record_date = %s LIMIT 1",
+                    (d, d),
+                )
+            else:
+                return False
+            return cur.fetchone() is not None
+
+
+def _scan_old_files(folder: Path, kind: str, days: int) -> list[dict]:
+    """List files in `folder` along with extracted date + DB-data presence.
+    `kind` is `attendance` or `daily_packs` and decides which tables to check."""
+    out: list[dict] = []
+    if folder is None or not folder.exists():
+        return out
+    cutoff = datetime.utcnow().date() - timedelta(days=days)
+    for f in folder.iterdir():
+        if not f.is_file():
+            continue
+        d = _extract_date_from_filename(f.name)
+        is_old = (d is not None and d <= cutoff)
+        # Files with no parseable date fall back to mtime
+        if d is None:
+            try:
+                mtime = datetime.utcfromtimestamp(f.stat().st_mtime).date()
+                is_old = mtime <= cutoff
+                d = mtime
+            except OSError:
+                d = None
+                is_old = False
+        try:
+            size = f.stat().st_size
+        except OSError:
+            size = 0
+        in_db = _db_has_data_for_date(d, kind) if d is not None else False
+        out.append({
+            "filename": f.name,
+            "extracted_date": d.isoformat() if d else None,
+            "size": size,
+            "is_older_than_threshold": is_old,
+            "data_in_db": in_db,
+            "safe_to_delete": is_old and in_db,
+        })
+    return sorted(out, key=lambda r: (r["extracted_date"] or "", r["filename"]))
+
+
 def _resolve_packs_target_dir() -> Path:
     """Pick the directory to write incoming daily-packs files into. Mirrors
     `_resolve_upload_target_dir` but for the daily-packs watched folder."""
@@ -3047,7 +3321,12 @@ def _resolve_packs_target_dir() -> Path:
 async def v1_xlsx_upload(file: UploadFile = File(...), key_label: str = Depends(require_api_key)):
     """Save an .xlsx into the daily-packs watched folder. Idempotent by filename.
     Companion to /api/v1/pdf/upload — used by the desktop client to push the
-    daily フルキャスト Excel up so /api/daily-packs/auto-extract-excel can find it."""
+    daily フルキャスト Excel up so /api/daily-packs/auto-extract-excel can find it.
+
+    One-file-per-day rule: after a successful save, any other file in the
+    same folder whose filename encodes the same date is removed so only the
+    latest copy lives in the watched folder.
+    """
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="filename must end in .xlsx or .xlsm")
     target_dir = _resolve_packs_target_dir()
@@ -3060,12 +3339,17 @@ async def v1_xlsx_upload(file: UploadFile = File(...), key_label: str = Depends(
     if len(content) > 50 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="file too large (>50 MB)")
     dest.write_bytes(content)
+    # One-file-per-day cleanup
+    target_date = _extract_date_from_filename(safe_name)
+    removed_same_date = _delete_same_date_older_files(target_dir, dest, target_date)
     return {
         "ok": True,
         "filename": safe_name,
         "size": len(content),
         "stored_in": str(target_dir),
         "received_from_key": key_label,
+        "extracted_date": target_date.isoformat() if target_date else None,
+        "removed_same_date_files": removed_same_date,
     }
 
 
@@ -3075,6 +3359,11 @@ async def v1_pdf_upload(file: UploadFile = File(...), key_label: str = Depends(r
 
     Falls back to BASE_DIR/auto_uploads if the configured path can't be used
     on the Pi (e.g. a Windows-only path like E:\\...).
+
+    One-file-per-day rule: on success, other files in the same folder whose
+    filename encodes the same date are removed (older copies / re-uploads
+    with different naming) so the latest one is the only one parseable by
+    the auto-extract endpoint.
     """
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="filename must end in .pdf")
@@ -3085,12 +3374,16 @@ async def v1_pdf_upload(file: UploadFile = File(...), key_label: str = Depends(r
     content = await file.read()
     validate_pdf_content(content)
     dest.write_bytes(content)
+    target_date = _extract_date_from_filename(safe_name)
+    removed_same_date = _delete_same_date_older_files(target_dir, dest, target_date)
     return {
         "ok": True,
         "filename": safe_name,
         "size": len(content),
         "stored_in": str(target_dir),
         "received_from_key": key_label,
+        "extracted_date": target_date.isoformat() if target_date else None,
+        "removed_same_date_files": removed_same_date,
     }
 
 @app.get("/api/v1/pdf/list")
@@ -3116,10 +3409,102 @@ async def v1_pdf_retrieve(filename: str, key_label: str = Depends(require_api_ke
         raise HTTPException(status_code=404, detail=f"{safe} not found in {AUTO_UPLOAD_DIR}")
     return FileResponse(target, media_type="application/pdf", filename=safe)
 
+
+@app.get("/api/v1/xlsx/list")
+async def v1_xlsx_list(key_label: str = Depends(require_api_key)):
+    """List daily-packs Excel files already on the server. Each entry carries
+    the parsed date from the filename so the desktop client can match a target
+    report_date to a file before triggering /api/daily-packs/auto-extract-excel.
+    """
+    folder = DAILY_PACKS_AUTO_UPLOAD_DIR
+    if not folder.exists():
+        return {"path": str(folder), "exists": False, "files": []}
+    files = []
+    for p in sorted(folder.iterdir(), key=lambda x: x.name, reverse=True):
+        if (
+            p.is_file()
+            and p.suffix.lower() in (".xlsx", ".xlsm")
+            and not p.name.startswith("~$")
+        ):
+            st = p.stat()
+            d = _extract_date_from_filename(p.name)
+            files.append({
+                "filename": p.name,
+                "size": st.st_size,
+                "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+                "extracted_date": d.isoformat() if d else None,
+            })
+    return {"path": str(folder), "exists": True, "count": len(files), "files": files}
+
 @app.post("/api/v1/pdf/auto-upload")
-async def v1_pdf_auto_upload(save: bool = False, key_label: str = Depends(require_api_key)):
-    """Trigger preview/save of the latest PDF in the watched folder (key-protected)."""
-    return await attendance_auto_upload(save=save)
+async def v1_pdf_auto_upload(
+    save: bool = False,
+    date: str | None = None,
+    key_label: str = Depends(require_api_key),
+):
+    """Trigger preview/save of a PDF in the watched folder (key-protected).
+
+    Without `date`: picks the latest PDF (legacy behavior — backward-compatible).
+    With `date=YYYY-MM-DD`: picks the PDF whose filename encodes that date.
+    Returns a structured `file_not_available` 404 when the requested date has
+    no PDF in the watched folder.
+    """
+    return await attendance_auto_upload(save=save, date=date)
+
+
+@app.get("/api/v1/done-files/warnings")
+async def v1_done_warnings(
+    limit: int = 200,
+    kind: str | None = None,
+    key_label: str = Depends(require_api_key),
+):
+    """Return recent move-to-done warnings (key-protected).
+
+    Each warning is one JSON line written by `_log_done_warning` whenever a
+    successful DB save was followed by a failed file move (filesystem error,
+    cross-device rename failure, race with manual file deletion, etc.). The DB
+    state is correct — only the file is still sitting in the watched folder
+    instead of `done/`. The desktop client can poll this endpoint to surface
+    the warning to the operator so they can retry the move (or just drag the
+    file into Done themselves).
+
+    Query params:
+      - `limit` — max entries to return (newest last). Clamped to [1, 2000].
+      - `kind`  — optional filter `attendance` | `daily_packs`.
+    """
+    n = max(1, min(int(limit or 200), 2000))
+    if kind is not None and kind not in ("attendance", "daily_packs"):
+        raise HTTPException(status_code=400, detail="kind must be 'attendance' or 'daily_packs'")
+    if not _DONE_WARNINGS_LOG.exists():
+        return {
+            "path":     str(_DONE_WARNINGS_LOG),
+            "exists":   False,
+            "count":    0,
+            "warnings": [],
+        }
+    entries: list[dict] = []
+    try:
+        with _DONE_WARNINGS_LOG.open("r", encoding="utf-8") as f:
+            tail = f.readlines()[-n:]
+        for line in tail:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            if kind is not None and e.get("kind") != kind:
+                continue
+            entries.append(e)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"could not read warnings log: {exc}") from exc
+    return {
+        "path":     str(_DONE_WARNINGS_LOG),
+        "exists":   True,
+        "count":    len(entries),
+        "warnings": entries,
+    }
 
 
 # ============================================================================
@@ -3201,6 +3586,60 @@ async def admin_access_log(request: Request, limit: int = 100):
     with _access_lock:
         items = list(_recent_access[-limit:])
     return {"count": len(items), "items": list(reversed(items))}
+
+@app.get("/admin/api/api-status")
+async def admin_api_status(request: Request, limit: int = 200):
+    """API request/response status — every /api/* hit captured by the access
+    middleware, plus rolled-up endpoint stats. Drives the Admin → API Status tab."""
+    _require_admin_session(request)
+    limit = max(1, min(limit, _RECENT_MAX))
+    with _access_lock:
+        snapshot = list(_recent_access)
+    # Filter to API endpoints only.
+    api_items = [it for it in snapshot if (it.get("path") or "").startswith("/api/")
+                 or (it.get("path") or "").startswith("/admin/api/")]
+    # Per-endpoint roll-up.
+    by_path: dict[str, dict] = {}
+    for it in api_items:
+        path = it.get("path") or "?"
+        st   = int(it.get("status") or 0)
+        dur  = int(it.get("duration_ms") or 0)
+        row  = by_path.setdefault(path, {
+            "path": path, "count": 0, "errors_4xx": 0, "errors_5xx": 0,
+            "total_ms": 0, "max_ms": 0, "last_status": None, "last_ts": None,
+        })
+        row["count"]     += 1
+        row["total_ms"]  += dur
+        row["max_ms"]     = max(row["max_ms"], dur)
+        row["last_status"] = st
+        row["last_ts"]    = it.get("ts")
+        if 400 <= st < 500: row["errors_4xx"] += 1
+        if st >= 500:       row["errors_5xx"] += 1
+    endpoints = []
+    for row in by_path.values():
+        row["avg_ms"] = round(row["total_ms"] / row["count"]) if row["count"] else 0
+        endpoints.append(row)
+    endpoints.sort(key=lambda r: r["count"], reverse=True)
+    # Summary
+    total = len(api_items)
+    err4  = sum(1 for it in api_items if 400 <= int(it.get("status") or 0) < 500)
+    err5  = sum(1 for it in api_items if int(it.get("status") or 0) >= 500)
+    durs  = [int(it.get("duration_ms") or 0) for it in api_items]
+    durs_sorted = sorted(durs)
+    p50 = durs_sorted[len(durs_sorted)//2] if durs_sorted else 0
+    p95 = durs_sorted[int(len(durs_sorted)*0.95)] if durs_sorted else 0
+    avg = round(sum(durs)/len(durs)) if durs else 0
+    return {
+        "summary": {
+            "total": total, "errors_4xx": err4, "errors_5xx": err5,
+            "avg_ms": avg, "p50_ms": p50, "p95_ms": p95,
+            "endpoint_count": len(endpoints),
+            "buffer_size": _RECENT_MAX,
+            "buffer_used": len(snapshot),
+        },
+        "endpoints": endpoints,
+        "recent": list(reversed(api_items[-limit:])),
+    }
 
 @app.get("/admin/api/alerts")
 async def admin_alerts(request: Request):
@@ -5106,20 +5545,69 @@ def _pick_latest_xlsx_in(folder: Path):
     return files[0]
 
 
+def _pick_xlsx_for_date(folder: Path, target_date) -> Path | None:
+    """Find the .xlsx/.xlsm in `folder` whose filename encodes `target_date`.
+    Returns None if no match (caller turns this into a 'file_not_available' 404)."""
+    if folder is None or not folder.exists() or not folder.is_dir() or target_date is None:
+        return None
+    matches = []
+    for p in folder.iterdir():
+        if not (p.is_file() and p.suffix.lower() in (".xlsx", ".xlsm")):
+            continue
+        if p.name.startswith("~$"):
+            continue
+        d = _extract_date_from_filename(p.name)
+        if d == target_date:
+            matches.append(p)
+    if not matches:
+        return None
+    matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return matches[0]
+
+
 @app.post("/api/daily-packs/auto-extract-excel")
-async def auto_extract_daily_pack_excel():
-    """Pick the latest .xlsx in the daily-packs watched folder, parse it, and
-    return preview + start-time suggestion + prediction. Mirrors the PDF
-    `auto-extract` so the Excel segment can reuse the Auto-update pattern."""
+async def auto_extract_daily_pack_excel(date: str | None = None):
+    """Pick an .xlsx in the daily-packs watched folder, parse it, and return
+    preview + start-time suggestion + prediction. Mirrors the PDF
+    `auto-extract` so the Excel segment can reuse the Auto-update pattern.
+
+    Without `date`: picks the latest .xlsx (legacy behavior).
+    With `date=YYYY-MM-DD`: picks the .xlsx whose filename encodes that date.
+    Returns a structured `file_not_available` 404 if no file matches.
+    """
     folder, single_file = _resolve_watched_target(DAILY_PACKS_AUTO_UPLOAD_DIR)
     if folder is None:
         path_str = str(DAILY_PACKS_AUTO_UPLOAD_DIR)
         if _looks_like_windows_path(path_str):
             raise HTTPException(status_code=404, detail=f"Configured path is a Windows-only path the Pi cannot read: {path_str}")
         raise HTTPException(status_code=404, detail=f"Watched path not reachable: {path_str}")
-    picked = single_file if (single_file is not None and single_file.suffix.lower() in (".xlsx", ".xlsm")) else _pick_latest_xlsx_in(folder)
-    if picked is None:
-        raise HTTPException(status_code=404, detail=f"No .xlsx files found in {folder}")
+    target_date = None
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD") from exc
+    if target_date is not None:
+        if single_file is not None and single_file.suffix.lower() in (".xlsx", ".xlsm"):
+            picked = single_file if _extract_date_from_filename(single_file.name) == target_date else None
+        else:
+            picked = _pick_xlsx_for_date(folder, target_date)
+        if picked is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "file_not_available",
+                    "kind": "daily_packs_xlsx",
+                    "requested_date": target_date.isoformat(),
+                    "watched_folder": str(folder),
+                    "message": f"No daily-packs Excel for {target_date.isoformat()} in {folder}. "
+                               f"Upload the .xlsx first via POST /api/v1/xlsx/upload.",
+                },
+            )
+    else:
+        picked = single_file if (single_file is not None and single_file.suffix.lower() in (".xlsx", ".xlsm")) else _pick_latest_xlsx_in(folder)
+        if picked is None:
+            raise HTTPException(status_code=404, detail=f"No .xlsx files found in {folder}")
     try:
         parsed = parse_daily_pack_excel(picked)
     except Exception as exc:
@@ -5173,6 +5661,10 @@ async def extract_daily_pack_excel(file: UploadFile = File(...)):
     rates = _load_rates()
     pdate = parsed["meta"].get("production_date")
     start = _suggest_start_time(pdate) if pdate else {"start_time": "17:00", "source": "default", "n": 0, "candidates": ["17:00", "19:00"]}
+    plan = parsed.get("production_plan") or {}
+    if plan.get("section_start_time"):
+        start = {"start_time": plan["section_start_time"], "source": "production_plan", "n": None,
+                 "candidates": [start.get("start_time"), plan["section_start_time"]]}
     prediction = _build_prediction(parsed["products"], start["start_time"], rates)
     return {
         "source_filename": file.filename,
@@ -5180,6 +5672,12 @@ async def extract_daily_pack_excel(file: UploadFile = File(...)):
         "products":        parsed["products"],
         "start":           start,
         "prediction":      prediction,
+        # New blocks (parity with /auto-extract-excel) so the drag-drop UI
+        # populates the section-totals strip + フルキャスト card + A/B/C
+        # plan preview AND the subsequent save carries them through.
+        "section_totals":  parsed.get("section_totals"),
+        "fullcast":        parsed.get("fullcast") or [],
+        "production_plan": parsed.get("production_plan"),
     }
 
 
@@ -5379,6 +5877,17 @@ async def save_daily_pack_excel(payload: dict = Body(...)):
                              source),
                         )
         conn.commit()
+    # File now lives in DB → move source Excel to <packs-watched>/done/ so the
+    # next Auto-update doesn't re-pick it. Best-effort: any error is logged but
+    # never rolls back the just-committed batch. We resolve the source by name
+    # in the watched folder (the payload only carries the basename).
+    moved_to_done: str | None = None
+    if source:
+        candidate = DAILY_PACKS_AUTO_UPLOAD_DIR / Path(source).name
+        if candidate.exists() and candidate.is_file():
+            moved = _move_to_done(candidate, "daily_packs")
+            if moved is not None:
+                moved_to_done = str(moved)
     return {
         "ok": True,
         "batch_id": batch_id,
@@ -5394,7 +5903,92 @@ async def save_daily_pack_excel(payload: dict = Body(...)):
         "section_start_time": sec_start_t,
         "fullcast_saved": (0 if payload.get("skip_fullcast") else len(payload.get("fullcast") or [])),
         "plan_lines_saved": {k: len(v or []) for k, v in plan_lines.items()},
+        "moved_to_done": bool(moved_to_done),
+        "done_path": moved_to_done,
     }
+
+
+# ---------------------------------------------------------------------------
+# Done-folder management — list / restore / delete files that have already
+# been ingested into the DB. Three endpoints, all browser-facing (no API key)
+# to match the rest of the management surface. The Done subfolders are
+# auto-created the first time _move_to_done() runs.
+# ---------------------------------------------------------------------------
+def _validate_done_kind(kind: str) -> str:
+    if kind not in ("attendance", "daily_packs"):
+        raise HTTPException(status_code=400, detail="kind must be 'attendance' or 'daily_packs'")
+    return kind
+
+
+def _safe_done_path(kind: str, filename: str) -> Path:
+    """Resolve Done folder + a basename-only filename. Rejects path-traversal
+    attempts (anything containing a separator or resolving outside Done)."""
+    base = (filename or "").strip()
+    if not base or base != Path(base).name:
+        raise HTTPException(status_code=400, detail="filename must be a plain basename")
+    done = _done_dir_for(kind)
+    target = (done / base).resolve()
+    try:
+        target.relative_to(done.resolve())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="filename escapes Done folder") from exc
+    return target
+
+
+@app.get("/api/done-files/list")
+async def done_files_list():
+    """Return both Done folders' contents in one shot for the management UI."""
+    return {
+        "attendance": {
+            "path":  str(_done_dir_for("attendance")),
+            "files": _list_done_files("attendance"),
+        },
+        "daily_packs": {
+            "path":  str(_done_dir_for("daily_packs")),
+            "files": _list_done_files("daily_packs"),
+        },
+    }
+
+
+@app.post("/api/done-files/restore")
+async def done_files_restore(payload: dict = Body(...)):
+    """Move a Done file back to its watched (pending) folder so the next
+    Auto-update can re-process it. Overwrites a same-named file in the parent."""
+    kind = _validate_done_kind((payload.get("kind") or "").strip())
+    src = _safe_done_path(kind, payload.get("filename") or "")
+    if not src.exists() or not src.is_file():
+        raise HTTPException(status_code=404, detail=f"{src.name} not found in Done")
+    parent = _parent_dir_for(kind)
+    parent.mkdir(parents=True, exist_ok=True)
+    dest = parent / src.name
+    if dest.exists():
+        try:
+            dest.unlink()
+        except Exception:
+            pass
+    try:
+        src.rename(dest)
+    except OSError:
+        shutil.copy2(src, dest)
+        src.unlink()
+    return {
+        "ok": True,
+        "kind": kind,
+        "filename": src.name,
+        "restored_to": str(dest),
+    }
+
+
+@app.post("/api/done-files/delete")
+async def done_files_delete(payload: dict = Body(...)):
+    """Permanently delete a file from the Done folder. The UI gates this with
+    a two-step confirm; no soft-delete on the server side."""
+    kind = _validate_done_kind((payload.get("kind") or "").strip())
+    target = _safe_done_path(kind, payload.get("filename") or "")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail=f"{target.name} not found in Done")
+    target.unlink()
+    return {"ok": True, "kind": kind, "filename": target.name, "deleted": True}
 
 
 # ---------------------------------------------------------------------------
@@ -5410,7 +6004,7 @@ _CLEANUP_TABLES: list[tuple[str, str]] = [
     ("temp_staff",         "record_date"),
     ("production_plan",    "record_date"),
 ]
-_CLEANUP_MAX_DATES = 5
+_CLEANUP_MAX_DATES = 31  # Demo/testing window — covers a full month per request.
 
 
 def _parse_cleanup_dates(raw) -> list:
@@ -5438,6 +6032,251 @@ def _parse_cleanup_dates(raw) -> list:
         raise HTTPException(status_code=400,
             detail=f"too many dates: maximum {_CLEANUP_MAX_DATES} per request (got {len(out)})")
     return sorted(out)
+
+
+# ---------------------------------------------------------------------------
+# Feedback log — append-only text file driven by the demo banner's
+# "Send feedback" button. No DB, no auth — just a plain newline-delimited
+# file the operator can read directly. Hard-capped at 4 KB per message.
+# ---------------------------------------------------------------------------
+FEEDBACK_LOG_PATH = BASE_DIR / "logs" / "feedback.txt"
+_FEEDBACK_LOCK = threading.Lock()
+
+
+@app.post("/api/feedback")
+async def feedback_submit(payload: dict = Body(...), request: Request = None):
+    msg  = (payload.get("message") or "").strip()
+    name = (payload.get("name") or "").strip()[:60]
+    page = (payload.get("page") or "").strip()[:200]
+    if not msg:
+        raise HTTPException(status_code=400, detail="message required")
+    if len(msg) > 4000:
+        raise HTTPException(status_code=400, detail="message too long (max 4000 chars)")
+    ip = request.client.host if request and request.client else "?"
+    ua = (request.headers.get("user-agent") if request else "") or ""
+    ts = datetime.utcnow().isoformat() + "Z"
+    # NDJSON-style line so future tooling can parse each entry without
+    # ambiguity (multi-line messages are kept inside the JSON string).
+    entry = json.dumps({
+        "ts": ts, "ip": ip, "name": name or None, "page": page or None,
+        "ua": ua[:200], "message": msg,
+    }, ensure_ascii=False)
+    with _FEEDBACK_LOCK:
+        FEEDBACK_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with FEEDBACK_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(entry + "\n")
+    return {"ok": True, "stored_at": ts, "log_path": str(FEEDBACK_LOG_PATH)}
+
+
+@app.get("/api/feedback/recent")
+async def feedback_recent(limit: int = 50):
+    """Return the last N feedback entries (newest first). Used by an admin
+    UI later if desired; for now an operator can also just `tail -f` the
+    feedback file directly."""
+    if limit < 1 or limit > 500:
+        raise HTTPException(status_code=400, detail="limit must be 1..500")
+    if not FEEDBACK_LOG_PATH.exists():
+        return {"entries": []}
+    try:
+        lines = FEEDBACK_LOG_PATH.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {"entries": []}
+    out = []
+    for line in lines[-limit:]:
+        try:
+            out.append(json.loads(line))
+        except Exception:
+            out.append({"raw": line})
+    out.reverse()
+    return {"entries": out, "total": len(lines)}
+
+
+@app.get("/api/data-status/{date}")
+async def data_status(date: str):
+    """Single-date health check across every data source the operator
+    cares about. Returns row counts + a simple `present` boolean per kind
+    so the UI can show "✓ have / ✗ missing" badges before triggering a
+    report-generation flow.
+
+    Date interpretation follows project_date_rules.md (memory):
+      • attendance        keyed on attendance PDF date  = `date − 1`
+      • daily_packs / pack_items / production_plan  keyed on `date`
+      • temp_staff (フルキャスト) keyed on shift_date   = `date − 1`
+
+    The response includes both `report_date` (= input) and `shift_date`
+    (= input − 1) so the caller can see which day each table was queried
+    against. Missing-data warnings name the specific kind so the operator
+    knows what to fix before retrying.
+    """
+    try:
+        d = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD") from exc
+    shift_d = d - timedelta(days=1)
+
+    def _count(query: str, *params) -> int:
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, params)
+                    row = cur.fetchone()
+                    return int(row[0]) if row else 0
+        except Exception:
+            return 0
+
+    n_attendance = _count("SELECT COUNT(*) FROM attendance_records WHERE record_date = %s", shift_d)
+    n_daily_packs_summary = _count("SELECT COUNT(*) FROM daily_packs WHERE record_date = %s", d)
+    n_pack_items   = _count("SELECT COUNT(*) FROM daily_pack_items WHERE production_date = %s", d)
+    n_fullcast     = _count("SELECT COUNT(*) FROM temp_staff WHERE record_date = %s", shift_d)
+    n_plan         = _count("SELECT COUNT(*) FROM production_plan WHERE record_date = %s", d)
+
+    blocks = {
+        "attendance": {
+            "keyed_on": "attendance PDF date (= report_date − 1)",
+            "lookup_date": shift_d.isoformat(),
+            "rows": n_attendance,
+            "present": n_attendance > 0,
+        },
+        "daily_packs": {
+            "keyed_on": "production date (= report_date)",
+            "lookup_date": d.isoformat(),
+            "rows_summary": n_daily_packs_summary,
+            "rows_items": n_pack_items,
+            "present": (n_daily_packs_summary > 0) or (n_pack_items > 0),
+        },
+        "fullcast": {
+            "keyed_on": "shift_date (= report_date − 1)",
+            "lookup_date": shift_d.isoformat(),
+            "rows": n_fullcast,
+            "present": n_fullcast > 0,
+        },
+        "production_plan": {
+            "keyed_on": "production date (= report_date)",
+            "lookup_date": d.isoformat(),
+            "rows": n_plan,
+            "present": n_plan > 0,
+        },
+    }
+    missing = [k for k, v in blocks.items() if not v["present"]]
+    return {
+        "report_date": d.isoformat(),
+        "shift_date":  shift_d.isoformat(),
+        "all_present": len(missing) == 0,
+        "missing":     missing,
+        "blocks":      blocks,
+    }
+
+
+def _apply_range_filter(files: list[dict], range_from: str | None, range_to: str | None) -> list[dict]:
+    """When a date range is set, filter files to those whose extracted_date
+    is in [range_from..range_to] inclusive. `safe_to_delete` is recomputed:
+    in-range + DB has data → safe. The threshold (days) becomes irrelevant
+    because the operator is being explicit about which window to clean.
+    Files outside the range are dropped from the list."""
+    if not (range_from or range_to):
+        return files
+    out = []
+    for f in files:
+        d = f.get("extracted_date")
+        if not d:
+            continue
+        if range_from and d < range_from:
+            continue
+        if range_to and d > range_to:
+            continue
+        f = dict(f)
+        f["range_filtered"] = True
+        f["safe_to_delete"] = bool(f.get("data_in_db"))
+        out.append(f)
+    return out
+
+
+@app.get("/api/cleanup/old-files")
+async def cleanup_old_files(days: int = 30,
+                            range_from: str | None = None,
+                            range_to:   str | None = None):
+    """List files in BOTH watched folders, with each file's extracted date,
+    DB-data presence, and whether it's safe to delete.
+
+    Two modes:
+      • days-only (default): safe_to_delete = (older than `days`) AND DB has data
+      • range-set: safe_to_delete = (extracted_date in [range_from..range_to]) AND DB has data
+        Files outside the range are dropped. `days` is ignored when range is set.
+
+    Files for which the DB has nothing are NEVER safe_to_delete — operators
+    don't lose unprocessed input."""
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=400, detail="days must be 1..365")
+    for v in (range_from, range_to):
+        if v and not _DAYOFF_DATE_RE.match(v):
+            raise HTTPException(status_code=400, detail=f"bad range date '{v}' (expected YYYY-MM-DD)")
+    if range_from and range_to and range_from > range_to:
+        raise HTTPException(status_code=400, detail="range_from must be ≤ range_to")
+    a_files = _scan_old_files(AUTO_UPLOAD_DIR,            "attendance",  days)
+    d_files = _scan_old_files(DAILY_PACKS_AUTO_UPLOAD_DIR, "daily_packs", days)
+    a_files = _apply_range_filter(a_files, range_from, range_to)
+    d_files = _apply_range_filter(d_files, range_from, range_to)
+    return {
+        "days_threshold": days,
+        "range_from": range_from,
+        "range_to":   range_to,
+        "today": datetime.utcnow().date().isoformat(),
+        "attendance":  {"folder": str(AUTO_UPLOAD_DIR),            "files": a_files},
+        "daily_packs": {"folder": str(DAILY_PACKS_AUTO_UPLOAD_DIR), "files": d_files},
+    }
+
+
+@app.post("/api/cleanup/old-files/delete")
+async def cleanup_old_files_delete(payload: dict = Body(...)):
+    """Delete files flagged safe_to_delete=true from the watched folders.
+    Requires `confirm: true`. Re-runs the safety check server-side so a stale
+    UI list can't trick the server into deleting a file whose DB data has
+    since disappeared.
+
+    Body: { confirm: true, days?: 30, range_from?: YYYY-MM-DD, range_to?: YYYY-MM-DD }
+    Range-set semantics match the GET endpoint: when both are present, only
+    files whose extracted_date is in [range_from..range_to] are eligible,
+    and `days` is ignored.
+    """
+    if not payload.get("confirm"):
+        raise HTTPException(status_code=400, detail="confirm: true is required")
+    days = int(payload.get("days") or 30)
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=400, detail="days must be 1..365")
+    range_from = payload.get("range_from") or None
+    range_to   = payload.get("range_to") or None
+    for v in (range_from, range_to):
+        if v and not _DAYOFF_DATE_RE.match(v):
+            raise HTTPException(status_code=400, detail=f"bad range date '{v}'")
+    if range_from and range_to and range_from > range_to:
+        raise HTTPException(status_code=400, detail="range_from must be ≤ range_to")
+
+    deleted = {"attendance": [], "daily_packs": []}
+    skipped = {"attendance": [], "daily_packs": []}
+    for kind, folder in (("attendance", AUTO_UPLOAD_DIR), ("daily_packs", DAILY_PACKS_AUTO_UPLOAD_DIR)):
+        files = _scan_old_files(folder, kind, days)
+        files = _apply_range_filter(files, range_from, range_to)
+        for entry in files:
+            f = folder / entry["filename"]
+            if not entry["safe_to_delete"]:
+                skipped[kind].append({"filename": entry["filename"],
+                                      "reason": "no DB data" if not entry["data_in_db"] else "not old enough"})
+                continue
+            try:
+                if f.is_file():
+                    f.unlink()
+                    deleted[kind].append(entry["filename"])
+            except OSError as e:
+                skipped[kind].append({"filename": entry["filename"], "reason": str(e)})
+    return {
+        "ok": True,
+        "days_threshold": days,
+        "range_from": range_from,
+        "range_to":   range_to,
+        "deleted": deleted,
+        "skipped": skipped,
+        "deleted_at": datetime.utcnow().isoformat() + "Z",
+    }
 
 
 @app.get("/api/cleanup/preview")
@@ -6272,9 +7111,13 @@ async def line_send_mobile_link(
     report_date: str = Form(...),
     type: str = Form("attendance"),
 ):
-    """Send a 4-box snapshot image plus a tap-to-open link to the mobile viewer.
+    """Send a single Buttons-Template card per recipient: 4-box snapshot as
+    the thumbnail, title + body text, tap-to-open button that goes to the
+    mobile-viewer URL (`/attendance/m/report` or `/attendance/m/summary`).
 
-    Two LINE messages per recipient: image first, then text+URL.
+    The raw URL is intentionally hidden behind the button — operator
+    requested this so the chat shows a clean card instead of a long URL
+    line. `defaultAction` makes the whole card tappable.
     """
     cfg = _line_load()
     token = cfg.get("channel_access_token", "")
@@ -6295,7 +7138,15 @@ async def line_send_mobile_link(
     out_path = LINE_IMG_DIR / fname
     out_path.write_bytes(data)
     base = cfg.get("public_base_url", "").rstrip("/")
-    img_url = f"{base}/static/line_images/{fname}"
+    # Snapshot is still saved to disk as a record of "what numbers the
+    # operator confirmed for this day" — useful for audit / debugging.
+    # But the LINE card thumbnail uses the static BRANDED card image
+    # provided by the operator (one per type). The recipient sees a
+    # polished consistent card; the live numbers are one tap away on
+    # the mobile viewer page.
+    snapshot_url = f"{base}/static/line_images/{fname}"
+    branded_card = "attendance_card.jpg" if safe_type == "attendance" else "summary_card.jpg"
+    img_url = f"{base}/static/line_card_default/{branded_card}"
     page = "report" if safe_type == "attendance" else "summary"
     link_url = f"{base}/m/{page}?date={safe_date}"
     label_ja = "勤怠記録" if safe_type == "attendance" else "月次サマリー"
@@ -6312,7 +7163,13 @@ async def line_send_mobile_link(
         )
         results.append({"id": rid, "card_status": s_card, "response": resp_card[:200]})
     ok = all(200 <= r["card_status"] < 300 for r in results)
-    return {"ok": ok, "image_url": img_url, "link_url": link_url, "results": results}
+    return {
+        "ok": ok,
+        "image_url": img_url,        # the branded card thumbnail used in chat
+        "snapshot_url": snapshot_url,  # the per-day numbers snapshot kept on disk
+        "link_url": link_url,
+        "results": results,
+    }
 
 
 @app.get("/api/m/summary")

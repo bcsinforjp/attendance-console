@@ -1,11 +1,525 @@
 # Progress & Bug Status — Attendance App
 # 進捗・不具合対応状況 — 勤怠アプリ
 
-**Date / 日付:** 2026-05-01
+**Date / 日付:** 2026-05-02
 
 **Version / バージョン:** 3.4 (post-tag work on `dev`)
 
-**Latest update / 最新更新 (2026-05-01 — Post-save navigation routes by entry point)**
+**Latest update / 最新更新 (2026-05-02 — Processed-files (Done) folder + Restore/Delete)**
+
+After a successful "Confirm & Save" the imported PDF or Excel is now
+automatically moved into a Done sub-folder, so the watched folder
+only ever shows files still waiting to be processed. A new card on
+the Management → Data Cleanup tab lists every file in Done with two
+buttons: **↩ Restore** sends the file back to the watched folder
+(the next Auto-update will pick it up again), and **🗑 Delete**
+permanently removes it from disk. Delete only touches the file —
+the data already saved into the database is untouched.
+
+This makes the "what is still pending vs. what has already been
+imported" status visible at a glance, and gives the operator a safe
+way to re-run an import or to clean up disk space without going
+into the server.
+
+「保存」処理が成功したファイルは自動で done サブフォルダに移
+動するようになりました。これによりアップロード監視フォルダ
+には未処理ファイルだけが残ります。Management → データ削除タ
+ブに新しいカードを追加し、Done フォルダにあるファイルを一覧
+表示します。**↩ 復元** で監視フォルダに戻して次の Auto-update
+で再処理でき、**🗑 削除** でディスクから完全に削除できます
+（DB のデータには影響しません）。
+
+「未処理」と「処理済み」が一目でわかるようになり、再取り込
+みやディスク整理を安全に実行できます。
+
+---
+
+**Previous update / 前回の更新 (2026-05-02 — Back-fill any date from server-side files)**
+
+The desktop app can now ask the server to re-process any past day —
+for example 2026-04-23 — using a PDF or Excel that was uploaded
+earlier and is still on the Pi. Before this change the trigger
+endpoints could only re-process the **latest** file in the watched
+folder, so back-filling a missing day required manually moving
+files around. Now the desktop app passes a date and the server
+finds the matching file by itself. If the file isn't on the
+server, the response clearly says which file is missing so the
+operator knows what to upload.
+
+The change is fully backward-compatible: existing buttons and the
+existing `watch.js` flow keep working without any modification —
+the new `date` parameter is optional. A new list endpoint for
+Excel files (`/api/v1/xlsx/list`, mirroring the existing PDF list)
+lets the desktop app see what dates are already on the server
+before deciding to re-upload.
+
+デスクトップアプリから過去の任意の日付（例：2026-04-23）を
+サーバ側に既にアップロード済みの PDF / Excel を使って再処理
+できるようになりました。これまでは「最新ファイル」しか自動
+処理できず、欠損日を補完するためにファイルを手動で並び替え
+る必要がありました。今回の変更でデスクトップアプリが日付を
+渡すだけで、サーバが該当ファイルを自動で選んでくれます。
+ファイルが無い場合は「どのファイルが無いか」を明確に返すた
+め、何をアップロードすべきか即座に分かります。
+
+既存のボタン・既存の `watch.js` は変更不要です。新しい
+`date` パラメータは省略可能で、省略時は従来どおり最新ファイ
+ルを処理します。Excel 用にも `/api/v1/xlsx/list`（PDF 用の
+リスト API のミラー）を追加し、デスクトップアプリ側で
+「サーバに該当日付のファイルがあるか」を確認してから
+アップロード判断ができるようになりました。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Site-wide banner + Admin API Status tab)**
+
+The banner shown at the top of every page is now controlled from a
+single place. The amber "BETA / test period" strip that used to sit
+on the management page (with the wrong, expired date) has been
+removed; in its place the same banner that already lives on the
+Console page is now injected on every page (Console, Gantt,
+Summary, Reports, Management, Dashboard). The banner is edited
+from the Admin site, under the Announcement tab — change the text,
+colour, badge or whether it can be dismissed, hit Save, and every
+page picks it up within five minutes (or instantly on reload).
+
+A new Admin tab — **API Status** — was added next to Access Log.
+It shows, in real time, every API request the app handled: total
+count, 4xx and 5xx error counts, average / p50 / p95 latency, an
+endpoint-by-endpoint table (hits, error counts, average ms, max
+ms, last response code, last seen), and a colour-coded log of
+recent requests (green for 2xx, amber for 4xx, red for 5xx). A
+filter box narrows by path; a checkbox turns on auto-refresh
+every 5 seconds. The data comes from the in-memory access buffer
+that already powers the Access Log tab.
+
+各ページ上部に表示するバナーを一元管理できるようにしました。
+管理画面に表示されていた「BETA・テスト期間終了 2026-04-30」と
+いう古い帯（期限切れの日付付き）を削除し、コンソール画面と
+同じバナーをすべてのページ（Console、Gantt、Summary、Reports、
+Management、Dashboard）に共通で表示するようにしました。バナー
+の内容は Admin サイトの「Announcement」タブから編集できます。
+文言・色・バッジ・ユーザーが閉じられるかどうかなどを変更して
+保存すると、各ページに最大 5 分以内（再読み込みなら即時）で
+反映されます。
+
+Admin に新しいタブ **「API Status」** を追加しました（Access Log
+の隣）。アプリが処理したすべての API リクエストを以下の項目で
+リアルタイム表示します：合計件数、4xx／5xx エラー件数、平均／
+p50／p95 のレスポンスタイム、エンドポイント別の集計表（ヒット数、
+エラー件数、平均 ms、最大 ms、最終ステータス、最終時刻）、最近
+のリクエストの色分けログ（2xx 緑／4xx 黄／5xx 赤）。パスで
+フィルタリングでき、5 秒ごとに自動更新するチェックボックスも
+あります。データは Access Log で使用しているメモリ内バッファ
+から取得しています。
+
+---
+
+**Previous update / 一つ前の更新 (2026-05-01 — Feedback button render bug fixed)**
+
+A user reported the feedback button was failing — the floating
+button no longer behaved correctly and the contents of the
+feedback dialog were appearing as plain text at the bottom of the
+page instead of staying hidden until the button was tapped.
+
+The fix: the dialog now ships hidden by default through an inline
+`style="display:none"` attribute, so it cannot leak into the page
+even if the styling is delayed or overridden. The button still
+opens the dialog as before; the open state simply uses a stronger
+CSS rule to override the inline hide. The cache-bust version on
+all six pages was bumped one notch so browsers and the CDN fetch
+the corrected script.
+
+ユーザーから「フィードバックボタンが壊れている」という報告がありました。
+フローティングボタンの挙動がおかしく、ダイアログの中身がページの
+一番下にそのまま見えてしまう状態でした。
+
+修正内容：ダイアログ要素そのものに `style="display:none"` を直接
+付与し、CSS の読み込みタイミングに左右されず常に非表示の状態で
+出現するようにしました。ボタンを押したときの「開く」動作は
+従来どおりですが、上書き優先度を上げてしっかり表示されるように
+しています。あわせて 6 ページすべてのキャッシュバスター番号を
+1 つ進め、ブラウザと CDN が修正後のスクリプトを取得するように
+しました。
+
+---
+
+**Previous update / 一つ前の更新 (2026-05-01 — Feedback gets a floating button + admin reader tab)**
+
+The feedback flow was polished and made more professional:
+
+1. **Floating action button (FAB).** The Send-feedback button moved
+   off the amber demo banner into a small floating green pill in the
+   bottom-right corner of every full page. It stays out of the way of
+   the page content but is always one tap away. On phones it shrinks
+   to a circle with just the 💬 icon. Hidden on mobile viewers, report
+   popups, and print so the polished/focused views stay clean.
+2. **Polished modal.** The feedback dialog now has a sticky header
+   with a close (✕) button, a bigger card, larger inputs with a green
+   focus ring, a live character counter (turns amber after 3,000
+   characters and red after 3,900), and a small "📍 /current/page"
+   indicator so the operator sees exactly which page the message is
+   coming from. Ctrl/⌘ + Enter inside the textarea sends.
+3. **Management → 💬 Feedback tab.** A new admin tab on the
+   Management page reads recent submissions from
+   `logs/feedback.txt` (via `GET /api/feedback/recent`) and renders
+   them as a clean card-per-entry list — name, timestamp, page,
+   IP, full multiline message. Limit selector (1–500, default 50)
+   plus a Refresh button. Read-only — submissions are still made
+   only via the FAB.
+
+The previous demo banner stays as a passive notice strip; only the
+button moved.
+
+フィードバック機能の見た目と使い勝手を整えました：
+
+1. **フローティング・アクション・ボタン (FAB)。** Send-feedback
+   ボタンをデモバナーから取り出し、各ページ右下に小さな緑色の
+   フローティングボタンとして配置しました。コンテンツの邪魔に
+   ならず、どのページからもワンタップでアクセスできます。
+   スマホ画面では 💬 アイコンのみの円形に縮小されます。
+   モバイル閲覧画面・レポートポップアップ・印刷時は非表示。
+2. **モーダルの改善。** ダイアログに上部固定のヘッダーと閉じる
+   (✕) ボタンを追加し、カード幅を拡大、入力欄のフォーカス時に
+   グリーンのリング、文字数カウンター（3,000 文字超で琥珀色、
+   3,900 文字超で赤）、現在ページのパスを表示する
+   「📍 /current/page」インジケーターを追加しました。textarea
+   内で Ctrl/⌘ + Enter で送信できます。
+3. **Management → 💬 Feedback タブ。** Management ページに新しい
+   タブを追加しました。サーバーの `logs/feedback.txt` から
+   `GET /api/feedback/recent` 経由で受信メッセージを読み取り、
+   名前・タイムスタンプ・ページ・IP・本文を 1 件 1 カードで
+   表示します。表示件数（1〜500、既定 50）と Refresh ボタン
+   付き。閲覧専用で、送信は引き続き FAB からのみ行います。
+
+デモバナーは「これはデモ版です」の通知として残してあり、
+ボタンだけが移動した形です。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Data Cleanup gained From/To range pickers in both sections)**
+
+The Data Cleanup tab on Management got faster to use for "wipe a
+window" operations:
+
+1. **Per-date deletion section** — alongside the single-date
+   `+ Add to list` button, there is now a **From / To + Add range**
+   pair. Pick a start and end date, click Add range, and every
+   day in `[from..to]` is added to the chip list at once (capped
+   at 31 dates per operation, same as before). The two-step
+   consent + the destructive-action warning are unchanged.
+2. **Old uploaded files section** — alongside the days-threshold
+   input, there is now an optional **From / To** scope. When set,
+   the scan only considers files whose date falls inside the
+   range, the days threshold is ignored, and `safe to delete` is
+   recomputed as just "DB has data". This makes a "clean up files
+   for last week's processed days" operation a 3-click workflow
+   (pick range → Scan → Delete).
+
+The server enforces the same safety rules as before — only files
+whose date's data is in the database are eligible. Invalid /
+inverted ranges return 400 from both endpoints.
+
+Management → Data Cleanup タブで、「ある期間をまとめて削除する」
+操作が一段と速くなるよう、両セクションに From / To の範囲
+ピッカーを追加しました：
+
+1. **日付別の削除セクション** — 既存の単一日付「+ Add to list」
+   ボタンの隣に、**From / To + Add range** を追加しました。
+   開始日と終了日を選んで Add range を押すと、`[from..to]` の
+   全日付が一括でチップリストに追加されます（1 操作 31 日付の
+   上限は従来通り）。同意チェックと削除前警告も変更ありません。
+2. **古いアップロードファイルのセクション** — days しきい値の
+   隣に、任意の **From / To** スコープを追加しました。範囲を
+   指定すると、その期間内のファイルのみ走査対象となり、days
+   しきい値は無視され、「safe to delete」の判定は「DB にデータ
+   あり」だけになります。「先週の処理済み日のファイルを片付ける」
+   といった操作が、範囲指定 → Scan → Delete の 3 クリックで
+   完了します。
+
+サーバー側の安全ルールは従来通り：DB にデータがある日付の
+ファイルのみが削除対象です。範囲指定不正（順序逆転、書式不正）
+は 400 エラーで弾かれます。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Demo-preview banner + feedback button + log file)**
+
+A small amber "🚧 Demo preview" banner now appears under the top
+header on every full page (it's hidden on the mobile viewers and
+report popups so those stay focused). On the right side of the
+banner there is a green **💬 Send feedback** button.
+
+Clicking the button opens a small bilingual modal:
+- Optional name (any handle the user wants to leave)
+- Required message (max ~4,000 characters)
+- Send / Cancel
+
+Submissions are appended one-per-line to
+`/var/www/attendance_app/logs/feedback.txt` (each line is JSON
+carrying timestamp, IP, user-agent, page, name and message).
+The operator can read this file with any text editor or
+`tail -f /var/www/attendance_app/logs/feedback.txt` for live
+tailing. There is no UI viewer yet — by request the file itself
+is the storage. A `GET /api/feedback/recent?limit=N` endpoint is
+provided so a future admin viewer can list entries newest-first.
+
+トップヘッダーの下に、薄いオレンジの「🚧 Demo preview」
+バナーを追加しました（モバイル閲覧画面・レポート用ポップアップ
+では非表示）。右端の **💬 Send feedback** ボタンを押すと、
+名前（任意）とメッセージ（最大約 4,000 文字）を送れる
+モーダルダイアログが開きます。
+
+送信内容は 1 件 1 行の JSON 形式で
+`/var/www/attendance_app/logs/feedback.txt` に追記されます
+（タイムスタンプ・IP・User-Agent・ページパス・名前・本文を
+含む）。テキストエディタで開いて読むのが基本ですが、
+`tail -f` でリアルタイム監視も可能です。今後の管理画面
+向けに `GET /api/feedback/recent?limit=N` エンドポイント
+（最新順 JSON 取得）も用意しています。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Branded card thumbnails + data-status API + 31-day cleanup cap + USER_GUIDE.md)**
+
+Three operator-requested changes in one batch:
+
+1. **Branded LINE card thumbnails are now permanent.** The two
+   illustrated images you uploaded (`attendance_card.jpg` and
+   `summary_card.jpg`) are saved under `static/line_card_default/`
+   and are now the thumbnails on every LINE card we send. The
+   per-day numbers snapshot is still saved to disk as an audit
+   record but no longer appears in the chat thumbnail. The locked-
+   flow memory was updated to record this — future sessions won't
+   revert to the snapshot thumbnail without your permission.
+2. **`GET /api/data-status/<date>`.** A new browser-facing endpoint
+   that answers "is everything saved for this date?" — checks
+   attendance, daily_packs (summary + items), fullcast, and
+   production_plan in one call. Returns `{ all_present, missing,
+   blocks }` where each block carries `keyed_on`, `lookup_date`,
+   row counts, and `present`. The endpoint follows the four-date
+   rules: attendance and フルキャスト are looked up on
+   `shift_date = report_date − 1`; daily_packs and the production
+   plan on the report date itself.
+3. **Cleanup cap raised from 5 → 31 dates per operation.**
+   Management → 🗑 Data Cleanup can now process a full month of
+   dates in a single delete. The "no delete-all mode" rule and the
+   two-step consent-checkbox safety rail are unchanged. UI counter
+   reads `0 / 31 dates selected`; bilingual help text says
+   `1 回の操作で 最大 31 日付（1 ヶ月）まで`.
+
+A new top-level `USER_GUIDE.md` was added covering every operator-
+visible feature in one place: the four-date relationship, the
+daily upload workflow, the LINE flow, mobile viewers, all four
+management tabs, the desktop `.bat` client, and an 8-row
+troubleshooting cheatsheet.
+
+オペレーターからのご要望 3 件を 1 つのバッチで反映しました：
+
+1. **LINE カードのブランドサムネイル化を確定。** 提供いただいた
+   2 枚の絵（`attendance_card.jpg` / `summary_card.jpg`）を
+   `static/line_card_default/` に保存し、LINE 送信カードの
+   サムネイルとして固定化しました。日次の数値スナップショット
+   は引き続き監査記録としてサーバーに保存されますが、チャット
+   側のサムネイルには表示されません。LINE フローのロック用
+   メモリにも今回の変更を記録してあります。
+2. **`GET /api/data-status/<date>`** という API を追加しました。
+   指定した日付について「必要なデータが揃っているか」を 1 回の
+   呼び出しで返します。勤怠／daily_packs（サマリー＋商品行）／
+   フルキャスト／production_plan の 4 種類をチェックし、
+   `{ all_present, missing, blocks }` の形で返します。日付の
+   関係（勤怠とフルキャストは `report_date − 1`、daily_packs と
+   production_plan は report_date）はメモリの規則通りです。
+3. **削除の上限を 5 日付 → 31 日付に拡張。** Management →
+   🗑 Data Cleanup で 1 回の操作で最大 1 ヶ月分の日付を処理
+   できます。「全削除モードなし」ルールと 2 段階の同意
+   チェックボックスはそのまま残しています。UI カウンターは
+   `0 / 31 dates selected`、説明文も
+   `1 回の操作で 最大 31 日付（1 ヶ月）まで` に更新済み。
+
+加えて、運用上必要な機能を 1 ヶ所にまとめた `USER_GUIDE.md`
+を新規追加しました（約 360 行）：4 日付の関係、日次の取り込み
+フロー、LINE 送信フロー、モバイル閲覧画面、Management 4 タブ、
+デスクトップ用 `.bat` クライアント、8 項目のトラブルシュート
+チートシートまでカバーしています。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Gantt page Send-to-LINE rewired to the card flow)**
+
+The Gantt page's **Send to LINE** button was still using the old
+"send a PDF link as plain text" flow — that's why the operator was
+seeing a different (non-card) message style for attendance reports.
+
+The button now uses the same card flow as the Summary page: it
+captures the productivity 4-box at the top of the gantt as a PNG
+image and sends a single Buttons Template card per recipient with
+the image, title, date, and a tap button that opens
+`/attendance/m/report?date=…`. Both attendance and summary messages
+now arrive in chat as identical card layouts.
+
+ガントページの **Send to LINE** ボタンが、古い「PDF リンクを
+テキストで送る」方式のままだったため、勤怠レポートだけ
+カード形式と異なる送信になっていました。
+
+このボタンも、サマリーページと同じカード送信フローに統一
+しました。ページ上部の生産性 4 ボックスを PNG 画像として取得し、
+1 件のカード（画像 + タイトル + 日付 + タップボタンで
+`/attendance/m/report?date=…` へ遷移）として受信者に送信します。
+これで勤怠・サマリーともに、チャット上で同じレイアウトの
+カードが届きます。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Attendance LINE card link reverted to /m/report — same shape as Summary)**
+
+The attendance card's tap-button now opens the trimmed mobile
+viewer at `/attendance/m/report?date=…` again, matching the summary
+card's `/attendance/m/summary?date=…` style. Both cards open clean
+view-only pages without admin buttons or any PDF download prompt.
+
+LINE 勤怠カードのタップ先 URL を、再びシンプルなモバイル
+閲覧画面 `/attendance/m/report?date=…` に戻しました。サマリー
+カードの `/attendance/m/summary?date=…` と同じ形式です。
+両方のカードとも、管理ボタンや PDF ダウンロードプロンプトの
+ない、閲覧専用のクリーンなページを開きます。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Attendance LINE card now links to full gantt page with ?report=1)**
+
+When the operator sends the attendance card from LINE, tapping the
+button now opens the **full gantt page** at
+`https://rnd.asiakawaii.com/attendance/gantt?date=…&report=1`
+instead of the trimmed mobile viewer. The `?report=1` flag tells
+the unified header script to skip rendering the top navigation, so
+the recipient lands on a clean gantt view that still has the
+in-page toolbar (date picker, legend, per-employee rows).
+
+The summary card was not changed — it still opens the mobile-tuned
+`/m/summary?date=…` viewer with rotation support.
+
+LINE で送信する勤怠レポートのカード→タップで開かれる URL を、
+従来の簡易版 `/m/report?date=…` から、フル機能の
+`https://rnd.asiakawaii.com/attendance/gantt?date=…&report=1`
+に変更しました。`?report=1` パラメータにより、共通ヘッダー
+スクリプトがトップナビを描画せず、ガント本体のツールバー
+（日付ピッカー、凡例、社員別行）はそのまま使えます。
+
+サマリーレポートのカードはこれまで通り、回転対応の
+`/m/summary?date=…` モバイル閲覧画面を開きます。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — LINE send back to Buttons Template card)**
+
+The previous "image + plain text URL" revert was rolled back. LINE
+messages are once again sent as a single styled card per recipient:
+the snapshot image is the thumbnail, the title and date appear in
+the card body, and a single button (`📊 View Report` /
+`📈 View Summary`) opens the mobile viewer. The raw URL is
+intentionally NOT shown in chat — only the button.
+
+直前の「画像 + テキストにリンク」形式への差し戻しは取り消し
+ました。LINE 送信は再度、受信者ごとに 1 通のカード形式に戻し
+ています：スナップショット画像をサムネイルとして、件名と日付
+をカード本体に表示し、ボタン（`📊 View Report` /
+`📈 View Summary`）でモバイル閲覧画面に遷移します。生の URL
+はチャット上に表示せず、ボタンのみになります。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — LINE send reverted to image + plain-text link)**
+
+LINE messages from the Reports / Gantt page now arrive as **two
+separate messages** again — the snapshot image first, then a plain
+text message with the mobile-viewer link — exactly the way the
+operator originally asked for it.
+
+The earlier change to a Buttons Template card was reverted because
+some LINE clients hid the link behind a button label. The plain
+text format makes the URL `https://rnd.asiakawaii.com/attendance/m/report?date=…`
+visible right in the chat thread, tappable, copyable.
+
+LINE 送信を、以前ご指定の通り「画像 1 通 + テキスト＋リンク
+1 通」の 2 通形式に戻しました。
+
+途中で導入したカード形式（Buttons Template）は、一部の LINE
+クライアントでリンクがボタン裏に隠れて見えなくなる問題があった
+ため、要望通り戻しています。これにより、モバイル閲覧用の URL
+（`https://rnd.asiakawaii.com/attendance/m/report?date=…`）が
+チャット上にそのまま表示され、タップ・コピーともに可能です。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — File retention: one-file-per-day + 30-day cleanup gated on DB)**
+
+The watched folders for attendance PDFs and daily-packs Excel files
+now manage themselves so the operator doesn't have to:
+
+1. **One file per day on upload.** When a new PDF or Excel comes in
+   via the v1 upload endpoints, the server checks every file already
+   in that folder, identifies any whose filename encodes the SAME
+   date (full-width digits and various separators are all handled),
+   and deletes those after the new upload has succeeded. The upload
+   response lists what was removed so the desktop client can
+   verify. Result: the watched folder always has the latest copy
+   for each day, never a mix of old versions.
+2. **30-day retention sweep, gated on the DB.** A new
+   "📦 Old uploaded files" section was added to Management →
+   🗑 Data Cleanup. Pick a threshold (default 30 days), click
+   Scan, see both folders side-by-side with each file tagged:
+   - 🗑 `safe to delete` — older than threshold AND its date's data
+     is confirmed in the database
+   - ⚠ `old but no DB data — kept` — old file but no rows exist for
+     that date, so the operator could still reprocess it
+   - `kept` — recent file, untouched
+   One big red Delete button removes only the safe-to-delete files.
+   The server re-runs the safety check on the delete call so a
+   stale UI list can't accidentally remove a file whose data has
+   since disappeared from the DB.
+
+Operationally: drop a new フルキャスト Excel for a day already in
+the folder → the previous one for that day is removed automatically.
+Run the retention sweep once a month → 30+ day old files whose data
+is safely in the DB get cleaned up; anything still un-processed
+stays on disk.
+
+監視フォルダ（勤怠 PDF・デイリーパック Excel）が自動的に整理
+されるようになりました。オペレーターが手で掃除する必要は
+ありません：
+
+1. **1 日 1 ファイル（アップロード時）。** v1 アップロード
+   エンドポイントで新しいファイルが届くと、フォルダ内の既存
+   ファイルを走査し、ファイル名から「同じ日付」が読み取れる
+   ファイル（全角数字・各種区切り文字に対応）を、新規アップロード
+   成功後に削除します。レスポンスには削除されたファイル名が
+   `removed_same_date_files: [...]` で返り、デスクトップ
+   クライアントで確認できます。これにより、各日の最新コピー
+   だけが監視フォルダに残ります。
+2. **30 日経過の整理（DB 確認付き）。** Management →
+   🗑 Data Cleanup に「📦 古いアップロードファイル」セクション
+   を追加しました。しきい値（既定 30 日）を選んで Scan を押すと、
+   勤怠フォルダとデイリーパックフォルダの内容を並べて表示し、
+   各ファイルに次のタグを付けます：
+   - 🗑 `safe to delete`：しきい値より古く、対応日付の DB データ
+     が確認できる → 削除可能
+   - ⚠ `old but no DB data — kept`：古いが DB にデータが無い →
+     未処理として残す
+   - `kept`：新しいので残す
+   削除ボタン（赤）は safe-to-delete のファイルのみを削除し、
+   サーバー側でも再度安全チェックを実行するため、UI が古くて
+   既に DB から消えたデータのファイルを誤って削除することは
+   ありません。
+
+運用面：同じ日付の フルキャスト Excel を新規アップロード
+→ その日の旧版が自動削除。月 1 回ほど retention sweep を実行
+→ 30 日以上前で DB にデータが入っているファイルが片付き、
+未処理のものは残ります。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Post-save navigation routes by entry point)**
 
 The flow after saving a Daily Packs Excel batch now goes to a
 different place depending on how the operator started the save:

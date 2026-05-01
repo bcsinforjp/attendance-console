@@ -162,6 +162,7 @@
 <nav class="tabs" role="tablist">
   <button class="tab active" data-tab="overview">Overview</button>
   <button class="tab" data-tab="access">Access Log</button>
+  <button class="tab" data-tab="apistatus">API Status</button>
   <button class="tab" data-tab="visitors">Visitors</button>
   <button class="tab" data-tab="alerts">Alerts</button>
   <button class="tab" data-tab="security">Security</button>
@@ -269,6 +270,51 @@
   </div>
 </section>
 
+<!-- ============================ API STATUS ============================ -->
+<section id="panel-apistatus" class="panel">
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:1rem;padding:0.7rem 1rem;">
+    <div>
+      <strong style="color:var(--brand);">API request / response status</strong>
+      <span class="mono" style="color:var(--muted);font-size:0.78rem;margin-left:0.5rem;">last refresh <span id="apsRefresh">—</span></span>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <label class="mono" style="font-size:0.8rem;color:var(--muted);">
+        <input type="checkbox" id="apsAuto" style="vertical-align:middle;"> auto-refresh 5s
+      </label>
+      <input id="apsFilter" type="text" placeholder="Filter path…" style="width:220px;">
+      <button class="button" id="btnApsRefresh">↻ Refresh</button>
+    </div>
+  </div>
+
+  <section class="kpi-grid" aria-label="API metrics" style="margin-bottom:1rem;">
+    <article class="kpi"><div class="label">Requests (buffered)</div><div id="apsTotal" class="value">--</div><div class="detail" id="apsBuffer">—</div></article>
+    <article class="kpi"><div class="label">4xx errors</div><div id="apsE4" class="value">--</div></article>
+    <article class="kpi"><div class="label">5xx errors</div><div id="apsE5" class="value">--</div></article>
+    <article class="kpi"><div class="label">Avg latency</div><div id="apsAvg" class="value">--</div><div class="detail" id="apsP50P95">p50 — / p95 —</div></article>
+    <article class="kpi"><div class="label">Endpoints</div><div id="apsEpCount" class="value">--</div></article>
+  </section>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <h2>Endpoints — by hit count</h2>
+    <div class="scroll" style="max-height:340px;">
+      <table>
+        <thead><tr><th>Path</th><th class="num">Hits</th><th class="num">4xx</th><th class="num">5xx</th><th class="num">Avg ms</th><th class="num">Max ms</th><th class="num">Last</th><th>Last seen</th></tr></thead>
+        <tbody id="apsEpTbody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Recent requests <span class="right mono" style="color:var(--muted);font-size:0.78rem;">newest first · color-coded by status</span></h2>
+    <div class="scroll" style="max-height:520px;">
+      <table>
+        <thead><tr><th>When</th><th class="mono">Method</th><th>Path</th><th class="num">Status</th><th class="num">ms</th><th>IP</th></tr></thead>
+        <tbody id="apsRecTbody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
 <!-- ============================ VISITORS ============================ -->
 <section id="panel-visitors" class="panel">
   <div class="card">
@@ -348,7 +394,7 @@
     <div class="card">
       <h2>Banner editor</h2>
       <p style="color:var(--muted);font-size:0.86rem;margin-bottom:0.7rem;">
-        Drives the top banner on <span class="mono">/attendance/console</span>. Pick a preset (BETA / Maintenance / Info / Warning / Success) or write your own text. Save publishes it instantly.
+        Drives the site-wide banner shown on every <span class="mono">/attendance/*</span> page (Console, Gantt, Summary, Reports, Management, Dashboard). Pick a preset (BETA / Maintenance / Info / Warning / Success) or write your own text. Save publishes it instantly.
       </p>
       <div class="row">
         <div class="field">
@@ -451,7 +497,7 @@ function pill(ok, label){ return `<span class="pill ${ok?'ok':'bad'}">${label}</
 function setKV(el, rows){ el.innerHTML = rows.map(([k,v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(""); }
 
 /* ----------- Tab routing (hash-based) ----------- */
-const PANELS = ["overview","access","visitors","alerts","security","announcement","bridge"];
+const PANELS = ["overview","access","apistatus","visitors","alerts","security","announcement","bridge"];
 function showTab(name){
   if (!PANELS.includes(name)) name = "overview";
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
@@ -459,6 +505,7 @@ function showTab(name){
   if (location.hash !== `#/${name}`) history.replaceState(null,"",`#/${name}`);
   /* fire panel-specific refresh */
   if (name === "access")        refreshLog();
+  else if (name === "apistatus") refreshApiStatus();
   else if (name === "visitors") refreshVisitors();
   else if (name === "alerts")   refreshAlerts();
   else if (name === "security") refreshSecurity();
@@ -675,6 +722,58 @@ async function refreshLog(){
 }
 $("btnRefreshLog").addEventListener("click", refreshLog);
 $("logFilter").addEventListener("input", () => refreshLog());
+
+/* ----------- API Status ----------- */
+let _apsTimer = null;
+function statusClass(s){ if (!s) return ""; if (s >= 500) return "bad"; if (s >= 400) return "warn"; if (s >= 300) return ""; if (s >= 200) return "ok"; return ""; }
+async function refreshApiStatus(){
+  try{
+    const r = await fetch("/admin/api/api-status?limit=300", {credentials:"same-origin"});
+    const j = await r.json();
+    const s = j.summary || {};
+    setText("apsTotal", (s.total||0).toLocaleString());
+    setText("apsBuffer", `${(s.buffer_used||0).toLocaleString()} / ${(s.buffer_size||0).toLocaleString()} buffer`);
+    setText("apsE4", (s.errors_4xx||0).toLocaleString());
+    setText("apsE5", (s.errors_5xx||0).toLocaleString());
+    setText("apsAvg", (s.avg_ms||0) + " ms");
+    setText("apsP50P95", `p50 ${s.p50_ms||0}ms · p95 ${s.p95_ms||0}ms`);
+    setText("apsEpCount", (s.endpoint_count||0).toLocaleString());
+    setText("apsRefresh", new Date().toLocaleTimeString());
+
+    const filter = ($("apsFilter").value || "").toLowerCase();
+    const eps = (j.endpoints || []).filter(e => !filter || (e.path||"").toLowerCase().includes(filter));
+    if (!eps.length){ $("apsEpTbody").innerHTML = `<tr><td colspan="8" class="empty">—</td></tr>`; }
+    else $("apsEpTbody").innerHTML = eps.map(e => `<tr>
+      <td class="mono">${fmt.esc(e.path)}</td>
+      <td class="num">${e.count}</td>
+      <td class="num">${e.errors_4xx||0}</td>
+      <td class="num">${e.errors_5xx||0}</td>
+      <td class="num">${e.avg_ms||0}</td>
+      <td class="num">${e.max_ms||0}</td>
+      <td class="num"><span class="pill ${statusClass(e.last_status)}">${e.last_status||"—"}</span></td>
+      <td title="${fmt.esc(e.last_ts||"")}">${fmt.rel(e.last_ts||"")}</td>
+    </tr>`).join("");
+
+    const rec = (j.recent || []).filter(it => !filter || (it.path||"").toLowerCase().includes(filter));
+    if (!rec.length){ $("apsRecTbody").innerHTML = `<tr><td colspan="6" class="empty">—</td></tr>`; }
+    else $("apsRecTbody").innerHTML = rec.map(it => `<tr>
+      <td title="${fmt.esc(it.ts||"")}">${fmt.rel(it.ts||"")}</td>
+      <td class="mono">${fmt.esc(it.method||"")}</td>
+      <td class="mono">${fmt.esc(it.path||"")}</td>
+      <td class="num"><span class="pill ${statusClass(it.status)}">${it.status||"—"}</span></td>
+      <td class="num">${it.duration_ms||0}</td>
+      <td class="mono">${fmt.esc(it.ip||"")}</td>
+    </tr>`).join("");
+  } catch(e){
+    $("apsEpTbody").innerHTML = `<tr><td colspan="8" class="empty">load failed: ${fmt.esc(e.message||e)}</td></tr>`;
+  }
+}
+$("btnApsRefresh").addEventListener("click", refreshApiStatus);
+$("apsFilter").addEventListener("input", () => refreshApiStatus());
+$("apsAuto").addEventListener("change", (ev) => {
+  if (_apsTimer) { clearInterval(_apsTimer); _apsTimer = null; }
+  if (ev.target.checked) { _apsTimer = setInterval(refreshApiStatus, 5000); refreshApiStatus(); }
+});
 
 /* ----------- Visitors ----------- */
 async function refreshVisitors(){

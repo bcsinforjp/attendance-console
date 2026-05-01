@@ -299,7 +299,7 @@ body.mobile{background:#f4f7f9;}
   @page{size:A4 portrait;margin:4mm;}
 }
 </style>
-<script src="static/site_header.js" defer></script>
+<script src="static/site_header.js?v=2026050104" defer></script>
 </head>
 <body>
 
@@ -309,7 +309,7 @@ body.mobile{background:#f4f7f9;}
   <label>Date: <input type="date" id="dateInput"></label>
   <button id="refreshBtn" type="button">Refresh</button>
   <button id="printBtn" class="primary" type="button">⬇ Download PDF</button>
-  <button id="lineBtn" type="button" title="Generate PDF in this browser and send the link to LINE recipients">💬 Send PDF to LINE</button>
+  <button id="lineBtn" type="button" title="Capture the productivity 4-box and send a card to LINE recipients (same flow as the Summary page)">💬 Send to LINE</button>
   <span id="lineStatus" style="font-size:11px;color:#5a6b73;"></span>
 </div>
 
@@ -380,13 +380,13 @@ body.mobile{background:#f4f7f9;}
 const WIN_START=10, WIN_HOURS=22.5, MN_AX=24-WIN_START, MN_PCT=(MN_AX/WIN_HOURS)*100;
 const params=new URLSearchParams(location.search);
 if(params.get('embed')==='1')document.body.classList.add('embed');
-const MOBILE_MODE=/^\/.*\/m\/(report|summary)\/?$/.test(location.pathname)||params.get('mobile')==='1';
+const MOBILE_MODE=/^\/.*\/m\/(report|summary|gantt)\/?$/.test(location.pathname)||params.get('mobile')==='1';
 if(MOBILE_MODE){
   document.body.classList.add('mobile');
   // The page's relative fetch('api/…') paths are anchored against the URL.
   // Served at /attendance/m/report they would resolve to /attendance/m/api/…
   // (404). Inject a <base> so they resolve back to /attendance/api/… instead.
-  const m=location.pathname.match(/^(\/.*?)\/m\/(report|summary)\/?$/);
+  const m=location.pathname.match(/^(\/.*?)\/m\/(report|summary|gantt)\/?$/);
   if(m){
     const b=document.createElement('base');
     b.href=m[1].replace(/\/$/,'')+'/';
@@ -1040,12 +1040,17 @@ async function init(){
   load(date);
 }
 
-const LINE_LIB_URL='https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js';
-function loadHtml2Pdf(){
+/* Send-to-LINE — captures the productivity 4-box (.summary) at the top of
+   the gantt page as a PNG and posts it to /api/line/send-mobile-link, which
+   sends a Buttons Template card to every recipient (image + title + tap
+   button → /attendance/m/report?date=…). Matches the summary page's send
+   flow exactly so both cards look the same in the chat thread. */
+const HTML2CANVAS_SRC='https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+function loadHtml2Canvas(){
   return new Promise((resolve,reject)=>{
-    if(window.html2pdf)return resolve();
+    if(window.html2canvas)return resolve();
     const s=document.createElement('script');
-    s.src=LINE_LIB_URL;s.onload=()=>resolve();s.onerror=()=>reject(new Error('failed to load html2pdf.js'));
+    s.src=HTML2CANVAS_SRC; s.onload=()=>resolve(); s.onerror=()=>reject(new Error('html2canvas load failed'));
     document.head.appendChild(s);
   });
 }
@@ -1054,30 +1059,24 @@ async function sendPdfToLine(){
   const btn=$('lineBtn');
   const date=$('dateInput').value;
   if(!date){status.textContent='pick a date first';return;}
-  btn.disabled=true;status.textContent='loading PDF library…';
+  btn.disabled=true; status.textContent='rendering snapshot…';
   try{
-    await loadHtml2Pdf();
-    status.textContent='rendering PDF…';
-    const target=document.querySelector('.page')||document.body;
-    const opt={
-      margin:[6,6,6,6],
-      filename:`attendance_${date}.pdf`,
-      image:{type:'jpeg',quality:0.92},
-      html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'},
-      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-      pagebreak:{mode:['css','legacy']},
-    };
-    const blob=await window.html2pdf().set(opt).from(target).outputPdf('blob');
+    await loadHtml2Canvas();
+    // Snapshot the productivity 4-box only (matches what reports.html / summary.html send).
+    const target=document.getElementById('summary')||document.querySelector('.page')||document.body;
+    const canvas=await window.html2canvas(target,{scale:2,backgroundColor:'#ffffff',useCORS:true});
+    const blob=await new Promise(res=>canvas.toBlob(b=>res(b),'image/png'));
+    if(!blob){status.textContent='snapshot failed';return;}
     status.textContent=`uploading (${(blob.size/1024).toFixed(0)} KB)…`;
     const fd=new FormData();
-    fd.append('file',blob,`attendance_${date}.pdf`);
+    fd.append('file',blob,`attendance_${date}.png`);
     fd.append('report_date',date);
     fd.append('type','attendance');
-    const res=await fetch('api/line/upload-and-send',{method:'POST',body:fd});
+    const res=await fetch('api/line/send-mobile-link',{method:'POST',body:fd});
     const j=await res.json().catch(()=>({}));
     if(!res.ok||!j.ok){status.textContent='LINE send failed: '+(j.detail||JSON.stringify(j));return;}
-    const okN=(j.results||[]).filter(r=>r.status>=200&&r.status<300).length;
-    status.textContent=`✅ sent to ${okN} recipient(s) — ${j.pdf_url}`;
+    const okN=(j.results||[]).length;
+    status.textContent=`✅ sent to ${okN} recipient(s) → ${j.link_url}`;
   }catch(err){
     status.textContent='error: '+(err.message||err);
   }finally{

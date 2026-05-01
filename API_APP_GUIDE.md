@@ -139,8 +139,65 @@ curl -s -X POST -H "X-API-Key: YOUR_KEY" ^
 
 ### List & retrieve files already on the server
 ```cmd
+:: PDFs already on the server (attendance watched folder)
 curl -s -H "X-API-Key: YOUR_KEY" https://rnd.asiakawaii.com/attendance/api/v1/pdf/list
 curl -s -H "X-API-Key: YOUR_KEY" -O https://rnd.asiakawaii.com/attendance/api/v1/pdf/retrieve/就業日報2026.01.05.pdf
+
+:: Excel files already on the server (daily-packs watched folder) — v3.4
+curl -s -H "X-API-Key: YOUR_KEY" https://rnd.asiakawaii.com/attendance/api/v1/xlsx/list
+```
+
+`/api/v1/xlsx/list` response shape — note `extracted_date` is the date parsed
+out of the filename so the desktop client can match a target report_date to a
+specific file before triggering `auto-extract-excel`:
+
+```json
+{
+  "path": "/var/www/attendance_app/auto_uploads/daily_packs",
+  "exists": true,
+  "count": 2,
+  "files": [
+    { "filename": "２６.０４.３０.xlsx", "size": 84210,
+      "modified": "2026-04-30T18:42:01", "extracted_date": "2026-04-30" },
+    { "filename": "２６.０４.２３.xlsx", "size": 83910,
+      "modified": "2026-04-23T18:55:11", "extracted_date": "2026-04-23" }
+  ]
+}
+```
+
+### Back-fill a specific date with files already on the server (v3.4)
+
+The auto-update triggers now accept an optional `?date=YYYY-MM-DD` query
+parameter. When omitted, both endpoints fall back to "pick the latest file"
+(the original behavior, fully backward-compatible — no existing caller has to
+change). When supplied, the server picks the file whose filename encodes that
+date.
+
+If the requested date has no matching file on the server, the response is a
+**structured 404** carrying `error="file_not_available"`, the missing date,
+the kind, and the watched folder so the client can show "PDF / Excel for
+2026-04-23 is not on the server — please upload it first":
+
+```json
+{
+  "detail": {
+    "error": "file_not_available",
+    "kind": "attendance_pdf",
+    "requested_date": "2026-04-23",
+    "watched_folder": "/var/www/attendance_app/auto_uploads/attendance",
+    "message": "No attendance PDF for 2026-04-23 in /var/www/attendance_app/auto_uploads/attendance. Upload the PDF first via POST /api/v1/pdf/upload."
+  }
+}
+```
+
+```cmd
+:: Back-fill attendance for 2026-04-23 from a PDF already on the server
+curl -s -X POST -H "X-API-Key: YOUR_KEY" ^
+  "https://rnd.asiakawaii.com/attendance/api/v1/pdf/auto-upload?save=true&date=2026-04-23"
+
+:: Re-extract daily-packs for 2026-04-23 from an Excel already on the server
+curl -s -X POST ^
+  "https://rnd.asiakawaii.com/attendance/api/daily-packs/auto-extract-excel?date=2026-04-23"
 ```
 
 ---
@@ -355,6 +412,199 @@ if (window.desktop?.autoUpdate) {
 }
 ```
 If the page is loaded in a normal browser, `window.desktop` is `undefined` and the existing fetch path runs unchanged.
+
+---
+
+## 6.5 Desktop-client update guide — back-fill any date (v3.4)
+
+This is the recipe for the `watch.js` flow described in §1 of the desktop
+guide ("REST pre-check → upload-if-missing → trigger → verify"), now extended
+to back-fill **any** report_date — not just today — using files already on the
+server.
+
+### 6.5.1 New / changed endpoints
+
+| Method | Path                                                        | What changed                                                                                              |
+|--------|-------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|
+| GET    | `/api/v1/xlsx/list`                                         | **New.** Lists Excel files already on the server. Each entry includes `extracted_date` parsed from the filename. |
+| POST   | `/api/v1/pdf/auto-upload?save=true&date=YYYY-MM-DD`         | `date` is **new and optional**. Without it, picks latest (legacy). With it, picks the matching file or returns `file_not_available`. |
+| POST   | `/api/daily-packs/auto-extract-excel?date=YYYY-MM-DD`       | `date` is **new and optional**. Same semantics as above.                                                  |
+
+Backward-compatibility: every existing caller (legacy `watch.js`, `upload_latest.bat`, the console buttons) keeps working unchanged because `date` is optional.
+
+### 6.5.2 Updated decision tree for `_getDataStatus()` callers
+
+```
+GET /api/data-status/{date}
+   ↓
+For each missing block (attendance, daily_packs):
+   ├─ Is the file for {date} already on the server?
+   │     • PDFs:  GET /api/v1/pdf/list   → check `extracted_date`
+   │     • Excel: GET /api/v1/xlsx/list  → check `extracted_date`
+   │
+   ├─ YES → call the trigger with ?date={date} only (skip upload)
+   │     • POST /api/v1/pdf/auto-upload?save=true&date={date}
+   │     • POST /api/daily-packs/auto-extract-excel?date={date}
+   │
+   └─ NO  → upload, THEN trigger with ?date={date}
+         • POST /api/v1/pdf/upload    (file)
+         • POST /api/v1/pdf/auto-upload?save=true&date={date}
+         • POST /api/v1/xlsx/upload   (file)
+         • POST /api/daily-packs/auto-extract-excel?date={date}
+
+GET /api/data-status/{date}   ← verify (still up to 6 polls)
+```
+
+The `?date=` parameter ensures that even if the server has a *newer* file
+sitting in the watched folder, the back-fill ingests the correct one for the
+target date instead of overshooting to "latest."
+
+### 6.5.3 Drop-in `watch.js` patch
+
+```js
+// 1) Pre-check + decide which blocks to fix.
+const status = await _getDataStatus(targetDate);
+if (status.all_present) return { ok: true, skipped: true };
+
+// 2) For each missing block, ask the server first whether the file for
+//    targetDate is already there. If yes, skip the upload step entirely.
+async function _hasOnServer(kind, targetDate) {
+  const url = kind === 'pdf'
+    ? `${BASE}/api/v1/pdf/list`
+    : `${BASE}/api/v1/xlsx/list`;
+  const r = await fetch(url, { headers: { 'X-API-Key': KEY } });
+  if (!r.ok) return false;
+  const j = await r.json();
+  return (j.files || []).some(f => f.extracted_date === targetDate);
+}
+
+// 3) Attendance block
+if (status.missing.includes('attendance')) {
+  if (!await _hasOnServer('pdf', targetDate)) {
+    await _uploadOne('pdf', localPdfPath);                  // POST /api/v1/pdf/upload
+  }
+  const r = await fetch(
+    `${BASE}/api/v1/pdf/auto-upload?save=true&date=${targetDate}`,
+    { method: 'POST', headers: { 'X-API-Key': KEY } }
+  );
+  if (r.status === 404) {
+    const j = await r.json().catch(() => ({}));
+    const d = j.detail || {};
+    if (d.error === 'file_not_available') {
+      throw new Error(`Attendance PDF for ${d.requested_date} not on server. Upload it first.`);
+    }
+  }
+}
+
+// 4) Daily-packs block (mirror of the attendance branch)
+if (status.missing.includes('daily_packs')) {
+  if (!await _hasOnServer('xlsx', targetDate)) {
+    await _uploadOne('xlsx', localXlsxPath);                // POST /api/v1/xlsx/upload
+  }
+  const r = await fetch(
+    `${BASE}/api/daily-packs/auto-extract-excel?date=${targetDate}`,
+    { method: 'POST' }   // no key — endpoint is browser-facing
+  );
+  if (r.status === 404) {
+    const j = await r.json().catch(() => ({}));
+    const d = j.detail || {};
+    if (d.error === 'file_not_available') {
+      throw new Error(`Daily-packs Excel for ${d.requested_date} not on server. Upload it first.`);
+    }
+  }
+}
+
+// 5) Verify (existing poll loop, unchanged)
+```
+
+Two reminders that survive from §3:
+- Send `X-API-Key` only to `/api/v1/...` endpoints. The Excel trigger
+  (`/api/daily-packs/auto-extract-excel`) is **browser-facing and unauthenticated** — sending the key is harmless, omitting it is correct.
+- The `date` parameter is the **report_date** (production date). Per
+  `project_date_rules.md` the server keys attendance internally on
+  `record_date = report_date − 1`. The same `date` value goes to every endpoint
+  in the chain (`data-status`, `auto-upload`, `auto-extract-excel`).
+
+### 6.5.4 Smoke test (back-fill 2026-04-23)
+
+```cmd
+set KEY=YOUR_KEY
+set BASE=https://rnd.asiakawaii.com/attendance
+set DATE=2026-04-23
+
+:: Is anything missing for that date?
+curl -s %BASE%/api/data-status/%DATE%
+
+:: What attendance PDFs / packs Excels does the server already have?
+curl -s -H "X-API-Key: %KEY%" %BASE%/api/v1/pdf/list
+curl -s -H "X-API-Key: %KEY%" %BASE%/api/v1/xlsx/list
+
+:: Back-fill attendance from server-side PDF (no upload needed)
+curl -s -X POST -H "X-API-Key: %KEY%" ^
+  "%BASE%/api/v1/pdf/auto-upload?save=true&date=%DATE%"
+
+:: Back-fill daily packs from server-side Excel (no upload needed)
+curl -s -X POST "%BASE%/api/daily-packs/auto-extract-excel?date=%DATE%"
+
+:: Verify
+curl -s %BASE%/api/data-status/%DATE%
+```
+
+If a file isn't on the server, the trigger returns the structured
+`file_not_available` 404 from §3 — upload first via `/api/v1/pdf/upload` or
+`/api/v1/xlsx/upload`, then retry the trigger with the same `?date=`.
+
+---
+
+## 6.6 Move-to-Done warnings (v3.4)
+
+After a successful DB save the server moves the source PDF / Excel into a
+`done/` subfolder so the next Auto-update doesn't re-pick it. If that file
+move fails (filesystem error, cross-device rename, file removed mid-flight,
+etc.), the API call still **succeeds** — the DB write already committed and
+must not be rolled back by a filesystem hiccup. The successful response simply
+carries `moved_to_done: false`.
+
+Each such warning is appended to `logs/done_warnings.log` (one JSON entry
+per line) and can be retrieved by the desktop client over a key-protected
+endpoint:
+
+```cmd
+:: Latest 200 warnings (default), oldest first
+curl -s -H "X-API-Key: YOUR_KEY" ^
+  https://rnd.asiakawaii.com/attendance/api/v1/done-files/warnings
+
+:: Filter by kind, custom limit
+curl -s -H "X-API-Key: YOUR_KEY" ^
+  "https://rnd.asiakawaii.com/attendance/api/v1/done-files/warnings?kind=daily_packs&limit=50"
+```
+
+Response shape:
+
+```json
+{
+  "path":   "/var/www/attendance_app/logs/done_warnings.log",
+  "exists": true,
+  "count":  2,
+  "warnings": [
+    { "ts": "2026-05-02T03:14:19", "kind": "attendance",
+      "filename": "就業日報2026.04.23.pdf",
+      "src_path": "/var/www/attendance_app/auto_uploads/attendance/就業日報2026.04.23.pdf",
+      "error":    "PermissionError: [Errno 13] Permission denied" },
+    { "ts": "2026-05-02T03:18:02", "kind": "daily_packs",
+      "filename": "２６.０４.２３.xlsx",
+      "src_path": "/var/www/attendance_app/auto_uploads/daily_packs/２６.０４.２３.xlsx",
+      "error":    "OSError: [Errno 18] Invalid cross-device link" }
+  ]
+}
+```
+
+Recommended desktop client behavior: after every save call where
+`moved_to_done === false`, poll `/api/v1/done-files/warnings?kind=…&limit=10`
+once and surface the most recent matching entry to the operator with a hint
+("the file did not auto-archive — please drag it from the watched folder into
+done/ manually, or retry by deleting the source"). Auth: `X-API-Key`,
+identical to every other `/api/v1/*` call.
 
 ---
 
