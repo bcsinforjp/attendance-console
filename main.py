@@ -37,7 +37,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 # Create app
-app = FastAPI(title="V3 Attendance Console", version="3.4")
+app = FastAPI(title="V3 Attendance Console", version="3.5")
 
 BASE_DIR = Path(__file__).resolve().parent
 EMPLOYEE_ROSTER_PATH = BASE_DIR / "employee_roster.json"
@@ -512,6 +512,32 @@ def init_db() -> None:
             """)
             cursor.execute("ALTER TABLE temp_staff ADD COLUMN IF NOT EXISTS leave_next_day BOOLEAN NOT NULL DEFAULT FALSE")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_temp_staff_date ON temp_staff(record_date)")
+            # 2026-05-01 — daily_packs gets right-side N合計/Y合計 + section-2 plan start_time.
+            cursor.execute("ALTER TABLE daily_packs ADD COLUMN IF NOT EXISTS n_total INTEGER")
+            cursor.execute("ALTER TABLE daily_packs ADD COLUMN IF NOT EXISTS y_total INTEGER")
+            cursor.execute("ALTER TABLE daily_packs ADD COLUMN IF NOT EXISTS section_start_time VARCHAR(5)")
+            # 2026-05-01 — production_plan persists the A/B/C line breakdown
+            # parsed off 製造予定表 ＮＹ. One row per (date, line, item).
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS production_plan (
+                    id              SERIAL PRIMARY KEY,
+                    record_date     DATE    NOT NULL,
+                    line_code       CHAR(1) NOT NULL,
+                    item_name       TEXT    NOT NULL,
+                    planned_qty     INTEGER NOT NULL DEFAULT 0,
+                    n_qty           INTEGER NOT NULL DEFAULT 0,
+                    y_qty           INTEGER NOT NULL DEFAULT 0,
+                    combined_qty    INTEGER NOT NULL DEFAULT 0,
+                    start_time      VARCHAR(5),
+                    takt_time       VARCHAR(8),
+                    pph_target      INTEGER,
+                    required_staff  INTEGER,
+                    source_filename TEXT,
+                    saved_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+                    UNIQUE (record_date, line_code, item_name)
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_production_plan_date ON production_plan(record_date)")
             # daily_pack_items stores the per-product Excel breakdown (one row per
             # product per upload). Replaces a same-date batch on re-upload via
             # delete-then-insert, so production_date is unique-per-upload not strict PK.
@@ -4595,6 +4621,315 @@ def _parse_pack_sheet(ws, sheet_name):
         "sheet_name": sheet_name,
     }
 
+# ---------------------------------------------------------------------------
+# Sub-parsers added 2026-05-01: read three more pieces from the workbook so
+# the daily-packs flow can persist:
+#   1) Section-2 right-side totals (Ｎ合計 / Ｙ合計 / sum) on 入力画面
+#   2) フルキャスト manual rows on 人時生産性 (R78/R79 area for Section 2,
+#      plus the matching block for Section 1 lower in the same sheet)
+#   3) Section-2 production plan (Aライン / Bライン / Cライン) on 製造予定表 ＮＹ
+#
+# All three search by Japanese LABEL, never by hardcoded coordinates — the
+# operator's workbook gets minor cell shifts month over month.
+# ---------------------------------------------------------------------------
+
+def _norm_jp(s) -> str:
+    """NFKC + strip whitespace including ideographic space — cheaper variant
+    of _nfkc for label matching where we also want to fold full/half spaces."""
+    if s is None:
+        return ""
+    t = unicodedata.normalize("NFKC", str(s))
+    return t.replace("　", "").replace(" ", "").strip()
+
+
+def _parse_section_totals_from_input_sheet(ws) -> dict | None:
+    """Find Ｎ合計 / Ｙ合計 by label in the top header rows of 入力画面 and
+    return their numeric values + a combined sum. Tolerates the screenshot's
+    layout where the two cells sit far to the right of the per-product grid
+    and may be one or more rows above the value row.
+
+    Returns {n_total, y_total, combined, n_label_at:[r,c], y_label_at:[r,c]}
+    or None if labels not found.
+    """
+    n_at = y_at = None
+    # Scan first ~10 rows × all columns for the labels
+    max_r = min(ws.max_row, 12)
+    max_c = min(ws.max_column, 80)
+    for r in range(1, max_r + 1):
+        for c in range(1, max_c + 1):
+            v = ws.cell(r, c).value
+            t = _norm_jp(v)
+            if not t:
+                continue
+            if n_at is None and t == "N合計":
+                n_at = (r, c)
+            elif y_at is None and t == "Y合計":
+                y_at = (r, c)
+            if n_at and y_at:
+                break
+        if n_at and y_at:
+            break
+    if n_at is None or y_at is None:
+        return None
+    # Walk down the column under each label until we find the first numeric.
+    def first_num_below(r0, c0):
+        for r in range(r0 + 1, min(ws.max_row + 1, r0 + 8)):
+            v = ws.cell(r, c0).value
+            iv = _excel_cell_int(v)
+            if iv is not None and iv >= 0:
+                return iv, r
+        return None, None
+    n_total, n_row = first_num_below(*n_at)
+    y_total, y_row = first_num_below(*y_at)
+    return {
+        "n_total": n_total or 0,
+        "y_total": y_total or 0,
+        "combined": (n_total or 0) + (y_total or 0),
+        "n_label_at": list(n_at),
+        "y_label_at": list(y_at),
+        "n_value_at": [n_row, n_at[1]] if n_row else None,
+        "y_value_at": [y_row, y_at[1]] if y_row else None,
+    }
+
+
+def _parse_fullcast_rows_from_jisei_sheet(ws) -> list[dict]:
+    """Read フルキャスト rows from the 人時生産性 sheet.
+
+    Layout (verified on the real 夜勤用日報 workbook):
+      • 人時生産性計算　製造２課 starts at R1; section ends with two rows
+        whose col A = headcount (e.g. 8 then 1) and col C = total worked time
+        (timedelta), then a 人時生産性 calc row in col A.
+      • 人時生産性計算　製造１課 begins later in the same sheet with the same
+        shape; its フルキャスト rows are the two rows above its 人時生産性 row.
+
+    We locate each section by scanning for the label '人時生産性\\n…' in col A,
+    walk back up to two rows that look like fullcast (small int in col A,
+    timedelta in col C) and emit them.
+    """
+    out: list[dict] = []
+    # Find rows whose col A starts with '人時生産性' (the calc label rows)
+    section_anchors = []
+    for r in range(1, min(ws.max_row + 1, 400)):
+        v = ws.cell(r, 1).value
+        if isinstance(v, str) and "人時生産性" in v and "計算" not in v:
+            section_anchors.append(r)
+    # Also look for the section title rows (人時生産性計算　製造X課) to label
+    section_titles: list[tuple[int, str]] = []  # (row, "section_label")
+    for r in range(1, min(ws.max_row + 1, 400)):
+        v = ws.cell(r, 1).value
+        if isinstance(v, str) and "人時生産性計算" in v:
+            section_titles.append((r, v))
+
+    def label_for_anchor(anchor_row: int) -> str:
+        # The closest section title above this anchor
+        prev = [t for t in section_titles if t[0] < anchor_row]
+        if not prev:
+            return ""
+        title = prev[-1][1]
+        if "２課" in title or "2課" in title:
+            return "製造2課"
+        if "１課" in title or "1課" in title:
+            return "製造1課"
+        return _norm_jp(title)
+
+    def _hhmm_from_cell(v):
+        """Read a 人時生産性 cell that may be timedelta, datetime.time, or
+        datetime.datetime (Excel's 1900-base) and return 'HH:MM' (or None)."""
+        if v is None:
+            return None
+        if isinstance(v, timedelta):
+            secs = int(v.total_seconds()) % (24 * 3600)
+            return f"{secs // 3600:02d}:{(secs % 3600) // 60:02d}"
+        if hasattr(v, "hour") and hasattr(v, "minute"):
+            return f"{v.hour:02d}:{v.minute:02d}"
+        return None
+
+    for anchor in section_anchors:
+        # Walk up from anchor-1 collecting candidate fullcast rows until
+        # we hit an employee row (col B has a name string) or the section title.
+        # Column layout (verified on 夜勤用日報 workbook, rows 84-85):
+        #   A = headcount         (e.g. 5)
+        #   B = blank
+        #   C = start_time        (timedelta — Excel renders it as "19:00")
+        #   D = leave_time        (datetime — Excel renders the time part, e.g. "04:00")
+        #   E = total worked time (timedelta — the real labor: headcount × duration)
+        candidates = []
+        r = anchor - 1
+        while r > 0 and len(candidates) < 4:
+            a = ws.cell(r, 1).value
+            b = ws.cell(r, 2).value
+            c = ws.cell(r, 3).value
+            d = ws.cell(r, 4).value
+            e = ws.cell(r, 5).value
+            if isinstance(a, (int, float)) and 0 < a <= 50 and (b is None or _norm_jp(b) == ""):
+                start_hhmm = _hhmm_from_cell(c)
+                leave_hhmm = _hhmm_from_cell(d)
+                total_secs = 0
+                leave_next_day = False
+                if isinstance(e, timedelta):
+                    total_secs = int(e.total_seconds())
+                    leave_next_day = e.days >= 1
+                # Heuristic for leave-next-day when col E is missing: leave time
+                # numerically less than start time means it crosses midnight.
+                if start_hhmm and leave_hhmm and not leave_next_day:
+                    sh, sm = (int(x) for x in start_hhmm.split(":"))
+                    lh, lm = (int(x) for x in leave_hhmm.split(":"))
+                    if (lh * 60 + lm) <= (sh * 60 + sm):
+                        leave_next_day = True
+                candidates.append({
+                    "row": r, "headcount": int(a),
+                    "start_time": start_hhmm, "leave_time": leave_hhmm,
+                    "leave_next_day": leave_next_day,
+                    "total_seconds": total_secs,
+                })
+                r -= 1
+                continue
+            if isinstance(b, str) and b.strip():
+                break
+            if isinstance(a, str) and ("人時生産性計算" in a or "個人コード" in a):
+                break
+            r -= 1
+        # Reverse so output is in workbook order (top-down)
+        for cand in reversed(candidates):
+            head = cand["headcount"]
+            secs = cand["total_seconds"]
+            per_person_h = round((secs / head) / 3600.0, 2) if (head and secs) else None
+            out.append({
+                "section_label": label_for_anchor(anchor),
+                "headcount": head,
+                "start_time": cand["start_time"],
+                "leave_time": cand["leave_time"],
+                "leave_next_day": cand["leave_next_day"],
+                "total_seconds": secs,
+                "total_hours": round(secs / 3600.0, 2),
+                "hours_per_person": per_person_h,
+                "source_row": cand["row"],
+            })
+    return out
+
+
+_PLAN_LINE_HEADERS = {
+    "Aライン": "A", "Aライン計": "A",
+    "Bライン": "B", "Bライン計": "B",
+    "Cライン": "C", "Cライン計": "C",
+}
+
+
+def _parse_production_plan_sheet(ws) -> dict:
+    """Parse 製造予定表 ＮＹ (Section-2 plan).
+
+    Header columns (verified on the real workbook): item-name in col A; we
+    locate '確定' / 'Ｙ便' / 'Ｎ+Ｙ' / '製造\\n時間' / 'タイムテーブル' / 'p/h'
+    / '必要\\n人員' by label in the row directly under each Aライン/Bライン/Cライン
+    section header. Then walk rows until we hit a 'X line 計' row (the line total).
+    """
+    rows = ws.max_row
+    cols_max = ws.max_column
+
+    # Find each line section's header rows (label row + the row right under it
+    # which holds the column titles for that line)
+    line_blocks: list[dict] = []
+    for r in range(1, rows + 1):
+        a = _norm_jp(ws.cell(r, 1).value)
+        if a in ("Aライン", "Bライン", "Cライン"):
+            line_blocks.append({"line": _PLAN_LINE_HEADERS[a], "header_row": r, "title_row": r + 1})
+
+    plan: dict = {"section_start_time": None, "lines": {"A": [], "B": [], "C": []}, "totals": {"A": 0, "B": 0, "C": 0}}
+
+    last_col_map: dict = {}  # carry across line blocks — B/C don't always repeat every column header
+    for blk in line_blocks:
+        # Read the column-title row to find which column is which
+        col_map = dict(last_col_map)  # inherit from previous line; per-line title overrides
+        for c in range(1, cols_max + 1):
+            t = _norm_jp(ws.cell(blk["title_row"], c).value)
+            if not t:
+                continue
+            if t == "確定":             col_map["n_qty"] = c
+            elif t == "Y便":            col_map["y_qty"] = c
+            elif t in ("N+Y", "Ｎ+Ｙ"):  col_map["combined"] = c
+            elif t == "製造時間":        col_map["takt"] = c
+            elif t == "タイムテーブル":   col_map["start"] = c
+            elif t == "切替時間":        col_map["changeover"] = c
+            elif t == "p/h" or t.lower() == "p/h":
+                                       col_map["pph_target"] = c
+            elif t == "必要人員":        col_map["required_staff"] = c
+            elif t in ("製造予定数", "製造\n予定数"):
+                                       col_map["planned_qty"] = c
+            elif t == "アイテム":        col_map["item_name"] = c
+        last_col_map = dict(col_map)
+        # Item-name column defaults to col 1 if not flagged explicitly
+        col_item = col_map.get("item_name", 1)
+        # Walk rows from title_row+1 down until we hit 'X計' or a blank row
+        items = []
+        line_total = 0
+        r = blk["title_row"] + 1
+        while r <= rows:
+            name_v = ws.cell(r, col_item).value
+            name = _norm_jp(name_v)
+            if not name:
+                r += 1
+                if r - blk["title_row"] > 30:
+                    break
+                continue
+            if name in ("Aライン計", "Bライン計", "Cライン計", "Ａライン計", "Ｂライン計", "Ｃライン計"):
+                # Read total qty from the planned_qty column (or combined) on this row
+                tot_col = col_map.get("planned_qty") or col_map.get("combined")
+                if tot_col:
+                    line_total = _excel_cell_int(ws.cell(r, tot_col).value) or 0
+                break
+            # Also stop if we hit the next section header or "２便計" / "３便計" / blank far down
+            if name in ("Aライン", "Bライン", "Cライン", "２便計", "３便計", "二便計", "三便計"):
+                break
+            # Build an item record
+            def _at(col_key):
+                col = col_map.get(col_key)
+                if col is None:
+                    return None
+                return ws.cell(r, col).value
+            def _int(col_key):
+                return _excel_cell_int(_at(col_key))
+            def _time_str(col_key):
+                v = _at(col_key)
+                if v is None:
+                    return None
+                if hasattr(v, "hour") and hasattr(v, "minute"):
+                    return f"{v.hour:02d}:{v.minute:02d}"
+                return _norm_jp(v) or None
+            items.append({
+                "item_name": name,
+                "planned_qty": _int("planned_qty") or _int("combined") or 0,
+                "n_qty":       _int("n_qty") or 0,
+                "y_qty":       _int("y_qty") or 0,
+                "combined":    _int("combined") or 0,
+                "start_time":  _time_str("start"),
+                "takt_time":   _time_str("takt"),
+                "pph_target":  _int("pph_target"),
+                "required_staff": _int("required_staff"),
+            })
+            r += 1
+        plan["lines"][blk["line"]] = items
+        plan["totals"][blk["line"]] = line_total
+    # Section start time: pick the LATEST first-item start across all
+    # non-empty lines. The workbook sometimes flips which line carries the
+    # "main" (night) production vs the early prep — but the actual canonical
+    # night-shift start is always the latest of the line-firsts (typically
+    # 19:20). Falls back to None if no line has items with a start time.
+    candidates = []
+    for ln in ("A", "B", "C"):
+        items = plan["lines"].get(ln) or []
+        if items:
+            t = items[0].get("start_time")
+            if t and re.match(r"^\d{1,2}:\d{2}$", t):
+                candidates.append((t, ln))
+    if candidates:
+        # Sort by HH*60+MM ascending, take the LATEST
+        def to_min(s): h, m = s.split(":"); return int(h) * 60 + int(m)
+        candidates.sort(key=lambda c: to_min(c[0]))
+        plan["section_start_time"] = candidates[-1][0]
+        plan["section_start_source_line"] = candidates[-1][1]
+    return plan
+
+
 # Sheets to try in order. 入力画面 is the canonical input view in the real
 # 日報 workbook (matches what the PDF prints). 受注集計表 is a secondary
 # summary view used in some older files.
@@ -4605,25 +4940,62 @@ def parse_daily_pack_excel(file_path: Path) -> dict:
     other sheet that happens to contain the N便計/Y便計 header pair.
     Layout-tolerant: NFKC-folds fullwidth Ｎ/Ｙ, allows the header to span up
     to 3 rows, and skips single-letter ID columns when picking product names.
+
+    Also pulls (when present):
+      • section_totals  — Ｎ合計 / Ｙ合計 / sum from 入力画面
+      • fullcast        — フルキャスト rows from 人時生産性 (Section 1 + 2)
+      • production_plan — A/B/C lines from 製造予定表 ＮＹ (Section 2)
     """
-    wb = load_workbook(file_path, data_only=True, read_only=True)
+    # We need read_only=False so we can call ws.cell() directly with random
+    # access for the auxiliary parsers (they label-search the whole sheet).
+    wb = load_workbook(file_path, data_only=True, read_only=False, keep_vba=False)
     sheets_in_order = (
         [s for s in _PACK_SHEET_PREFERENCE if s in wb.sheetnames]
         + [s for s in wb.sheetnames if s not in _PACK_SHEET_PREFERENCE]
     )
-    last_err: Exception | None = None
+    base: dict | None = None
     tried = []
     for sheet_name in sheets_in_order:
         try:
-            return _parse_pack_sheet(wb[sheet_name], sheet_name)
+            base = _parse_pack_sheet(wb[sheet_name], sheet_name)
+            base["_input_sheet_name"] = sheet_name
+            break
         except Exception as exc:
-            last_err = exc
             tried.append(f"{sheet_name}: {exc}")
             continue
-    raise ValueError(
-        "No sheet matched the daily-packs layout. Tried: "
-        + " | ".join(tried[:5])
-    )
+    if base is None:
+        raise ValueError(
+            "No sheet matched the daily-packs layout. Tried: "
+            + " | ".join(tried[:5])
+        )
+
+    # Section totals (right-side Ｎ合計 / Ｙ合計) — from the same sheet we just parsed.
+    try:
+        if base.get("_input_sheet_name") in wb.sheetnames:
+            base["section_totals"] = _parse_section_totals_from_input_sheet(wb[base["_input_sheet_name"]])
+    except Exception:
+        base["section_totals"] = None
+
+    # Fullcast rows on 人時生産性 (best-effort — not all workbooks have this sheet)
+    try:
+        if "人時生産性" in wb.sheetnames:
+            base["fullcast"] = _parse_fullcast_rows_from_jisei_sheet(wb["人時生産性"])
+        else:
+            base["fullcast"] = []
+    except Exception:
+        base["fullcast"] = []
+
+    # Production plan (A/B/C lines) — sheet name has an ideographic space.
+    plan_sheet = next((s for s in wb.sheetnames if "製造予定表" in s and ("ＮＹ" in s or "NY" in s)), None)
+    if plan_sheet:
+        try:
+            base["production_plan"] = _parse_production_plan_sheet(wb[plan_sheet])
+        except Exception:
+            base["production_plan"] = None
+    else:
+        base["production_plan"] = None
+
+    return base
 
 
 def _suggest_start_time(production_date) -> dict:
@@ -4756,6 +5128,12 @@ async def auto_extract_daily_pack_excel():
     rates = _load_rates()
     pdate = parsed["meta"].get("production_date")
     start = _suggest_start_time(pdate) if pdate else {"start_time": "17:00", "source": "default", "n": 0, "candidates": ["17:00", "19:00"]}
+    # If the workbook has a planned start time on 製造予定表, prefer that over the
+    # heuristic — it's a confirmed value, not an inference.
+    plan = parsed.get("production_plan") or {}
+    if plan.get("section_start_time"):
+        start = {"start_time": plan["section_start_time"], "source": "production_plan", "n": None,
+                 "candidates": [start.get("start_time"), plan["section_start_time"]]}
     prediction = _build_prediction(parsed["products"], start["start_time"], rates)
     return {
         "source_filename": picked.name,
@@ -4764,6 +5142,9 @@ async def auto_extract_daily_pack_excel():
         "products":        parsed["products"],
         "start":           start,
         "prediction":      prediction,
+        "section_totals":  parsed.get("section_totals"),
+        "fullcast":        parsed.get("fullcast") or [],
+        "production_plan": parsed.get("production_plan"),
     }
 
 
@@ -4827,12 +5208,21 @@ async def save_daily_pack_excel(payload: dict = Body(...)):
     batch_id = str(uuid.uuid4())
     inserted = 0
     total_packs = 0
+    # Compute per-product effective qty: prefer grand_total, fall back to
+    # n_total + y_total (some workbooks leave 全合計 blank). The day-level
+    # total is later overridden by section_totals.combined when present —
+    # that's the authoritative right-side Ｎ合計+Ｙ合計 the operator confirms.
+    def _effective_qty(p: dict) -> int:
+        gt = p.get("grand_total")
+        if isinstance(gt, (int, float)) and gt > 0:
+            return int(gt)
+        return int(p.get("n_total") or 0) + int(p.get("y_total") or 0)
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM daily_pack_items WHERE production_date = %s", (pdate,))
             for p in products:
                 rate, _ = _rate_for_product(rates, p.get("product_name") or "")
-                qty = int(p.get("grand_total") or 0)
+                qty = _effective_qty(p)
                 total_packs += qty
                 est_secs = int(round((qty / max(rate, 1)) * 3600)) if qty else 0
                 cur.execute(
@@ -4872,25 +5262,263 @@ async def save_daily_pack_excel(payload: dict = Body(...)):
             if source: note_parts.append(source)
             note_parts.append(f"{inserted} products")
             note_parts.append(f"batch {batch_id[:8]}")
+            # Pull the parsed extras the UI passed through (or compute fresh
+            # totals from products[] as a fallback for legacy callers).
+            section_totals = payload.get("section_totals") or {}
+            n_total_val = section_totals.get("n_total") if section_totals else None
+            y_total_val = section_totals.get("y_total") if section_totals else None
+            sec_start_t = (payload.get("section_start_time") or
+                           (payload.get("production_plan") or {}).get("section_start_time"))
+            # Authoritative day-level pack count: when the right-side Ｎ合計+Ｙ合計
+            # was confirmed in the workbook, use it instead of the per-product sum.
+            if section_totals and isinstance(section_totals.get("combined"), int) and section_totals["combined"] > 0:
+                total_packs = int(section_totals["combined"])
             cur.execute(
                 """
-                INSERT INTO daily_packs (record_date, number_of_packs, note)
-                VALUES (%s, %s, %s)
+                INSERT INTO daily_packs (record_date, number_of_packs, note,
+                                         n_total, y_total, section_start_time)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (record_date) DO UPDATE
-                    SET number_of_packs = EXCLUDED.number_of_packs,
-                        note = EXCLUDED.note,
+                    SET number_of_packs    = EXCLUDED.number_of_packs,
+                        note               = EXCLUDED.note,
+                        n_total            = COALESCE(EXCLUDED.n_total, daily_packs.n_total),
+                        y_total            = COALESCE(EXCLUDED.y_total, daily_packs.y_total),
+                        section_start_time = COALESCE(EXCLUDED.section_start_time, daily_packs.section_start_time),
                         updated_at = NOW()
                 """,
-                (pdate, total_packs, " ".join(note_parts)),
+                (pdate, total_packs, " ".join(note_parts), n_total_val, y_total_val, sec_start_t),
             )
+
+            # Persist フルキャスト rows into temp_staff. CRITICAL date rule
+            # (memory: project_date_rules):
+            #   record_date for temp_staff = SHIFT date = production_date − 1
+            # The Excel's production_date is the day the packs are booked to;
+            # the workers actually clocked in the night before. Every other
+            # /api/temp-staff/{date} consumer (gantt, summary, manual fullcast
+            # tab) keys on the shift date.
+            shift_date = pdate - timedelta(days=1)
+            if payload.get("skip_fullcast"):
+                pass
+            else:
+                fullcast = payload.get("fullcast") or []
+                if fullcast:
+                    cur.execute("DELETE FROM temp_staff WHERE record_date = %s", (shift_date,))
+                    for fc in fullcast:
+                        head = int(fc.get("headcount") or 0)
+                        secs = int(fc.get("total_seconds") or 0)
+                        if head <= 0:
+                            continue
+                        # Each fullcast row carries its own start/leave time read
+                        # straight from 人時生産性 — col C and col D of the row.
+                        # Fall back to section start / 10:00 only when missing.
+                        start_t = (fc.get("start_time") or sec_start_t or "19:00")[:5]
+                        leave_t = (fc.get("leave_time") or "10:00")[:5]
+                        leave_nxt = bool(fc.get("leave_next_day", True))
+                        per_person_h = fc.get("hours_per_person")
+                        if per_person_h is None and secs and head:
+                            per_person_h = round((secs / head) / 3600.0, 2)
+                        # If total_seconds is missing on the parsed row (older
+                        # files), fall back to start/leave HH:MM math.
+                        if (not secs) and start_t and leave_t and head:
+                            sh, sm = (int(x) for x in start_t.split(":"))
+                            lh, lm = (int(x) for x in leave_t.split(":"))
+                            duration_min = (lh * 60 + lm + (24 * 60 if leave_nxt else 0)) - (sh * 60 + sm)
+                            if duration_min > 0:
+                                secs = duration_min * 60 * head
+                                per_person_h = round(duration_min / 60.0, 2)
+                        if not secs or not per_person_h:
+                            continue
+                        total_h = round(secs / 3600.0, 2)
+                        cur.execute(
+                            """
+                            INSERT INTO temp_staff (record_date, company, headcount,
+                                start_time, leave_time, leave_next_day,
+                                hours_per_person, total_hours, note)
+                            VALUES (%s, 'フルキャスト', %s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (shift_date, head, start_t, leave_t, leave_nxt, per_person_h, total_h,
+                             f"[excel-auto] {source or ''}".strip()),
+                        )
+
+            # Persist the production plan (A/B/C lines) — replace this date's rows.
+            plan = payload.get("production_plan") or {}
+            plan_lines = (plan.get("lines") or {}) if isinstance(plan, dict) else {}
+            if plan_lines:
+                cur.execute("DELETE FROM production_plan WHERE record_date = %s", (pdate,))
+                for line_code, items in plan_lines.items():
+                    for item in (items or []):
+                        cur.execute(
+                            """
+                            INSERT INTO production_plan (
+                                record_date, line_code, item_name,
+                                planned_qty, n_qty, y_qty, combined_qty,
+                                start_time, takt_time, pph_target, required_staff,
+                                source_filename
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (record_date, line_code, item_name) DO UPDATE SET
+                                planned_qty    = EXCLUDED.planned_qty,
+                                n_qty          = EXCLUDED.n_qty,
+                                y_qty          = EXCLUDED.y_qty,
+                                combined_qty   = EXCLUDED.combined_qty,
+                                start_time     = EXCLUDED.start_time,
+                                takt_time      = EXCLUDED.takt_time,
+                                pph_target     = EXCLUDED.pph_target,
+                                required_staff = EXCLUDED.required_staff,
+                                source_filename= EXCLUDED.source_filename,
+                                saved_at = NOW()
+                            """,
+                            (pdate, line_code[:1], (item.get("item_name") or "")[:200],
+                             int(item.get("planned_qty") or 0),
+                             int(item.get("n_qty") or 0),
+                             int(item.get("y_qty") or 0),
+                             int(item.get("combined") or 0),
+                             item.get("start_time"),
+                             item.get("takt_time"),
+                             item.get("pph_target"),
+                             item.get("required_staff"),
+                             source),
+                        )
         conn.commit()
     return {
         "ok": True,
         "batch_id": batch_id,
         "production_date": pdate.isoformat(),
+        # フルキャスト attendance + manual-entry tab key on the shift date
+        # (= production_date − 1). Surfacing it here so the frontend can
+        # navigate to the matching tab without re-deriving it.
+        "shift_date": shift_date.isoformat(),
         "rows_saved": inserted,
         "number_of_packs": total_packs,
+        "n_total": section_totals.get("n_total") if section_totals else None,
+        "y_total": section_totals.get("y_total") if section_totals else None,
+        "section_start_time": sec_start_t,
+        "fullcast_saved": (0 if payload.get("skip_fullcast") else len(payload.get("fullcast") or [])),
+        "plan_lines_saved": {k: len(v or []) for k, v in plan_lines.items()},
     }
+
+
+# ---------------------------------------------------------------------------
+# Data Cleanup — operator-controlled deletion of a small set of dates from
+# every date-keyed table. Hard-capped at 5 dates per request to make sure
+# this is never accidentally turned into a "wipe everything" tool. There is
+# no "all" mode — the operator must pick the specific dates.
+# ---------------------------------------------------------------------------
+_CLEANUP_TABLES: list[tuple[str, str]] = [
+    ("attendance_records", "record_date"),
+    ("daily_packs",        "record_date"),
+    ("daily_pack_items",   "production_date"),
+    ("temp_staff",         "record_date"),
+    ("production_plan",    "record_date"),
+]
+_CLEANUP_MAX_DATES = 5
+
+
+def _parse_cleanup_dates(raw) -> list:
+    if isinstance(raw, str):
+        items = [s.strip() for s in raw.split(",") if s.strip()]
+    elif isinstance(raw, list):
+        items = [str(s).strip() for s in raw if str(s).strip()]
+    else:
+        raise HTTPException(status_code=400, detail="dates must be a list or comma-separated string")
+    out: list = []
+    seen: set[str] = set()
+    for s in items:
+        if not _DAYOFF_DATE_RE.match(s):
+            raise HTTPException(status_code=400, detail=f"bad date '{s}' (expected YYYY-MM-DD)")
+        if s in seen:
+            continue
+        seen.add(s)
+        try:
+            out.append(datetime.strptime(s, "%Y-%m-%d").date())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"invalid date '{s}'")
+    if not out:
+        raise HTTPException(status_code=400, detail="dates is empty")
+    if len(out) > _CLEANUP_MAX_DATES:
+        raise HTTPException(status_code=400,
+            detail=f"too many dates: maximum {_CLEANUP_MAX_DATES} per request (got {len(out)})")
+    return sorted(out)
+
+
+@app.get("/api/cleanup/preview")
+async def cleanup_preview(dates: str):
+    """Count how many rows in each date-keyed table would be deleted for the
+    given dates. Use this to drive a confirmation UI before calling delete."""
+    target_dates = _parse_cleanup_dates(dates)
+    out: dict = {"dates": [d.isoformat() for d in target_dates], "max_dates": _CLEANUP_MAX_DATES, "rows": {}}
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            for tbl, col in _CLEANUP_TABLES:
+                per_date: dict[str, int] = {}
+                total = 0
+                for d in target_dates:
+                    cur.execute(f"SELECT COUNT(*) FROM {tbl} WHERE {col} = %s", (d,))
+                    n = int(cur.fetchone()[0])
+                    per_date[d.isoformat()] = n
+                    total += n
+                out["rows"][tbl] = {"date_column": col, "per_date": per_date, "total": total}
+    out["grand_total"] = sum(t["total"] for t in out["rows"].values())
+    return out
+
+
+@app.post("/api/cleanup/delete")
+async def cleanup_delete(payload: dict = Body(...)):
+    """Delete every row whose date_column is in the requested list, across all
+    tables in `_CLEANUP_TABLES`. Hard-capped at 5 dates. Requires `confirm:
+    true` in the body so a stray POST can't wipe data."""
+    if not payload.get("confirm"):
+        raise HTTPException(status_code=400, detail="confirm: true is required to delete")
+    target_dates = _parse_cleanup_dates(payload.get("dates"))
+    deleted: dict = {}
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            for tbl, col in _CLEANUP_TABLES:
+                row_count = 0
+                for d in target_dates:
+                    cur.execute(f"DELETE FROM {tbl} WHERE {col} = %s", (d,))
+                    row_count += cur.rowcount
+                deleted[tbl] = row_count
+        conn.commit()
+    return {
+        "ok": True,
+        "dates": [d.isoformat() for d in target_dates],
+        "deleted": deleted,
+        "grand_total": sum(deleted.values()),
+        "deleted_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@app.get("/api/production-plan/{date}")
+async def get_production_plan(date: str):
+    """Return saved A/B/C production plan rows for a given date, grouped by line."""
+    try:
+        d = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD") from exc
+    out: dict = {"record_date": d.isoformat(), "lines": {"A": [], "B": [], "C": []}, "totals": {"A": 0, "B": 0, "C": 0}, "section_start_time": None}
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT line_code, item_name, planned_qty, n_qty, y_qty, combined_qty,
+                       start_time, takt_time, pph_target, required_staff, source_filename
+                FROM production_plan
+                WHERE record_date = %s
+                ORDER BY line_code, id
+            """, (d,))
+            rows = cur.fetchall() or []
+            cur.execute("SELECT n_total, y_total, section_start_time FROM daily_packs WHERE record_date = %s", (d,))
+            head = cur.fetchone() or {}
+    for r in rows:
+        ln = (r.get("line_code") or "").upper()
+        if ln not in out["lines"]:
+            out["lines"][ln] = []
+            out["totals"][ln] = 0
+        out["lines"][ln].append(r)
+        out["totals"][ln] += int(r.get("planned_qty") or 0)
+    out["section_start_time"] = head.get("section_start_time")
+    out["n_total"] = head.get("n_total")
+    out["y_total"] = head.get("y_total")
+    return out
 
 
 @app.get("/api/daily-packs/items/{date}")

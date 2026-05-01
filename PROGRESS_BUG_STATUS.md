@@ -1,11 +1,325 @@
 # Progress & Bug Status — Attendance App
 # 進捗・不具合対応状況 — 勤怠アプリ
 
-**Date / 日付:** 2026-04-30
+**Date / 日付:** 2026-05-01
 
-**Version / バージョン:** 3.4
+**Version / バージョン:** 3.4 (post-tag work on `dev`)
 
-**Latest update / 最新更新 (2026-04-30 — v3.4: two-flow Auto-update + bat dispatch fix)**
+**Latest update / 最新更新 (2026-05-01 — Post-save navigation routes by entry point)**
+
+The flow after saving a Daily Packs Excel batch now goes to a
+different place depending on how the operator started the save:
+
+1. If the operator clicked **Confirm & Save batch →** on the Daily
+   Packs Excel tab directly, the page navigates to the **Reports**
+   page with the production date pre-filled in the URL. This is
+   the operator's normal end-of-shift workflow: finish Excel input,
+   review the day's report.
+2. If the operator clicked **⚡ Auto-update from Excel** on the
+   フルキャスト tab, the page returns to the **フルキャスト tab**
+   on the shift date (= production date − 1) and reloads the
+   会社 / 人数 list so the just-saved buckets are immediately
+   visible.
+
+The Reports page also accepts `?date=YYYY-MM-DD` on its URL now,
+so the report date is set automatically when the console redirects
+in. The Daily Packs Manual Confirm & Save flow was updated to
+carry the date forward in the same way.
+
+Daily Packs Excel の Confirm & Save 後の遷移先を、ボタンの
+起点に応じて切り替えるようにしました：
+
+1. **Daily Packs タブ → Excel セグメント → Confirm & Save batch →**
+   を直接押した場合 → **Reports ページ** に遷移し、URL に
+   製造日が付与された状態で開きます（オペレーターの通常の
+   勤務終了フロー）。
+2. **2 フルキャスト タブ → ⚡ Auto-update from Excel** を押した場合
+   → **フルキャストタブ** に戻り、シフト日（= 製造日 − 1）
+   の 会社 / 人数 一覧を読み直します。直前に保存された行が
+   そのまま確認できます。
+
+Reports ページは URL の `?date=YYYY-MM-DD` を読み取り、レポート日付
+を自動セットするようになりました。Daily Packs マニュアル入力の
+Confirm & Save も同じく製造日を URL に渡します。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Management page gained a 🗑 Data Cleanup tab)**
+
+A controlled way to remove a small number of bad days from the
+database has been added to the Management page. Operators can pick
+specific dates, see exactly how many rows in each table would be
+removed, and then confirm the delete. Three safety rails are in
+place to make sure this is never used as a "wipe everything" tool:
+
+1. **Pick by specific dates only** — there is no "delete all" or
+   "wipe table" mode. The operator types or picks the date(s) they
+   want gone, one at a time. Selected dates appear as removable
+   red chips so a typo can be undone before the preview.
+2. **Maximum 5 dates per operation** — the UI counts `N / 5
+   selected` and the server rejects anything beyond 5 with HTTP
+   400. To clean a longer range, repeat the operation.
+3. **Two-step confirm with a big red warning** — clicking Preview
+   shows a per-table per-date row-count table, then a bilingual
+   "destructive action / 取り消しできません" panel appears with a
+   confirmation checkbox. The Delete button only enables once that
+   box is ticked.
+
+Once confirmed, the server deletes from `attendance_records`,
+`daily_packs`, `daily_pack_items`, `temp_staff`, and
+`production_plan` for the selected date(s) in a single transaction
+and returns per-table counts so the operator can verify the action
+landed correctly.
+
+Management ページに「🗑 Data Cleanup · データ削除」タブを
+追加しました。指定した日付だけのデータをデータベースから
+削除できます。誤って全データを消してしまわないよう、
+3 つの安全策を組み込んでいます：
+
+1. **必ず日付を 1 件ずつ指定。** 「全削除」モードはありません。
+   オペレーターが日付を入力／選択して追加する形式で、追加した
+   日付は赤いチップで表示され、× ボタンで取り消せます。
+2. **1 回の操作で最大 5 日付まで。** UI に `N / 5 selected` の
+   カウンターがあり、サーバー側でも 5 件を超えた場合は HTTP
+   400 で拒否します。長い期間をクリーンアップする場合は
+   操作を分けて実行します。
+3. **2 段階確認 + 大きな赤色警告。** プレビューを押すと
+   テーブル × 日付 ごとの行数表と、バイリンガルの「取り消し
+   できません」警告パネルが表示されます。同意チェックボックス
+   を入れない限り削除ボタンは押せません。
+
+確認後、サーバーは `attendance_records` / `daily_packs` /
+`daily_pack_items` / `temp_staff` / `production_plan` の各テーブル
+から指定日付の行を 1 トランザクションで削除し、テーブル別の
+削除件数を返します。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — フルキャスト start/leave times now read from the correct Excel cells)**
+
+The auto-extracted フルキャスト rows now show the same start and
+leave times that appear in the actual Excel workbook. The parser
+was reading the wrong column for start time, which caused the
+saved rows to use the production-plan default (19:20 → 10:00) for
+every bucket and to mis-calculate the per-person hours.
+
+For the 2026-04-19 file, the saved rows are now exactly:
+- 5 名 · 19:00 → 翌 04:00 · 9 時間/人 · 合計 45 時間
+- 3 名 · 19:00 → 翌 05:00 · 10 時間/人 · 合計 30 時間
+- shift total = 75 時間 (was incorrectly 38 時間)
+
+The Excel preview also shows the time window per bucket, so the
+operator can verify the times match the workbook before saving.
+
+人時生産性 シートの読み取り列を間違えていたため、自動取り込み
+されたフルキャストの開始時刻・退勤時刻が、実際の Excel と
+一致しない不具合を修正しました。
+
+修正前は、開始時刻として「就業時間（duration）」列を読み取って
+いたため、保存される行はすべて 製造予定表 の開始時刻
+（19:20）と既定の退勤時刻（10:00）になり、1 人当たりの時間も
+19 時間と誤計算されていました。
+
+修正後、2026-04-19 のファイルから取り込まれる行は：
+- 5 名 · 19:00 → 翌 04:00 · 9 時間/人 · 合計 45 時間
+- 3 名 · 19:00 → 翌 05:00 · 10 時間/人 · 合計 30 時間
+- このシフトの労働時間合計 = 75 時間（旧バグでは 38 時間）
+
+Excel プレビューにも各行の時間帯が表示されるようになり、
+保存前に Excel と一致しているか確認できます。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — フルキャスト date keying corrected + Skip / Auto-update buttons on manual tab)**
+
+The relationship between the four daily dates that the operator works
+with has been locked in across the app, fixing a real bug introduced
+in the morning's Excel import work and adding two convenience buttons
+on the manual フルキャスト tab:
+
+1. **The four daily dates now line up the same way everywhere:**
+   - Report date = Daily Packs day = Excel production date.
+   - Report date = attendance PDF upload date + 1 day.
+   - **フルキャスト 手動入力 shift date = production date − 1.**
+   - フルキャスト 手動入力 shift date = attendance PDF upload date.
+2. **Bug fix.** The Excel-import flow was saving フルキャスト rows
+   under the production date — but the manual fullcast tab and the
+   gantt overlay both look up by shift date (= production date − 1).
+   The auto-extracted rows were landing on the wrong day and weren't
+   visible. Fix: the save endpoint now writes
+   `temp_staff.record_date = production_date − 1`, returns
+   `shift_date` in the response, and the post-save navigation
+   opens the manual tab on the correct day.
+3. **Two new buttons on the manual フルキャスト tab:**
+   - **⚡ Auto-update from Excel** — runs the same Daily Packs
+     Excel auto-extract + save flow without leaving the fullcast
+     tab. Internally it switches to the Excel segment, clicks
+     Auto-update, waits for the parse to complete, clicks Save.
+     The save then navigates back to the fullcast tab with the
+     shift date pre-loaded and the rows visible.
+   - **Skip →** — operator confirms there are no フルキャスト
+     for this shift and jumps to Daily Packs. No DB writes.
+
+The four-way date relationship has been added to the memory file so
+future sessions don't reintroduce the same off-by-one date bug.
+
+オペレーターが日々扱う 4 つの日付の関係を、アプリ全体で
+統一しました。午前中の Excel 取り込み作業で混入したバグを
+修正し、フルキャスト手動入力タブに便利なボタンを 2 つ
+追加しています：
+
+1. **4 つの日付の関係を全画面で統一：**
+   - レポート日付 = Daily Packs 日 = Excel の製造日。
+   - レポート日付 = 勤怠 PDF アップロード日 + 1 日。
+   - **フルキャスト 手動入力 シフト日 = 製造日 − 1 日。**
+   - フルキャスト 手動入力 シフト日 = 勤怠 PDF アップロード日。
+2. **バグ修正。** Excel 取り込みのフローで、フルキャスト 行を
+   製造日に保存してしまっていました。しかし、手動フルキャスト
+   タブとガント表示の両方は シフト日（= 製造日 − 1）で参照
+   するため、自動取り込みされた行が間違った日に保存され
+   表示されない問題が発生していました。修正後は
+   `temp_staff.record_date = 製造日 − 1` で保存し、レスポンス
+   に `shift_date` を含めて、保存後の遷移先も正しい日付に
+   なります。
+3. **手動フルキャストタブに新ボタン 2 つ：**
+   - **⚡ Auto-update from Excel** — フルキャストタブから離れず
+     に、Daily Packs Excel の自動取り込み・保存フローを 1
+     クリックで実行します。内部では Excel セグメントへの
+     切替・Auto-update・解析完了待機・Save を順に実行し、
+     保存後は正しいシフト日のフルキャストタブに戻ります。
+   - **Skip →** — このシフトには フルキャスト がいないと
+     確認したオペレーター用。Daily Packs タブに直接遷移し、
+     データベースには何も書きません。
+
+4 日付の関係はメモリファイル `project_date_rules.md` にも保存
+しました。今後のセッションで同じ off-by-one バグが再発しない
+ようにしています。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Daily-packs Excel preview cleanup + smarter start time + post-save navigation)**
+
+Five small but operationally important changes to the Daily Packs
+Excel flow, all driven by the operator's actual usage:
+
+1. **Excel preview is leaner.** The Input by, Weather / Temp, and
+   Total quantity fields were removed — they were either redundant
+   (the values vary per product so a single "total quantity" was
+   misleading) or never read by anyone. The preview now shows only
+   Production date · Start time · End time · Products count.
+2. **Cross-check pill no longer false-alarms.** Previously it
+   warned `⚠ per-product sum 0 ≠ 13,168` whenever the per-product
+   全合計 column was blank (which is most files). Now it compares
+   per-product N+Y against the right-side 合計 with a small
+   tolerance and stays silent when the per-product side is empty.
+3. **Start time is consistently 19:20.** The parser used to take
+   the first A-line item start, but the workbook flips which line
+   carries early-prep vs main production between months. The new
+   rule picks the latest first-item start across A / B / C —
+   that's always the canonical night-shift start (19:20) regardless
+   of which line is carrying it.
+4. **End time has a +30 minute buffer.** Per operator request, the
+   predicted end time now includes a 30-minute buffer, and the
+   label reads "End time (+30 min buffer)" so the buffer is
+   explicit. The avg-p/h calculation still uses the unbuffered run
+   length to stay accurate.
+5. **Workflow lands on the フルキャスト tab.** After a successful
+   Excel save, the console now switches to the manual fullcast tab
+   with the date pre-loaded, so the operator can immediately see
+   the just-saved 会社 / 人数 rows in the existing list UI and
+   confirm or edit them without retyping.
+
+実機の使い方に合わせて、Daily Packs の Excel 取り込み画面を
+5 か所、実用上重要なポイントで改善しました：
+
+1. **プレビュー画面をスリム化。** Input by、Weather / Temp、
+   Total quantity の 3 項目を削除しました（商品ごとに値が
+   異なるため「合計数量」を 1 つだけ表示するのは誤解を招き、
+   他の 2 項目も実際には参照されていませんでした）。プレビュー
+   は Production date / Start time / End time / Products count の
+   運用上必要な情報だけを表示します。
+2. **クロスチェック表示の誤警告をなくしました。** 以前は商品別
+   全合計列が空白の月（ほとんどの月）で
+   `⚠ per-product sum 0 ≠ 13,168` という警告が出ていました。
+   新しいロジックは、商品別 N+Y 合計を右側の合計と比較し、
+   0.5% 以内のずれは許容、商品別側が空の場合は表示しません。
+3. **開始時刻が常に 19:20 に。** 以前は Aライン先頭の開始時刻を
+   採用していましたが、月によって Aライン と Bライン の役割が
+   入れ替わります。新しいルールでは A / B / C の中で「最も遅い
+   先頭開始時刻」を採用するので、どちらのラインが本番でも
+   常に夜勤の正しい開始時刻 (19:20) になります。
+4. **End time に +30 分バッファ。** オペレーターのご要望通り、
+   予測終了時刻に 30 分のバッファを追加しました。ラベルも
+   「End time (+30 min buffer)」と明示。平均 p/h の計算は
+   バッファ無しの実稼働時間を使うので、平均値の精度は保たれます。
+5. **保存後はフルキャストタブに自動遷移。** Excel の保存が成功
+   すると、フルキャストタブに切り替わり、その Excel の製造日
+   を `fcDate` に設定して `loadFcFromDb()` で会社 / 人数 一覧
+   を読み込みます。保存された行を既存のリスト UI で確認・修正
+   でき、再入力は不要です。
+
+---
+
+**Previous update / 前回の更新 (2026-05-01 — Daily-packs Excel: section totals, フルキャスト, A/B/C plan all parsed and saved)**
+
+The daily-packs Excel pipeline now reads three more pieces from the
+real 夜勤用日報 workbook and persists them all to the database in
+one transaction:
+
+1. **Section totals (Ｎ合計 / Ｙ合計 / 合計).** The right-side total
+   columns on 入力画面 are now picked up automatically. The Daily
+   Packs Excel preview shows them as a single strip with a
+   cross-check pill that compares against the per-product sum so any
+   discrepancy is obvious. The operator-confirmed Ｎ合計+Ｙ合計 is
+   now the authoritative pack count for the day — this fixes the
+   case (verified on 2026-04-29) where per-product 全合計 was blank
+   and the day was saved with 0 packs.
+2. **フルキャスト auto-fill.** The 8 名 / 1 名 entries on the
+   人時生産性 sheet are now read directly into the preview as a
+   summary line (`8 名 + 1 名 = 9 名 · 27.0h total`). They save into
+   `temp_staff` automatically when the operator clicks Save. A skip
+   checkbox is provided next to the summary — when ticked, the save
+   leaves any existing `temp_staff` rows alone.
+3. **A/B/C production plan.** 製造予定表 ＮＹ is parsed into three
+   colour-coded preview cards (Aライン blue, Bライン green, Cライン
+   orange) with a compact `item · planned · N · Y · start` table.
+   The first A-line item's start time becomes the Section 2
+   start-time pill. Everything is saved to a new `production_plan`
+   table, one row per item per date, queryable via
+   `GET /api/production-plan/<date>`.
+
+データベース側では `daily_packs` に `n_total` / `y_total` /
+`section_start_time` の 3 列を追加し、新しい `production_plan`
+テーブルでライン別アイテム別に保存しています。
+
+Daily Packs の Excel 取り込みで、現場の 夜勤用日報 ファイルから
+さらに 3 つの情報を自動で読み取り、ワンクリックでまとめて
+データベースに保存できるようにしました：
+
+1. **課別合計 (Ｎ合計 / Ｙ合計 / 合計)。** 入力画面 の右側の合計
+   列を自動で取得します。Daily Packs Excel プレビューに 1 行
+   ストリップで表示し、商品別の合計と一致するかを ✓ / ⚠ ピル
+   でクロスチェックします。確認済みの Ｎ合計+Ｙ合計 がその日の
+   正式な合計パック数になります。これにより、商品別 全合計 が
+   空欄のため 1 日が 0 パックで保存されてしまう不具合（2026-04-29
+   の実機ファイルで確認）が解消されます。
+2. **フルキャストの自動入力。** 人時生産性 シートの 8 名 / 1 名
+   の行をプレビューに自動表示します
+   （`8 名 + 1 名 = 9 名 · 27.0h 合計` のような形式）。Save 時に
+   `temp_staff` テーブルへ自動保存します。サマリー横の Skip
+   チェックボックスを ON にすると、既存の `temp_staff` 行は
+   触らずにスキップできます。
+3. **A/B/C ラインの製造予定。** 製造予定表 ＮＹ を 3 枚の色分け
+   プレビューカード（Aライン 青 / Bライン 緑 / Cライン 橙）に
+   解析し、`アイテム · 予定 · N · Y · 開始時刻` の小テーブル
+   を表示します。Aライン先頭アイテムの開始時刻がそのまま
+   製造2課のスタートタイムになります。データは新しい
+   `production_plan` テーブルに保存され、
+   `GET /api/production-plan/<date>` で取り出せます。
+
+---
+
+**Previous update / 前回の更新 (2026-04-30 — v3.4: two-flow Auto-update + bat dispatch fix)**
 
 The desktop / CMD upload flow was split into two clearly-separate
 pipelines so an operator can push the daily PDFs and the daily-packs

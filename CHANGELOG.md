@@ -7,6 +7,126 @@ Format: `YYYY-MM-DD — [area] what changed (why) → files`
 
 ---
 
+## 2026-05-01 — v3.5 release tag
+
+Bump `app.version` 3.4 → 3.5. Coherent batch shipped on top of v3.4:
+
+- **Daily Packs Excel parser overhaul.** Three new sub-parsers read the right-side **Ｎ合計 / Ｙ合計** off `入力画面`, the **フルキャスト 5 名 / 3 名** rows on `人時生産性` (start time from col C, leave time from col D, total seconds from col E — fixes a column-misread bug), and the **A / B / C lines** on `製造予定表　ＮＹ`. All three blocks saved on Confirm & Save in one transaction.
+- **Schema migration.** New `production_plan` table; new `n_total` / `y_total` / `section_start_time` columns on `daily_packs`.
+- **Date-keying corrected.** Memory file `project_date_rules.md` captures the four-way relationship (Report = Excel prod = PDF + 1; フルキャスト shift = prod − 1). The Excel save now writes `temp_staff.record_date = production_date − 1` so the gantt overlay and the manual fullcast tab read the right day.
+- **Excel preview cleanup.** Dropped Input by / Weather / Total qty fields. Cross-check pill no longer false-alarms when per-product 全合計 is blank. Start time = latest first-item start across A / B / C (= 19:20 either way). End time gets a +30 min buffer.
+- **🗑 Data Cleanup tab in Management.** Per-date deletion across 5 date-keyed tables, hard 5-date cap, two-step confirm, no "delete all" mode.
+- **Manual フルキャスト tab.** Two new buttons: **⚡ Auto-update from Excel** (drives the whole Daily Packs Excel flow and lands back on the fullcast tab on shift_date) and **Skip →**.
+- **Post-save navigation.** Daily Packs Excel direct save → `/reports?date=production_date`. ⚡ Auto-update from fullcast → stays on fullcast tab on shift_date. Reports page reads `?date=` from URL.
+
+Detailed per-feature entries follow below.
+
+→ `main.py`, `README.md`, `PROJECT_INSIDE_AI_BLUEPRINT.md`
+
+## 2026-05-01 — Post-save navigation: Daily Packs Excel save → /reports; フルキャスト ⚡ Auto-update → stays on fullcast tab
+- **[ui]** Save handler in `console.html` now routes the post-save destination based on which button started the flow:
+  - **Daily Packs → Excel segment → Confirm & Save batch →** → `window.location.href = api("/reports") + "?date=" + production_date`. This is the operator's normal end-of-shift workflow: finish Excel input → review the day's report.
+  - **2 フルキャスト tab → ⚡ Auto-update from Excel** → returns to the fullcast tab on `shift_date` (= production_date − 1), reloads `temp_staff` for that day so the saved 会社/人数 rows are visible.
+  - The destination is controlled by `xlsxState.postSaveGoal` (default `"reports"`); the fullcast ⚡ handler sets it to `"fullcast"` right before clicking the hidden Save button, then it auto-resets to `"reports"` so the next direct save goes back to the default.
+  → `static/console.html`
+- **[ui]** Reports page (`/reports`) now reads `?date=YYYY-MM-DD` from the URL on load and seeds `$reportDate.value` with it (showing `source: opened from console save (production date)` in the hint). Falls through to the existing latest-DB-date heuristic when no `?date` is passed. → `static/reports.html`
+- **[ui]** Daily Packs **Manual** Confirm & Save also now carries the production date forward (`api("/reports") + "?date=" + $packDate.value`). Previously it redirected to `/reports` without a date so the page defaulted to the latest DB date. → `static/console.html`
+- **[verify]** Tested both paths in the browser:
+  - Daily Packs Excel direct save: `/reports?date=2026-04-19` opens with the report-date input pre-filled to 2026-04-19 and the date-source hint reading "opened from console save (production date)".
+  - フルキャスト ⚡ Auto-update: returns to TAB 2 on shift date 2026-04-18, 会社/人数 list shows the just-saved 5 名 / 3 名 buckets. → live test.
+
+## 2026-05-01 — Management → 🗑 Data Cleanup tab: per-date deletion with hard 5-date cap, two-step confirm, NO "delete all" mode
+- **[backend]** New endpoints under `/api/cleanup/`:
+  - `GET /api/cleanup/preview?dates=YYYY-MM-DD,…` — returns row counts per (table, date) for the requested dates across `attendance_records / daily_packs / daily_pack_items / temp_staff / production_plan`. Dates are validated by regex, deduped, sorted; **maximum 5 dates per request** (returns 400 otherwise). Used to drive the confirmation UI.
+  - `POST /api/cleanup/delete` — body `{dates: [...], confirm: true}`. Deletes every row whose date column is in the requested list, across the same 5 tables, in one transaction. Refuses without `confirm: true` (so a stray POST can't wipe data). Returns per-table delete counts + grand total + UTC timestamp.
+  - Both endpoints share `_parse_cleanup_dates()` which enforces the cap, the YYYY-MM-DD regex, and dedup.
+  - **Deliberate design choice**: there is no "delete all" / "wipe table" mode. The cap of 5 is the operator's safety rail.
+  → `main.py`
+- **[ui]** New 4th Management tab **`🗑 Data Cleanup · データ削除`** (next to Roster / Day-off / LINE Recipients). Tab itself is highlighted with a soft red border so the destructive area is visible at a glance. Workflow:
+  1. **Pick dates** — date input + **+ Add to list** button. Selected dates appear as removable red chips. Live counter shows `N / 5 dates selected`.
+  2. **🔍 Preview rows to delete** — fetches the preview API and renders a table per (table, date) with row counts (`0` rows are gray, non-zero are red-bold). Summary line shows total rows that would be deleted.
+  3. **Big red warning panel** — only renders when there's something to delete. Bilingual EN+JP "DESTRUCTIVE ACTION · 取り消しできません" warning, plus a checkbox `I understand and want to delete the data shown above. / 上記のデータを削除することに同意します。` that is **the only thing** that enables the red **🗑 Delete data** button.
+  4. **Final delete** — POSTs with `confirm: true`. On success the UI shows a green result panel with per-table delete counts, clears the selection, and resets the workflow.
+  → `static/management.html`
+- **[verify]** Live: `GET /api/cleanup/preview?dates=2026-04-29,2026-04-19` returned `grand_total: 146` rows (attendance_records=80, daily_packs=2, daily_pack_items=30, temp_staff=2, production_plan=32). Safety rails verified — 6-date request returns 400, bad date format returns 400, POST without `confirm: true` returns 400. → live test.
+- **[ops]** No DB schema change; this is purely add-only API + UI on top of the existing date-keyed tables. Round-9 backups created (`*.bak9`) before edits.
+
+## 2026-05-01 — フルキャスト start/leave times read from the right Excel cells (was reading the duration column as start time)
+- **[backend/critical-bug]** The `_parse_fullcast_rows_from_jisei_sheet` parser was reading `人時生産性` column **C** as `total_seconds`. Wrong — column C is the **start_time** stored as a timedelta-since-midnight (Excel renders it as `19:00`). The actual total worked time lives in column **E**, and the **leave_time** is in column **D**. The bug caused saved `temp_staff` rows to have:
+  - `start_time = section_start_time` (= 19:20 from production plan, not 19:00 from the workbook)
+  - `leave_time = "10:00"` hardcoded fallback (not 04:00 / 05:00 from D)
+  - `total_hours = 19.0` for every bucket (the start-time-as-duration mistake), which made `hours_per_person = 19h` for the 1-headcount case.
+- **[backend/fix]** Reworked the parser to read each fullcast row as: **A=headcount, C=start_time (timedelta→HH:MM), D=leave_time (datetime→HH:MM), E=total_seconds (timedelta)**. Adds a tolerant `_hhmm_from_cell()` helper that handles `timedelta`, `datetime.time`, and `datetime.datetime` (Excel's 1900-base) uniformly. Returns `start_time`, `leave_time`, `leave_next_day`, `total_seconds`, `total_hours`, `hours_per_person` per bucket. Heuristic: if `leave_next_day` isn't already set from col E being ≥1 day, infer it from `leave HH:MM ≤ start HH:MM`. → `main.py`
+- **[backend/fix]** `save-excel-batch` now uses each parsed row's own `start_time` and `leave_time` instead of falling back to the production-plan section start. Adds a fallback chain when the parser couldn't extract the total: derive from `(leave - start) × headcount` so older workbooks that don't fill column E still save sensibly. → `main.py`
+- **[ui]** The `xlsxFullcastDetail` line in the Excel preview now shows the per-row time window: `製造2課: 5 名 · 19:00 → 翌 04:00 (9h/人)`. Operators can verify the times match the workbook before clicking Save. → `static/console.html`
+- **[verify]** Round-trip on `2026-04-19` Excel:
+  - Parser: `[{5 名, start 19:00, leave 04:00, total 45h, 9h/人}, {3 名, start 19:00, leave 05:00, total 30h, 10h/人}]` — exactly matches the operator's screenshot.
+  - SQL: `temp_staff(2026-04-18)`:
+    ```
+    id 345 | 2026-04-18 | 5 | 19:00 | 04:00 | next-day | 9.00 h/p | 45.00 h
+    id 346 | 2026-04-18 | 3 | 19:00 | 05:00 | next-day | 10.00 h/p | 30.00 h
+    ```
+  - Total labor for the shift: 75h (was being saved as 38h with the bug). → live test.
+
+## 2026-05-01 — Date relationships locked in: フルキャスト row date fixed (now shift_date = production_date − 1) + Skip / Auto-update buttons on the manual fullcast tab
+- **[backend/critical-bug]** Fixed a date-keying bug introduced in the morning's Excel-import work. The save-excel-batch endpoint was writing `temp_staff.record_date = production_date` — but `temp_staff` is keyed on **shift date** (= production_date − 1). Every other consumer (`/api/temp-staff/{date}`, the gantt overlay, the manual fullcast tab) reads by shift date, so the Excel-saved フルキャスト rows were landing on the wrong day and not visible from the manual tab. Fix: server computes `shift_date = pdate - timedelta(days=1)` and uses it for both the `DELETE` (overwrite) and the `INSERT`. Save response now includes `shift_date` so the frontend can navigate to the right day. → `main.py`
+- **[ui]** Post-save navigation now opens the フルキャスト tab on `shift_date` (server-returned) instead of `production_date`. The success toast shows both dates: `Saved batch for 2026-04-19. Opening フルキャスト on shift date 2026-04-18…`. → `static/console.html`
+- **[ui]** **Two new buttons on the manual フルキャスト tab** (TAB 2):
+  - **`⚡ Auto-update from Excel`** (accent-colored) — runs the entire Daily Packs Excel auto-extract + save flow from inside the fullcast tab. Implementation: programmatically `switchTab("packs")`, click the Excel segment switch, click `btnXlsxAuRun`, poll until `btnSaveXlsxBatch` becomes enabled (30s timeout), then click Save. The save handler already navigates back to the fullcast tab on the right shift_date — one click does the whole loop end-to-end.
+  - **`Skip →`** (muted) — operator confirms there are no フルキャスト for this shift; jumps straight to the Daily Packs tab without writing anything to `temp_staff`.
+  → `static/console.html`
+- **[memory]** Saved `project_date_rules.md` to the memory store + an entry in `MEMORY.md` index. Captures the four-way date relationship as a single source of truth so future sessions don't reintroduce date-keying bugs:
+    - Report date = Daily Packs day = Excel production date.
+    - Report date = attendance PDF upload date + 1 day.
+    - フルキャスト 手動入力 shift date = Excel production date − 1 day.
+    - フルキャスト 手動入力 shift date = attendance PDF upload date.
+  → `~/.claude/projects/-var-www/memory/project_date_rules.md`
+- **[verify]** Round-trip on `2026-04-19` Excel:
+  - Save response: `{production_date: "2026-04-19", shift_date: "2026-04-18", number_of_packs: 13168, fullcast_saved: 2, plan_lines_saved: {A: 9, B: 8, C: 0}, section_start_time: "19:20"}`
+  - SQL: `temp_staff(record_date=2026-04-18)` has the 5名 / 3名 buckets at start_time=19:20; `temp_staff(record_date=2026-04-19)` is empty (correct — that's the production day, not the shift day).
+  - Cleaned up stale rows from earlier tests where the old code wrote to production_date. → live test.
+
+## 2026-05-01 — Daily-packs Excel preview cleanup: dropped Input by / Weather / Total qty fields, smarter start time, +30 min end buffer, jump to フルキャスト tab after save
+- **[ui]** Removed three unnecessary fields from the Daily Packs Excel preview: **Input by**, **Weather / Temp**, and the **Total quantity** sum (replaced with a compact **Products** count showing `N items` since totals vary per product). The preview is now narrower and shows only the operational fields: Production date · Start time · End time · Products. → `static/console.html`
+- **[ui]** **Cross-check pill** in the section-totals strip rewritten. The previous version flagged `⚠ per-product sum 0 ≠ 13,168` as an alarm any time per-product `grand_total` was missing — false alarm because that's expected on these workbooks. New logic compares per-product **N+Y** sum (which IS reliable) with section_totals.combined, allows a 0.5% drift tolerance, and stays silent when the per-product side is genuinely empty. → `static/console.html`
+- **[backend]** `_parse_production_plan_sheet` start-time rule changed. Was: first A-line item start. Now: **latest first-item start across all non-empty lines** (A / B / C). The workbook flips which line carries the canonical "main" production vs early prep between months — A-line first = 17:20 in one file but A-line first = 19:20 in another; B-line is the inverse. Picking the latest first-item-start consistently lands on the actual night-shift start (19:20 in both cases). The chosen line is recorded on the parsed plan as `section_start_source_line`. → `main.py`
+- **[ui]** Auto-update Start-time `<select>` now **dynamically appends** the parser-suggested value when it isn't already in the dropdown options (so 17:20 / 19:20 from the production plan can be displayed even though the static options were only 17:00 / 19:00). The Start time label gained the hint `(製造予定表)` to make the source explicit. → `static/console.html`
+- **[ui]** **End time field** gained an explicit **+30 min buffer** per operator request — `recomputePrediction()` now adds 30 minutes to the computed end-time, and the field label reads `End time (+30 min buffer)`. The hint line shows `Xh Ym run · avg N p/h · +30m buffer` so the buffer is visible. The avg-p/h calc uses the unbuffered run length (no double-counting). → `static/console.html`
+- **[ui]** **Post-save navigation** changed: after a successful Excel save, the console now jumps to the **フルキャスト tab** (TAB 2 — `switchTab("fullcast")`) instead of the Daily Packs Manual entry segment, sets `$fcDate` to the Excel's `production_date`, and calls `loadFcFromDb(date)` so the saved 会社 / 人数 rows appear immediately in the existing fullcast list UI. The operator can verify the auto-populated buckets and edit if needed without re-typing them. → `static/console.html`
+- **[verify]** Round-trip on `auto_uploads/daily_packs/夜勤用日報２６．０４．１９.xlsm`:
+  - Parser returned `section_start_time = 19:20` (chosen from A-line first item; B-line first was 17:20 — the older "earliest" rule would have picked the wrong one).
+  - `section_totals = {n_total: 9973, y_total: 3195, combined: 13168}` — pill renders without false alarm.
+  - `fullcast = [{5 名, 19h, 製造2課}, {3 名, 19h, 製造2課}]` — matches the operator's verified `5 名 + 3 名 = 8 名` total.
+  - SQL after save: `daily_packs(2026-04-19) → number_of_packs=13168, n_total=9973, y_total=3195, section_start_time=19:20`; `temp_staff(2026-04-19)` has 2 rows (5名 / 3名 both starting 19:20, leave 10:00 next-day, total 19h each).
+  - `GET /api/temp-staff/2026-04-19` returns `total_people: 8, total_hours: 38.0` — exactly what the post-save fullcast tab will show. → live test.
+
+## 2026-05-01 — Daily-packs Excel parser reads section totals + フルキャスト + A/B/C production plan; saves to DB
+- **[backend/parser]** Three new label-search sub-parsers added in `main.py` next to the existing `_parse_pack_sheet`:
+  - **`_parse_section_totals_from_input_sheet(ws)`** — scans the top header rows of `入力画面` for `Ｎ合計` / `Ｙ合計` cells (NFKC-folded so half/full-width Ｎ/Ｙ both match), then walks down each label's column for the first numeric cell. Returns `{n_total, y_total, combined, n_label_at, y_label_at}`. Layout-tolerant — the cells sit on the right side of the page after the per-product N便/Y便 grid; their column shifts month over month, so the search is by **text**, not coordinates.
+  - **`_parse_fullcast_rows_from_jisei_sheet(ws)`** — finds the `人時生産性` calc-label rows on the `人時生産性` sheet (`人時生産性\\nLabor productivity` in col A), walks back up to two rows that look like a fullcast bucket (small int 1–50 in col A, blank col B, timedelta in col C). Tags each bucket with `製造1課` or `製造2課` based on the closest section-title row above (`人時生産性計算　製造X課`). Returns a list of `{section_label, headcount, total_seconds, total_hours, source_row}`.
+  - **`_parse_production_plan_sheet(ws)`** — parses `製造予定表　ＮＹ`. Locates each `Aライン` / `Bライン` / `Cライン` block by label in col A; reads the column-title row directly under each block to find which columns hold `確定` / `Y便` / `N+Y` / `製造時間` / `タイムテーブル` / `切替時間` / `p/h` / `必要人員` / `製造予定数`. **Carries the column map across line blocks** because B and C lines don't repeat every header from A's title row. Walks down until the per-line `Aライン計` / `Bライン計` / `Cライン計` row, captures total. The first A-line item's start time becomes `section_start_time`. → `main.py`
+- **[backend]** `parse_daily_pack_excel` now opens the workbook in random-access mode (`read_only=False, keep_vba=False`) so the auxiliary parsers can label-search any sheet, and folds the three new blocks (`section_totals`, `fullcast`, `production_plan`) into the response. `/api/daily-packs/auto-extract-excel` passes them through. When the production plan provides a confirmed start time, it overrides the heuristic-based suggestion. → `main.py`
+- **[backend/db]** Migration on app start (idempotent `ALTER TABLE … ADD COLUMN IF NOT EXISTS`):
+  - `daily_packs` gained **`n_total`**, **`y_total`**, **`section_start_time VARCHAR(5)`**.
+  - New table **`production_plan`** (`record_date`, `line_code CHAR(1)`, `item_name`, `planned_qty`, `n_qty`, `y_qty`, `combined_qty`, `start_time`, `takt_time`, `pph_target`, `required_staff`, `source_filename`, `saved_at`) with `UNIQUE (record_date, line_code, item_name)` and `idx_production_plan_date`. → `main.py`
+- **[backend]** `POST /api/daily-packs/save-excel-batch` now persists everything in one transaction:
+  1. Per-product rows into `daily_pack_items` (existing flow).
+  2. **Day-level row** in `daily_packs` — `n_total` / `y_total` / `section_start_time` go on the same UPSERT (`COALESCE(EXCLUDED, …)` so partial saves don't clobber prior values). When `section_totals.combined > 0` it overrides `number_of_packs` (this is the operator-confirmed Ｎ合計+Ｙ合計, authoritative over the per-product sum which can be 0 if the workbook leaves 全合計 blank — verified on the real 2026-04-29 file: per-product sum = 0, combined = 10,293, fix saves the right number).
+  3. **`temp_staff` フルキャスト rows** — replaces this date's rows from the parsed `fullcast[]` (one bucket per row, with `headcount` / `hours_per_person` / `total_hours` derived from `total_seconds`). Operator can opt out via `payload.skip_fullcast: true` — in that case existing rows are left alone.
+  4. **`production_plan` rows** — replace this date's rows with the parsed A/B/C breakdown (one row per item, `ON CONFLICT (record_date, line_code, item_name) DO UPDATE`).
+  Response now includes `n_total`, `y_total`, `section_start_time`, `fullcast_saved`, `plan_lines_saved: {A,B,C}`. → `main.py`
+- **[backend]** New `GET /api/production-plan/<date>` returns the saved A/B/C plan rows for a date plus the section-level `n_total`, `y_total`, `section_start_time` from `daily_packs`. Used by future report views. → `main.py`
+- **[ui]** Daily Packs Excel tab in the console gained three new preview cards (in this stacking order, between the start-time/total fields and the per-product table):
+  - **Section totals strip** — Ｎ合計 / Ｙ合計 / 合計 with a cross-check pill (✓ matches per-product sum  vs  ⚠ discrepancy with explicit number).
+  - **フルキャスト auto-fill block** — shows `8 名 + 1 名 = 9 名 · 27.0h total` (or however many buckets the parser found), with a per-bucket detail line. **Skip checkbox** lets the operator opt out — when checked, the save handler leaves `temp_staff` untouched so manually entered rows aren't overwritten.
+  - **A/B/C line preview cards** — three stacked cards (auto-grid, min 220px wide), colour-coded headers (S1 blue, S2 green, S3 orange), each card has a compact 5-column mini-table (item · planned · N · Y · start). Item names are short-truncated to ~12 characters so the card stays readable. Empty lines render an "empty" placeholder. A green `start 17:20` pill at the top shows the confirmed Section-2 start time. → `static/console.html`
+- **[ui]** `_saveOneParsed()` was extended to pass `section_totals`, `section_start_time`, `fullcast`, `skip_fullcast`, and `production_plan` through to the save endpoint. The Auto-update click handler now calls `renderXlsxExtras(j)` after `recomputePrediction()` so the new cards populate every time. → `static/console.html`
+- **[verify]** Live end-to-end against `auto_uploads/daily_packs/夜勤用日報２６．０４．２９.xlsm`:
+  - Parser returns `section_totals = {n_total: 7625, y_total: 2668, combined: 10293}`, `fullcast = [{8 名, 19.0h}, {1 名, 19.0h}]`, `production_plan = {section_start_time: "17:20", totals: {A:5487, B:5131, C:0}}`, **A** has 10 items with start times 17:20 → 23:12, **B** has 5 items including 燕三条/中華そば/とみ田豚まぜ/冷し中華/焼ちゃんぽん, **C** is empty.
+  - `POST /api/daily-packs/save-excel-batch` returned `rows_saved: 14, number_of_packs: 10293, plan_lines_saved: {A: 10, B: 5, C: 0}, fullcast_saved: 2`.
+  - SQL read-back: `daily_packs(2026-04-29)` row shows `number_of_packs=10293, n_total=7625, y_total=2668, section_start_time=17:20`. `production_plan(2026-04-29)` has 15 rows.
+  - `GET /api/production-plan/2026-04-29` returns the A/B/C lines with item-level start times preserved. → live test.
+
 ## 2026-04-30 — v3.4 release tag
 
 Bump `app.version` 3.3 → 3.4 to mark a coherent batch shipped on top of v3.3:

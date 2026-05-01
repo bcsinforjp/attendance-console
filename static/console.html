@@ -782,9 +782,11 @@
 
     <div class="actions">
       <button type="button" class="button button-outline" id="btnAddRow">+ Add row</button>
+      <button type="button" class="button button-accent"  id="btnFcAuto"  title="Run the same Daily Packs Excel auto-extract — saves フルキャスト rows from 人時生産性 R78/R79 to the shift date (= production date − 1).">⚡ Auto-update from Excel</button>
       <div class="spacer"></div>
+      <button type="button" class="button button-muted"   id="btnFcSkip"  title="Skip フルキャスト entry for this shift and move on to Daily Packs.">Skip →</button>
       <button type="button" class="button button-primary" id="btnConfirmFc">Confirm &amp; Save →</button>
-      <button type="button" class="button button-muted" id="btnClearFc">Clear</button>
+      <button type="button" class="button button-muted"   id="btnClearFc">Clear</button>
     </div>
     <div id="msgFc" class="message"></div>
   </section>
@@ -878,13 +880,11 @@
       <div id="xlsxPreview" class="hidden" style="margin-top:0.9rem;">
         <div class="fields" style="margin-bottom:0.6rem;">
           <div class="field"><label>Production date</label><input type="text" id="xlsxDate" readonly /></div>
-          <div class="field"><label>Input by</label><input type="text" id="xlsxInputBy" readonly /></div>
-          <div class="field"><label>Weather / Temp</label><input type="text" id="xlsxWeather" readonly /></div>
         </div>
 
         <div class="fields" style="margin-bottom:0.6rem;">
           <div class="field">
-            <label>Start time</label>
+            <label>Start time <span style="font-size:.7rem;color:var(--muted);font-weight:400;">(製造予定表)</span></label>
             <select id="xlsxStartTime">
               <option value="17:00">17:00</option>
               <option value="19:00">19:00</option>
@@ -892,15 +892,51 @@
             <span class="hint" id="xlsxStartHint">—</span>
           </div>
           <div class="field">
-            <label>Predicted end</label>
+            <label>End time <span style="font-size:.7rem;color:var(--muted);font-weight:400;">(+30 min buffer)</span></label>
             <input type="text" id="xlsxEndTime" readonly />
             <span class="hint" id="xlsxEndHint">—</span>
           </div>
           <div class="field">
-            <label>Total quantity</label>
-            <input type="text" id="xlsxTotalQty" readonly />
+            <label>Products</label>
+            <input type="text" id="xlsxProductsCount" readonly />
             <span class="hint" id="xlsxTotalHint">—</span>
           </div>
+        </div>
+
+        <!-- ===== Section totals strip (Ｎ合計 / Ｙ合計 / 合計) ===== -->
+        <div id="xlsxSectionTotalsBox" style="display:none;margin:0.4rem 0 0.6rem;border:1px solid var(--line);border-radius:10px;padding:0.6rem 0.8rem;background:var(--surface-soft);">
+          <div style="font-size:0.78rem;color:var(--muted);font-weight:600;letter-spacing:.04em;margin-bottom:0.35rem;">SECTION 2 TOTALS · 入力画面 右側</div>
+          <div style="display:flex;gap:1rem;align-items:baseline;flex-wrap:wrap;">
+            <span><span style="font-size:.78rem;color:var(--muted);">Ｎ合計</span> <b id="xlsxNTotal" style="font-size:1.15rem;color:var(--accent);">—</b></span>
+            <span><span style="font-size:.78rem;color:var(--muted);">Ｙ合計</span> <b id="xlsxYTotal" style="font-size:1.15rem;color:var(--accent);">—</b></span>
+            <span><span style="font-size:.78rem;color:var(--muted);">合計 (target)</span> <b id="xlsxGrandTotal" style="font-size:1.25rem;color:var(--brand-strong);">—</b></span>
+            <span class="mono" id="xlsxTotalsHint" style="margin-left:auto;font-size:.72rem;color:var(--muted);">—</span>
+          </div>
+        </div>
+
+        <!-- ===== フルキャスト auto-fill + skip ===== -->
+        <div id="xlsxFullcastBox" style="display:none;margin:0.4rem 0 0.6rem;border:1px solid var(--line);border-radius:10px;padding:0.6rem 0.8rem;background:var(--surface-soft);">
+          <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+            <div style="font-size:0.78rem;color:var(--muted);font-weight:600;letter-spacing:.04em;">フルキャスト · 人時生産性 R78/R79</div>
+            <span class="mono" id="xlsxFullcastSummary" style="font-size:0.85rem;color:var(--ink);font-weight:600;">—</span>
+            <span class="spacer" style="flex:1;"></span>
+            <label style="font-size:0.78rem;display:inline-flex;align-items:center;gap:.3rem;cursor:pointer;">
+              <input type="checkbox" id="xlsxFullcastSkip">
+              Skip フルキャスト save (don't touch <span class="mono">temp_staff</span>)
+            </label>
+          </div>
+          <div id="xlsxFullcastDetail" style="font-size:.75rem;color:var(--muted);margin-top:.3rem;"></div>
+        </div>
+
+        <!-- ===== A / B / C line preview tables ===== -->
+        <div id="xlsxPlanBox" style="display:none;margin:0.4rem 0 0.6rem;">
+          <div style="display:flex;align-items:center;gap:.6rem;font-size:0.78rem;color:var(--muted);font-weight:600;letter-spacing:.04em;margin-bottom:.3rem;">
+            <span>製造予定表 · A/B/C lines</span>
+            <span id="xlsxPlanStartPill" class="mono" style="font-size:.72rem;background:#ecfaf4;color:var(--brand-strong);border:1px solid #b8e4d8;border-radius:999px;padding:1px 8px;"></span>
+            <span class="spacer" style="flex:1;"></span>
+            <span id="xlsxPlanGrandTotal" class="mono" style="font-size:.78rem;color:var(--ink);"></span>
+          </div>
+          <div id="xlsxPlanGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.5rem;"></div>
         </div>
 
         <div style="overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:420px;">
@@ -1441,6 +1477,50 @@ document.getElementById("btnClearFc").addEventListener("click", () => {
   clearFcRows(); addFcRow(); clearMsg("msgFc");
 });
 
+/* ⚡ Auto-update — same end-to-end flow as the Daily Packs Excel
+   "Auto-update →" button. Switches to the packs tab, opens the Excel
+   segment, clicks Auto-update, then clicks Confirm & Save. The save
+   handler already navigates BACK to this tab on the shift date with
+   the populated rows. One click does the whole loop. */
+document.getElementById("btnFcAuto").addEventListener("click", async () => {
+  clearMsg("msgFc");
+  showMsg("msgFc", "info", "⚡ Triggering Daily Packs Excel auto-update — フルキャスト rows will be filled from 人時生産性 R78/R79.");
+  // Jump to Daily Packs tab → Excel segment
+  switchTab("packs");
+  const xlsxBtn = document.querySelector('#packSeg button[data-seg="xlsx"]');
+  if (xlsxBtn) xlsxBtn.click();
+  // Wait for the segment to render, then trigger auto-update
+  await new Promise(r => setTimeout(r, 250));
+  const auBtn = document.getElementById("btnXlsxAuRun");
+  if (!auBtn) { showMsg("msgFc", "error", "Excel auto-update button not found."); return; }
+  auBtn.click();
+  // Wait for parse + preview, then confirm & save (which auto-navigates back here)
+  // Use a polling loop that tolerates whatever parse latency the server has.
+  const ready = await new Promise(resolve => {
+    const t0 = Date.now();
+    const poll = () => {
+      const saveBtn = document.getElementById("btnSaveXlsxBatch");
+      if (saveBtn && !saveBtn.disabled) return resolve(true);
+      if (Date.now() - t0 > 30000) return resolve(false);
+      setTimeout(poll, 200);
+    };
+    poll();
+  });
+  if (!ready) { showMsg("msgFc", "error", "Excel parse timed out — try again from the Daily Packs tab."); return; }
+  // Mark the post-save goal so the save handler returns HERE (fullcast)
+  // instead of jumping to /reports.
+  if (typeof xlsxState !== "undefined") xlsxState.postSaveGoal = "fullcast";
+  document.getElementById("btnSaveXlsxBatch").click();
+});
+
+/* Skip — operator confirms there are no フルキャスト for this shift,
+   move on to Daily Packs tab without writing to temp_staff. */
+document.getElementById("btnFcSkip").addEventListener("click", () => {
+  clearMsg("msgFc");
+  showMsg("msgFc", "info", "Skipped — opening Daily Packs.");
+  setTimeout(() => switchTab("packs"), 300);
+});
+
 document.getElementById("btnConfirmFc").addEventListener("click", async () => {
   clearMsg("msgFc");
   const domRows = [...$fcRows.querySelectorAll(".fc-row")];
@@ -1589,6 +1669,113 @@ const $btnSaveXlsx = document.getElementById("btnSaveXlsxBatch");
 function fmtNum(n){ return (n == null) ? "—" : Number(n).toLocaleString(); }
 function escHtml(s){ return String(s ?? "").replace(/[<>&"']/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c])); }
 
+/* Trim a Japanese product name down to a short label for the A/B/C line cards.
+   Keep the first ~10 chars + an ellipsis if longer — operators recognise items by
+   the leading kanji. */
+function shortName(s, n=12){
+  s = String(s || "").trim();
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+/* Render Section totals + Fullcast + Plan blocks. Called every time the parsed
+   payload changes (after Auto-update or after a file is dropped). */
+function renderXlsxExtras(parsed) {
+  // --- Section totals strip ---
+  const st = parsed && parsed.section_totals;
+  const stBox = document.getElementById("xlsxSectionTotalsBox");
+  if (st && (st.n_total != null || st.y_total != null)) {
+    document.getElementById("xlsxNTotal").textContent = fmtNum(st.n_total);
+    document.getElementById("xlsxYTotal").textContent = fmtNum(st.y_total);
+    document.getElementById("xlsxGrandTotal").textContent = fmtNum(st.combined);
+    // Cross-check against per-product N+Y sum (more reliable than grand_total
+    // which is often blank on these workbooks). Only flag a mismatch when both
+    // sides are non-zero AND differ — avoids false alarms when grand_total
+    // is missing across all rows.
+    const productNYSum = (parsed.products || []).reduce(
+      (s, p) => s + (Number(p.n_total) || 0) + (Number(p.y_total) || 0), 0
+    );
+    const tolerance = Math.max(50, Math.round(st.combined * 0.005));  // ≤ 0.5% drift OK
+    const close = Math.abs(productNYSum - st.combined) <= tolerance;
+    const hint = document.getElementById("xlsxTotalsHint");
+    if (productNYSum > 0 && !close) {
+      hint.textContent = `⚠ per-product N+Y ${fmtNum(productNYSum)} differs from 合計 ${fmtNum(st.combined)} by ${fmtNum(productNYSum - st.combined)}`;
+      hint.style.color = "var(--warn)";
+    } else if (productNYSum > 0) {
+      hint.textContent = `✓ per-product N+Y matches (${fmtNum(productNYSum)})`;
+      hint.style.color = "var(--brand-strong)";
+    } else {
+      // grand_total/n_total/y_total all missing on the products list — quiet.
+      hint.textContent = "";
+    }
+    stBox.style.display = "block";
+  } else {
+    stBox.style.display = "none";
+  }
+
+  // --- Fullcast auto-fill block ---
+  const fc = (parsed && parsed.fullcast) || [];
+  const fcBox = document.getElementById("xlsxFullcastBox");
+  if (fc.length) {
+    const totalH = fc.reduce((s, r) => s + (Number(r.total_hours) || 0), 0);
+    const totalN = fc.reduce((s, r) => s + (Number(r.headcount)   || 0), 0);
+    const expr   = fc.map(r => `${r.headcount} 名`).join(" + ");
+    document.getElementById("xlsxFullcastSummary").textContent =
+      `${expr} = ${totalN} 名 · ${totalH.toFixed(1)}h total`;
+    document.getElementById("xlsxFullcastDetail").innerHTML = fc.map(r => {
+      const arrow = r.leave_next_day ? "→ 翌" : "→";
+      const time  = (r.start_time && r.leave_time) ? ` · ${r.start_time} ${arrow} ${r.leave_time}` : "";
+      const pp    = r.hours_per_person != null ? ` (${r.hours_per_person}h/人)` : "";
+      return `<span style="margin-right:.8rem;">${escHtml(r.section_label || "—")}: <b>${r.headcount} 名</b>${time}${pp}</span>`;
+    }).join("");
+    fcBox.style.display = "block";
+  } else {
+    fcBox.style.display = "none";
+  }
+
+  // --- A/B/C line preview ---
+  const plan = parsed && parsed.production_plan;
+  const planBox = document.getElementById("xlsxPlanBox");
+  if (plan && (plan.lines || plan.totals)) {
+    const startPill = document.getElementById("xlsxPlanStartPill");
+    startPill.textContent = plan.section_start_time ? `start ${plan.section_start_time}` : "start —";
+    let grand = 0;
+    const cards = ["A","B","C"].map(ln => {
+      const items = (plan.lines || {})[ln] || [];
+      const total = (plan.totals || {})[ln] || 0;
+      grand += total;
+      if (!items.length && !total) return "";
+      const rows = items.map(it =>
+        `<tr><td>${escHtml(shortName(it.item_name))}</td>` +
+        `<td class="num"><b>${fmtNum(it.planned_qty)}</b></td>` +
+        `<td class="num">${fmtNum(it.n_qty)}</td>` +
+        `<td class="num">${fmtNum(it.y_qty)}</td>` +
+        `<td class="num"><span class="mono" style="font-size:.7rem;">${escHtml(it.start_time || "—")}</span></td></tr>`
+      ).join("");
+      const lineColor = ln === "A" ? "#125e91" : ln === "B" ? "#1d7a4e" : "#c7701b";
+      return `<div style="border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden;">
+        <div style="background:${lineColor};color:#fff;padding:.35rem .6rem;font-size:.78rem;font-weight:700;display:flex;justify-content:space-between;">
+          <span>${ln} ライン</span><span class="mono">${fmtNum(total)}</span>
+        </div>
+        <table style="width:100%;font-size:.74rem;">
+          <thead><tr style="background:#f5f8fa;">
+            <th style="text-align:left;padding:.2rem .4rem;">item</th>
+            <th class="num" style="padding:.2rem .4rem;">planned</th>
+            <th class="num" style="padding:.2rem .4rem;">N</th>
+            <th class="num" style="padding:.2rem .4rem;">Y</th>
+            <th class="num" style="padding:.2rem .4rem;">start</th>
+          </tr></thead>
+          <tbody>${rows || `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:.4rem;">empty</td></tr>`}</tbody>
+        </table>
+      </div>`;
+    }).join("");
+    document.getElementById("xlsxPlanGrid").innerHTML = cards;
+    document.getElementById("xlsxPlanGrandTotal").textContent = grand ? `total ${fmtNum(grand)}` : "";
+    planBox.style.display = "block";
+  } else {
+    planBox.style.display = "none";
+  }
+}
+
 async function recomputePrediction() {
   const p = xlsxState.parsed; if (!p) return;
   const start = $xlsxStart.value || "17:00";
@@ -1607,15 +1794,18 @@ async function recomputePrediction() {
     return { ...prod, rate, used_default: !exact, minutes: Math.round(secs / 60) };
   });
   const [sh, sm] = start.split(":").map(n => parseInt(n, 10) || 0);
+  // Run end (no buffer) — used for the avg-p/h line. End-time field gets +30
+  // minute buffer per operator request ("end is max time of A or B + 30 min").
   const endTotalMin = sh*60 + sm + Math.floor(totalSec / 60);
-  const eh = Math.floor(endTotalMin / 60) % 24, em = endTotalMin % 60;
-  const overnight = Math.floor(endTotalMin / 60) >= 24;
+  const endWithBufferMin = endTotalMin + 30;
+  const eh = Math.floor(endWithBufferMin / 60) % 24, em = endWithBufferMin % 60;
+  const overnight = Math.floor(endWithBufferMin / 60) >= 24;
   const hh = Math.floor(totalSec / 3600), mm = Math.floor((totalSec % 3600) / 60);
   const avg = totalSec ? Math.round(totalQty / (totalSec / 3600)) : 0;
   document.getElementById("xlsxEndTime").value = `${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}` + (overnight ? "  (next day)" : "");
-  document.getElementById("xlsxEndHint").textContent = `${hh}h ${mm}m run · avg ${fmtNum(avg)} p/h`;
-  document.getElementById("xlsxTotalQty").value = fmtNum(totalQty);
-  document.getElementById("xlsxTotalHint").textContent = `${products.length} products`;
+  document.getElementById("xlsxEndHint").textContent = `${hh}h ${mm}m run · avg ${fmtNum(avg)} p/h · +30m buffer`;
+  document.getElementById("xlsxProductsCount").value = `${products.length} items`;
+  document.getElementById("xlsxTotalHint").textContent = totalQty ? `Σ qty ${fmtNum(totalQty)}` : "—";
 
   $xlsxTbody.innerHTML = rows.map(r => `<tr${r.used_default ? ' style="background:rgba(240,200,80,0.10);"' : ''}>
     <td>${escHtml(r.product_name)}</td>
@@ -1734,6 +1924,9 @@ $xlsxStart.addEventListener("change", recomputePrediction);
 async function _saveOneParsed(parsed, startOverride){
   const pdate = parsed.meta.production_date;
   if (!pdate) throw new Error("production date missing in Excel");
+  // Extras from the new sub-parsers — pass through so the server persists
+  // section totals, fullcast rows, and the production plan in one transaction.
+  const skipFullcast = !!document.getElementById("xlsxFullcastSkip")?.checked;
   const r = await fetch(api("/api/daily-packs/save-excel-batch"), {
     method: "POST", headers: {"Content-Type":"application/json"},
     body: JSON.stringify({
@@ -1746,6 +1939,12 @@ async function _saveOneParsed(parsed, startOverride){
       temperature:     parsed.meta.temperature,
       input_by:        parsed.meta.input_by,
       source_method:   xlsxState.sourceMethod || "excel",
+      // 2026-05-01 additions
+      section_totals:    parsed.section_totals || null,
+      section_start_time: (parsed.production_plan || {}).section_start_time || null,
+      fullcast:          parsed.fullcast || [],
+      skip_fullcast:     skipFullcast,
+      production_plan:   parsed.production_plan || null,
     })
   });
   const j = await r.json();
@@ -1763,7 +1962,8 @@ $btnSaveXlsx.addEventListener("click", async () => {
   if (!queue.length) return;
   $btnSaveXlsx.disabled = true;
   let savedCount = 0;
-  let lastDate = null;
+  let lastDate = null;        // production_date of the last saved batch
+  let lastShiftDate = null;   // = production_date − 1 (where temp_staff lives)
   try {
     for (const it of queue){
       it.status = "saving"; it.status_label = "saving…"; renderXlsxQueue();
@@ -1778,6 +1978,10 @@ $btnSaveXlsx.addEventListener("click", async () => {
         it.status_label = `✓ ${j.rows_saved} rows · ${(j.number_of_packs||0).toLocaleString()} packs`;
         savedCount++;
         lastDate = j.production_date;
+        // Server returns shift_date (= production_date − 1) — the date that
+        // フルキャスト manual entry / temp_staff is keyed on. We use it for
+        // post-save navigation.
+        lastShiftDate = j.shift_date || null;
       } catch (err) {
         it.status = "failed";
         it.status_label = `✗ ${err.message}`;
@@ -1788,19 +1992,41 @@ $btnSaveXlsx.addEventListener("click", async () => {
       showMsg("msgXlsx", "error", `Save failed for all ${queue.length} batch(es) — see queue rows.`);
       return;
     }
-    showMsg("msgXlsx", "success",
-      queue.length > 1
-        ? `✓ Saved ${savedCount}/${queue.length} batches. Switching to Manual entry on ${lastDate}…`
-        : `✓ Saved batch for ${lastDate}.  Switching to Manual entry to confirm…`);
-    /* Next step: jump to Manual entry on the LAST successfully-saved date. */
-    setTimeout(() => {
-      const manualBtn = document.querySelector('#packSeg button[data-seg="manual"]');
-      if (manualBtn) manualBtn.click();
-      if (lastDate) {
-        $packDate.value = lastDate;
-        $packDate.dispatchEvent(new Event("change"));
-      }
-    }, 1000);
+    // Where the post-save flow lands depends on who started it:
+    //   • fullcast tab's "⚡ Auto-update from Excel" → return to fullcast
+    //     on shift_date (= production_date − 1) so the operator can verify
+    //     the just-saved 会社/人数 rows.
+    //   • Daily Packs Excel direct save → jump to /reports?date=production_date
+    //     because this is the operator's normal end-of-shift workflow:
+    //     finish Excel input → review the day's report.
+    const fcOpenDate = lastShiftDate || lastDate;
+    const goal = xlsxState.postSaveGoal || "reports";  // default: Daily Packs flow → reports
+    if (goal === "fullcast") {
+      showMsg("msgXlsx", "success",
+        queue.length > 1
+          ? `✓ Saved ${savedCount}/${queue.length} batches. Returning to フルキャスト on ${fcOpenDate} (production ${lastDate})…`
+          : `✓ Saved batch for ${lastDate}. Returning to フルキャスト on shift date ${fcOpenDate}…`);
+      setTimeout(() => {
+        switchTab("fullcast");
+        if (fcOpenDate && typeof $fcDate !== "undefined" && $fcDate) {
+          $fcDate.value = fcOpenDate;
+          if (typeof loadFcFromDb === "function") loadFcFromDb(fcOpenDate);
+        }
+      }, 900);
+    } else {
+      // Reports page expects ?date=YYYY-MM-DD = the production date.
+      showMsg("msgXlsx", "success",
+        queue.length > 1
+          ? `✓ Saved ${savedCount}/${queue.length} batches. Opening Reports for ${lastDate}…`
+          : `✓ Saved batch for ${lastDate}. Opening Reports…`);
+      setTimeout(() => {
+        const url = api("/reports") + (lastDate ? `?date=${encodeURIComponent(lastDate)}` : "");
+        window.location.href = url;
+      }, 900);
+    }
+    // Reset the goal so the next click defaults back to "reports" unless
+    // explicitly re-set by the fullcast tab.
+    xlsxState.postSaveGoal = "reports";
   } finally {
     $btnSaveXlsx.disabled = false;
   }
@@ -1857,9 +2083,14 @@ $btnXlsxAuRun.addEventListener("click", async () => {
     xlsxState.rates  = await (await fetch(api("/api/production-rates"))).json();
 
     document.getElementById("xlsxDate").value     = j.meta.production_date || "(missing)";
-    document.getElementById("xlsxInputBy").value  = j.meta.input_by || "—";
-    document.getElementById("xlsxWeather").value  = `${j.meta.weather || "—"} / ${j.meta.temperature ?? "—"}°C`;
-    $xlsxStart.value = j.start.start_time || "17:00";
+    // Make sure the Start-time <select> contains the parser-suggested value;
+    // the existing options are 17:00 / 19:00 only — add anything else (e.g. the
+    // production-plan start 17:20 / 19:20) so the dropdown can show it.
+    const wantStart = j.start.start_time || "17:00";
+    if (![...$xlsxStart.options].some(o => o.value === wantStart)) {
+      const o = document.createElement("option"); o.value = wantStart; o.textContent = wantStart; $xlsxStart.appendChild(o);
+    }
+    $xlsxStart.value = wantStart;
     document.getElementById("xlsxStartHint").textContent =
       j.start.source === "auto-detected"
         ? `auto · median IN ${j.start.median_in} (n=${j.start.n})`
@@ -1867,6 +2098,7 @@ $btnXlsxAuRun.addEventListener("click", async () => {
     $xlsxPreview.classList.remove("hidden");
     setXlsxAuProgress(85, "rendering preview…");
     await recomputePrediction();
+    renderXlsxExtras(j);
     $btnSaveXlsx.disabled = !j.meta.production_date || !(j.products || []).length;
     setXlsxAuProgress(100, "ready");
     showMsg("msgXlsx", "success",
@@ -2210,7 +2442,11 @@ document.getElementById("btnConfirmPack").addEventListener("click", async () => 
       const fcMsg = `フルキャスト: ${fcSaved} date(s)/${fcRowCount} row(s) saved, skipped ${fcSkipped}, failed ${fcFailed}.`;
       showMsg("msgPack", fcFailed > 0 ? "error" : "success", `${packMsg} ${fcMsg} Opening Reports…`);
     }
-    setTimeout(() => { window.location.href = api("/reports"); }, 800);
+    // Carry the production date forward so /reports lands on the right day.
+    setTimeout(() => {
+      const d = $packDate && $packDate.value;
+      window.location.href = api("/reports") + (d ? `?date=${encodeURIComponent(d)}` : "");
+    }, 800);
   } catch (err) {
     showMsg("msgPack", "error", err.message || String(err));
   }

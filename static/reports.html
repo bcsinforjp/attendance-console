@@ -217,6 +217,16 @@ const $msg = document.getElementById("msgReports");
 function showMsg(kind, text){ $msg.className = "message show " + kind; $msg.textContent = text; }
 
 async function loadLatestDbDate() {
+  // Honor ?date= on the URL (e.g. when console save handler redirects here
+  // after a Daily Packs Excel Confirm & Save). Falls through to the
+  // latest-DB-date heuristic only when no explicit date was passed.
+  const urlDate = new URLSearchParams(location.search).get("date");
+  if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) {
+    $reportDate.value = urlDate;
+    $reportDateSource.textContent = "source: opened from console save (production date)";
+    $badgeA.textContent = urlDate;
+    $badgeS.textContent = urlDate;
+  }
   try {
     const res = await fetch(api("/api/gantt/latest-date"));
     if (!res.ok) throw new Error(await res.text());

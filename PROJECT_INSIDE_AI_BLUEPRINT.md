@@ -20,7 +20,7 @@ If this file conflicts with the live code, treat the live code as the source of 
 
 - Project name: Attendance Operations Console
 - Live path: `https://rnd.asiakawaii.com/attendance/`
-- App version: **3.4** (FastAPI `app.version` in `main.py`)
+- App version: **3.5** (FastAPI `app.version` in `main.py`)
 - App type: FastAPI backend + single-file HTML/CSS/JS frontend
 - Primary job:
   - upload Japanese attendance PDFs

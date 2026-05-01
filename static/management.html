@@ -968,11 +968,12 @@
 
   <section id="management" class="management">
 
-    <!-- Tab bar — three management areas -->
+    <!-- Tab bar — four management areas -->
     <nav class="mgmt-tabs" role="tablist" aria-label="Management areas">
       <button type="button" data-mgmt-tab="roster" class="active">📋 Roster · 名簿管理</button>
       <button type="button" data-mgmt-tab="dayoff">📅 Day-off Schedule · 休暇予定表</button>
       <button type="button" data-mgmt-tab="line">💬 LINE Recipients · LINE 通知先</button>
+      <button type="button" data-mgmt-tab="cleanup" style="border-color:#e8a39c;">🗑 Data Cleanup · データ削除</button>
     </nav>
 
     <!-- ============================================================
@@ -1161,6 +1162,64 @@
         <div id="lineStatusMsg" class="status"></div>
       </section>
     </div><!-- /panel:line -->
+
+    <!-- ============================================================
+         Tab 4: Data Cleanup · データ削除
+         Hard-capped at 5 dates per request. NO "delete all" mode.
+         ============================================================ -->
+    <div data-mgmt-panel="cleanup" hidden>
+      <section class="card cleanup-card" style="border:1px solid #e8a39c;background:#fff7f6;padding:1rem 1.2rem;">
+        <h2 style="color:#7a1c12;">🗑 Data Cleanup · データ削除</h2>
+        <p style="font-size:.84rem;color:#6a2018;margin:.3rem 0 .6rem;">
+          Permanently deletes data for selected dates from all date-keyed tables (attendance / daily_packs / daily_pack_items / temp_staff / production_plan). Maximum <b>5 dates per operation</b> — there is no "delete all" mode by design.<br>
+          <small>選択した日付のデータを attendance / daily_packs / daily_pack_items / temp_staff / production_plan の各テーブルから完全に削除します。1 回の操作で <b>最大 5 日付まで</b>。安全のため「全件削除」モードはありません。</small>
+        </p>
+
+        <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.6rem 0;">
+          <label>Pick a date <input type="date" id="clPickDate" style="margin-left:.4rem;"></label>
+          <button type="button" class="button" id="clAddDate">+ Add to list</button>
+          <span class="spacer" style="flex:1;"></span>
+          <span id="clCount" style="font-size:.78rem;color:var(--muted);">0 / 5 dates selected</span>
+        </div>
+
+        <div id="clDateChips" style="display:flex;gap:.4rem;flex-wrap:wrap;min-height:30px;margin-bottom:.4rem;"></div>
+
+        <div style="display:flex;gap:.6rem;align-items:center;margin:.6rem 0;">
+          <button type="button" class="button" id="clPreviewBtn" disabled>🔍 Preview rows to delete</button>
+          <button type="button" class="button" id="clClearBtn">Clear selection</button>
+        </div>
+
+        <div id="clPreviewBox" style="display:none;border:1px solid #d4e2e8;border-radius:8px;background:#fff;padding:.6rem .8rem;margin-bottom:.6rem;">
+          <div id="clPreviewSummary" style="font-size:.85rem;font-weight:600;color:var(--ink);margin-bottom:.4rem;"></div>
+          <div style="overflow:auto;max-height:240px;">
+            <table id="clPreviewTable" style="width:100%;font-size:.78rem;border-collapse:collapse;">
+              <thead><tr style="background:#f0f5f7;"><th style="text-align:left;padding:.3rem .5rem;">Table</th><th style="text-align:left;padding:.3rem .5rem;">Date column</th><th class="num" style="padding:.3rem .5rem;">Rows</th></tr></thead>
+              <tbody id="clPreviewTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- BIG RED WARNING (only visible after preview) -->
+        <div id="clWarnBox" style="display:none;border:2px solid #b42318;background:#ffe9e6;color:#7a1c12;border-radius:8px;padding:.8rem 1rem;margin-bottom:.6rem;">
+          <div style="font-size:1rem;font-weight:800;margin-bottom:.3rem;">⚠️ DESTRUCTIVE ACTION · 取り消しできません</div>
+          <div style="font-size:.85rem;">
+            This will <b>permanently delete</b> every row in the listed tables for the selected date(s). This action <b>cannot be undone</b>. Make sure you have backups (or confirm with the team) before proceeding.<br>
+            <small>選択した日付のデータが <b>完全に削除</b> されます。<b>取り消しはできません</b>。バックアップ取得・チーム確認のうえ実行してください。</small>
+          </div>
+          <label style="display:flex;align-items:center;gap:.4rem;margin-top:.5rem;font-size:.82rem;font-weight:600;">
+            <input type="checkbox" id="clConfirmCheck">
+            <span>I understand and want to delete the data shown above. / 上記のデータを削除することに同意します。</span>
+          </label>
+          <div style="display:flex;gap:.6rem;align-items:center;margin-top:.6rem;">
+            <button type="button" class="button button-danger" id="clDeleteBtn" disabled style="background:#b42318;color:#fff;border-color:#b42318;font-weight:700;">🗑 Delete data</button>
+            <button type="button" class="button" id="clCancelBtn">Cancel</button>
+            <span id="clStatus" style="font-size:.8rem;"></span>
+          </div>
+        </div>
+
+        <div id="clResultBox" style="display:none;border:1px solid #b8e4d8;background:#ecfaf4;color:#0b6f58;border-radius:8px;padding:.6rem .8rem;font-size:.85rem;"></div>
+      </section>
+    </div><!-- /panel:cleanup -->
 
   </section><!-- /#management -->
 </main>
@@ -1996,7 +2055,7 @@
 
 <script>
 /* ================================================================
-   Management tab bar — switches between Roster / Day-off / LINE
+   Management tab bar — switches between Roster / Day-off / LINE / Cleanup
    ================================================================ */
 (function() {
   const tabs = document.querySelectorAll(".mgmt-tabs button[data-mgmt-tab]");
@@ -2004,11 +2063,131 @@
   function show(name) {
     tabs.forEach(t => t.classList.toggle("active", t.dataset.mgmtTab === name));
     panels.forEach(p => p.toggleAttribute("hidden", p.dataset.mgmtPanel !== name));
-    if (name === "dayoff" && !window.__dayoffInited) { window.__dayoffInited = true; initDayoff(); }
-    if (name === "line"   && !window.__lineMgmtInited) { window.__lineMgmtInited = true; initLineMgmt(); }
+    if (name === "dayoff"  && !window.__dayoffInited)  { window.__dayoffInited  = true; initDayoff(); }
+    if (name === "line"    && !window.__lineMgmtInited){ window.__lineMgmtInited= true; initLineMgmt(); }
+    if (name === "cleanup" && !window.__cleanupInited) { window.__cleanupInited = true; initCleanup(); }
   }
   tabs.forEach(t => t.addEventListener("click", () => show(t.dataset.mgmtTab)));
 })();
+
+/* ================================================================
+   Data Cleanup — pick up to 5 dates, preview row counts, confirm,
+   then delete from every date-keyed table on the server.
+   ================================================================ */
+const CLEANUP_MAX_DATES = 5;
+const cleanup = { dates: [] };  // selected ISO dates, max 5
+
+function initCleanup() {
+  document.getElementById("clAddDate").addEventListener("click", () => {
+    const v = document.getElementById("clPickDate").value;
+    if (!v) return;
+    if (cleanup.dates.includes(v)) return;
+    if (cleanup.dates.length >= CLEANUP_MAX_DATES) {
+      alert(`Maximum ${CLEANUP_MAX_DATES} dates per delete. Remove one first.`);
+      return;
+    }
+    cleanup.dates.push(v);
+    cleanup.dates.sort();
+    renderCleanupChips();
+    document.getElementById("clPickDate").value = "";
+  });
+  document.getElementById("clClearBtn").addEventListener("click", () => {
+    cleanup.dates = [];
+    renderCleanupChips();
+    hideCleanupPreview();
+  });
+  document.getElementById("clPreviewBtn").addEventListener("click", runCleanupPreview);
+  document.getElementById("clCancelBtn").addEventListener("click", hideCleanupPreview);
+  document.getElementById("clConfirmCheck").addEventListener("change", e => {
+    document.getElementById("clDeleteBtn").disabled = !e.target.checked;
+  });
+  document.getElementById("clDeleteBtn").addEventListener("click", runCleanupDelete);
+  renderCleanupChips();
+}
+
+function renderCleanupChips() {
+  const box = document.getElementById("clDateChips");
+  if (!cleanup.dates.length) {
+    box.innerHTML = '<span style="color:var(--muted);font-size:.78rem;">No dates selected — pick a date and click <b>+ Add to list</b>.</span>';
+  } else {
+    box.innerHTML = cleanup.dates.map(d =>
+      `<span data-d="${d}" style="display:inline-flex;align-items:center;gap:.3rem;background:#fde9e6;color:#7a1c12;border:1px solid #f0c8c4;padding:.2rem .5rem;border-radius:999px;font-size:.78rem;font-weight:600;">${d} <button type="button" class="cl-rm" style="background:transparent;border:0;color:#7a1c12;cursor:pointer;padding:0 .1rem;font-size:.85rem;">×</button></span>`
+    ).join("");
+    box.querySelectorAll(".cl-rm").forEach(b => b.addEventListener("click", e => {
+      const d = e.currentTarget.parentElement.dataset.d;
+      cleanup.dates = cleanup.dates.filter(x => x !== d);
+      renderCleanupChips();
+      hideCleanupPreview();
+    }));
+  }
+  document.getElementById("clCount").textContent = `${cleanup.dates.length} / ${CLEANUP_MAX_DATES} dates selected`;
+  document.getElementById("clPreviewBtn").disabled = cleanup.dates.length === 0;
+}
+
+function hideCleanupPreview() {
+  document.getElementById("clPreviewBox").style.display = "none";
+  document.getElementById("clWarnBox").style.display = "none";
+  document.getElementById("clResultBox").style.display = "none";
+  document.getElementById("clConfirmCheck").checked = false;
+  document.getElementById("clDeleteBtn").disabled = true;
+  document.getElementById("clStatus").textContent = "";
+}
+
+async function runCleanupPreview() {
+  if (!cleanup.dates.length) return;
+  document.getElementById("clResultBox").style.display = "none";
+  try {
+    const r = await fetch(_doApi("/api/cleanup/preview?dates=" + encodeURIComponent(cleanup.dates.join(","))));
+    if (!r.ok) { alert("Preview failed: " + await r.text()); return; }
+    const j = await r.json();
+    const tbody = document.getElementById("clPreviewTbody");
+    tbody.innerHTML = Object.entries(j.rows || {}).map(([tbl, info]) =>
+      `<tr style="border-top:1px solid #eef3f5;"><td style="padding:.25rem .5rem;font-family:'IBM Plex Mono',monospace;">${tbl}</td><td style="padding:.25rem .5rem;color:var(--muted);">${info.date_column}</td><td class="num" style="padding:.25rem .5rem;font-weight:${info.total ? 700 : 400};color:${info.total ? '#b42318' : 'var(--muted)'};">${info.total}</td></tr>`
+    ).join("");
+    document.getElementById("clPreviewSummary").textContent =
+      `Preview for ${j.dates.length} date(s): ${j.dates.join(", ")} — total ${j.grand_total} row(s) will be deleted.`;
+    document.getElementById("clPreviewBox").style.display = "block";
+    document.getElementById("clWarnBox").style.display    = j.grand_total ? "block" : "none";
+    if (!j.grand_total) {
+      // No rows to delete — surface a friendly notice instead of the warn box.
+      document.getElementById("clPreviewSummary").textContent += " ✓ Nothing to delete.";
+    }
+  } catch (e) {
+    alert("Preview error: " + e.message);
+  }
+}
+
+async function runCleanupDelete() {
+  document.getElementById("clDeleteBtn").disabled = true;
+  document.getElementById("clStatus").textContent = "deleting…";
+  try {
+    const r = await fetch(_doApi("/api/cleanup/delete"), {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ dates: cleanup.dates, confirm: true }),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      document.getElementById("clStatus").textContent = "❌ " + t;
+      document.getElementById("clDeleteBtn").disabled = !document.getElementById("clConfirmCheck").checked;
+      return;
+    }
+    const j = await r.json();
+    const lines = Object.entries(j.deleted || {}).map(([tbl, n]) => `${tbl}: ${n}`).join("  ·  ");
+    const box = document.getElementById("clResultBox");
+    box.style.display = "block";
+    box.innerHTML = `✅ <b>Deleted ${j.grand_total} row(s)</b> across ${j.dates.length} date(s) (${j.dates.join(", ")}). ` +
+                    `<br><span class="mono" style="font-size:.78rem;color:var(--muted);">${lines}</span>` +
+                    `<br><span style="font-size:.72rem;color:var(--muted);">at ${j.deleted_at}</span>`;
+    cleanup.dates = [];
+    renderCleanupChips();
+    document.getElementById("clPreviewBox").style.display = "none";
+    document.getElementById("clWarnBox").style.display = "none";
+    document.getElementById("clConfirmCheck").checked = false;
+  } catch (e) {
+    document.getElementById("clStatus").textContent = "❌ " + e.message;
+    document.getElementById("clDeleteBtn").disabled = !document.getElementById("clConfirmCheck").checked;
+  }
+}
 
 /* ================================================================
    Day-off Schedule grid
