@@ -1,0 +1,13 @@
+[Unit]
+Description=Run attendance doctor every 5 hours
+
+[Timer]
+# First run 10 min after boot so it doesn't compete with attendance.service
+OnBootSec=10min
+# Then every 5 hours from the previous activation
+OnUnitActiveSec=5h
+Unit=attendance-doctor.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

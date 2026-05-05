@@ -316,7 +316,7 @@ body.mobile{background:#f4f7f9;}
 <div class="page">
   <div class="doc-header">
     <span class="doc-title" id="docTitle">勤怠記録 — Attendance Report</span>
-    <span class="doc-meta">Window: 10:00 → 08:30 next day</span>
+    <span class="doc-meta" id="docMeta"></span>
   </div>
   <div class="summary" id="summary"></div>
   <div class="legend">
@@ -592,8 +592,21 @@ function renderRow(emp, sectionLabel){
   return block;
 }
 
+function jpWeekday(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  return '日月火水木金土'[new Date(Date.UTC(y, m-1, d)).getUTCDay()];
+}
+function shiftFromReport(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m-1, d));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return dt.toISOString().slice(0,10);
+}
+
 function render(data){
+  const shift = shiftFromReport(data.date);
   $('docTitle').textContent=`勤怠記録 — Attendance Report｜${data.date}`;
+  $('docMeta').textContent=`シフト ${shift}（${jpWeekday(shift)}）`;
   const secBox=$('sections');secBox.innerHTML='';
   const tabs=$('tabs');tabs.innerHTML='';
 

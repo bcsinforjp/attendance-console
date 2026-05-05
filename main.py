@@ -567,6 +567,28 @@ def init_db() -> None:
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_pack_items_date ON daily_pack_items(production_date)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_pack_items_batch ON daily_pack_items(batch_id)")
+            # 2026-05-05 — uploaded_file_registry: dedupe by SHA-256, track lifecycle
+            # ('received' on upload, 'loaded' once rows reach the DB, 'replaced' if a
+            # later file with the same target_date overwrites it). Lets the desktop
+            # agent ask "have you seen this exact file?" before re-sending bytes.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS uploaded_file_registry (
+                    id              SERIAL PRIMARY KEY,
+                    sha256          CHAR(64) NOT NULL UNIQUE,
+                    file_type       VARCHAR(20) NOT NULL,
+                    file_name       TEXT NOT NULL,
+                    file_size       BIGINT NOT NULL,
+                    target_date     DATE,
+                    record_count    INTEGER,
+                    received_at     TIMESTAMP NOT NULL DEFAULT NOW(),
+                    loaded_at       TIMESTAMP,
+                    moved_path      TEXT,
+                    source_key      VARCHAR(40),
+                    status          VARCHAR(20) NOT NULL DEFAULT 'received'
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_ufr_type_date ON uploaded_file_registry(file_type, target_date)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_ufr_status ON uploaded_file_registry(status)")
         connection.commit()
 
 init_db()
@@ -2126,25 +2148,43 @@ async def summary_page():
 
 @app.get("/api/gantt/latest-date")
 async def gantt_latest_date():
-    """Most recent record_date in the DB, for default picker value."""
+    """Most recent REPORT date for which any data exists (attendance or packs).
+    Per DATE_RULES.md, report = shift + 1 = production. We take the latest
+    shift date in attendance_records and add 1 day; if daily_packs has a
+    later report date than that, use it instead."""
     with get_db_connection() as connection:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT MAX(record_date) FROM attendance_records")
+            cursor.execute(
+                """
+                SELECT GREATEST(
+                    (SELECT MAX(record_date) + 1 FROM attendance_records),
+                    (SELECT MAX(record_date)     FROM daily_packs)
+                )
+                """
+            )
             row = cursor.fetchone()
             latest = row[0].isoformat() if row and row[0] else None
     return {"date": latest}
 
 @app.get("/api/gantt/dates-with-data")
 async def gantt_dates_with_data():
-    """Dates that have at least one non-empty attendance row (most recent first)."""
+    """REPORT dates that have at least one non-empty attendance row OR a
+    pack count. Each attendance shift_date is returned as shift + 1 so the
+    UI picker navigates straight to the report URL."""
     with get_db_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT DISTINCT record_date
-                FROM attendance_records
-                WHERE commute_time <> '' OR time_to_leave <> '' OR working_hours <> ''
-                ORDER BY record_date DESC
+                SELECT DISTINCT report_date FROM (
+                    SELECT (record_date + 1) AS report_date
+                      FROM attendance_records
+                     WHERE commute_time <> '' OR time_to_leave <> '' OR working_hours <> ''
+                    UNION
+                    SELECT record_date AS report_date
+                      FROM daily_packs
+                     WHERE number_of_packs > 0
+                ) u
+                ORDER BY report_date DESC
                 LIMIT 30
                 """
             )
@@ -2177,7 +2217,14 @@ def _gantt_hours_to_hhmm(hours: float) -> str:
 
 
 def _gantt_compute_for_date(cursor, record_date: str, roster_index: dict) -> tuple[list[dict], dict]:
-    """Pull attendance + packs for one date, bucket by section, compute productivity.
+    """Pull attendance + packs for one day's REPORT, bucket by section, compute productivity.
+
+    `record_date` is the **report / production date** (= the date in the URL).
+    Per DATE_RULES.md:
+      attendance_records.record_date = shift date  = report − 1
+      temp_staff.record_date          = shift date  = report − 1
+      daily_packs.record_date         = report date = report
+    So the SQL pulls attendance/temp_staff at (record_date − 1) and packs at record_date.
 
     Pure function of the cursor — reusable for current date and previous day,
     so both appear in the API response and the frontend can draw up/down deltas
@@ -2192,7 +2239,7 @@ def _gantt_compute_for_date(cursor, record_date: str, roster_index: dict) -> tup
                time_to_leave,
                working_hours
         FROM attendance_records
-        WHERE record_date = %s
+        WHERE record_date = (%s::date - 1)
         ORDER BY personal_code, upload_date DESC
         """,
         (record_date,),
@@ -2204,16 +2251,17 @@ def _gantt_compute_for_date(cursor, record_date: str, roster_index: dict) -> tup
     )
     pack_row = cursor.fetchone()
 
-    # Fetch フルキャスト / temp-staff entries for this date so they can be
-    # shown as synthetic rows at the END of 製造２課 and folded into Section 2's
-    # productivity totals (hours + headcount). Each saved temp_staff row
-    # becomes one synthetic gantt row — the group worked one shift together.
+    # Fetch フルキャスト / temp-staff entries for the matching SHIFT date
+    # (= report − 1). Shown as synthetic rows at the END of 製造２課 and folded
+    # into Section 2's productivity totals (hours + headcount). Each saved
+    # temp_staff row becomes one synthetic gantt row — the group worked one
+    # shift together.
     cursor.execute(
         """
         SELECT id, company, headcount, start_time, leave_time, leave_next_day,
                hours_per_person, total_hours, note
         FROM temp_staff
-        WHERE record_date = %s
+        WHERE record_date = (%s::date - 1)
         ORDER BY start_time, id
         """,
         (record_date,),
@@ -3165,6 +3213,115 @@ async def auto_upload_config_set(payload: dict = Body(...)):
 async def v1_ping(key_label: str = Depends(require_api_key)):
     return {"ok": True, "key": key_label, "server_time": datetime.now().isoformat(timespec="seconds")}
 
+
+@app.get("/api/v1/status/precheck")
+async def v1_status_precheck(
+    type: str = Query(..., description="'attendance' or 'production'"),
+    date: str = Query(..., description="ISO YYYY-MM-DD — the production/record date the file is FOR"),
+    sha256: str = Query(..., min_length=64, max_length=64, description="lowercase hex SHA-256 of the file the desktop is about to send"),
+    key_label: str = Depends(require_api_key),
+):
+    """Single-call decision endpoint for the desktop agent.
+
+    Replaces the previous /api/v1/status/check + /api/v1/status/check-sha pair.
+    The data table is the source of truth; uploaded_file_registry is treated
+    as a derived index that gets reconciled on every call.
+
+    Flow:
+      1. Probe the right data table by `type`:
+           attendance → attendance_records WHERE record_date = date
+           production → daily_packs (then daily_pack_items) WHERE record_date = date
+      2. If row count == 0:
+           DELETE FROM uploaded_file_registry WHERE target_date=date OR sha256=sha
+           → {"action": "upload", "reason": "no_data"}
+      3. If rows exist, look up uploaded_file_registry by sha256:
+           hash matches and target_date matches → {"action": "skip",            "reason": "same_file"}
+           hash absent or different             → {"action": "confirm_replace", "reason": "different_file"}
+
+    The desktop agent should:
+      - "upload"          → POST the file to /api/v1/pdf/upload or /api/v1/xlsx/upload
+      - "skip"            → do nothing
+      - "confirm_replace" → ask the user; if confirmed, upload (server will overwrite)
+    """
+    if type not in ("attendance", "production"):
+        raise HTTPException(status_code=400, detail="type must be 'attendance' or 'production'")
+    if not re.fullmatch(r"[0-9a-f]{64}", sha256):
+        raise HTTPException(status_code=400, detail="sha256 must be 64 lowercase hex chars")
+    target_date = _parse_iso_date_or_400(date)
+    iso = target_date.isoformat()
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            # 1. Data probe — table choice is driven by request type.
+            if type == "attendance":
+                cur.execute(
+                    "SELECT COUNT(*), MAX(upload_date) FROM attendance_records WHERE record_date = %s",
+                    (target_date,),
+                )
+                row = cur.fetchone() or (0, None)
+                data_count = int(row[0] or 0)
+                latest = row[1]
+            else:
+                cur.execute(
+                    "SELECT number_of_packs, updated_at FROM daily_packs WHERE record_date = %s",
+                    (target_date,),
+                )
+                pack_row = cur.fetchone()
+                if pack_row:
+                    data_count = 1
+                    latest = pack_row[1]
+                else:
+                    cur.execute(
+                        "SELECT COUNT(*), MAX(uploaded_at) FROM daily_pack_items WHERE production_date = %s",
+                        (target_date,),
+                    )
+                    item_row = cur.fetchone() or (0, None)
+                    data_count = int(item_row[0] or 0)
+                    latest = item_row[1]
+
+            # 2. No data → reconcile registry, instruct upload.
+            if data_count == 0:
+                cur.execute(
+                    "DELETE FROM uploaded_file_registry WHERE target_date = %s OR sha256 = %s",
+                    (target_date, sha256),
+                )
+                conn.commit()
+                return {
+                    "action": "upload",
+                    "reason": "no_data",
+                    "type": type,
+                    "date": iso,
+                    "sha256": sha256,
+                }
+
+            # 3. Data exists — registry decides skip vs confirm-replace.
+            cur.execute(
+                "SELECT target_date, status FROM uploaded_file_registry WHERE sha256 = %s",
+                (sha256,),
+            )
+            reg_row = cur.fetchone()
+
+    if reg_row and reg_row[0] == target_date and reg_row[1] in ("loaded", "received"):
+        return {
+            "action": "skip",
+            "reason": "same_file",
+            "type": type,
+            "date": iso,
+            "sha256": sha256,
+            "uploaded_at": latest.isoformat() if latest else None,
+        }
+
+    return {
+        "action": "confirm_replace",
+        "reason": "different_file",
+        "type": type,
+        "date": iso,
+        "sha256": sha256,
+        "existing_records": data_count,
+        "uploaded_at": latest.isoformat() if latest else None,
+    }
+
+
 PI_FALLBACK_UPLOAD_DIR = BASE_DIR / "auto_uploads"
 
 def _resolve_upload_target_dir() -> Path:
@@ -3303,6 +3460,77 @@ def _scan_old_files(folder: Path, kind: str, days: int) -> list[dict]:
     return sorted(out, key=lambda r: (r["extracted_date"] or "", r["filename"]))
 
 
+# ---------------------------------------------------------------------------
+# Uploaded-file registry — SHA-256 dedupe + lifecycle tracking. The desktop
+# agent calls /api/v1/status/check (date) and /api/v1/status/check-sha (hash)
+# before sending bytes; the upload endpoints below also dedupe server-side.
+# ---------------------------------------------------------------------------
+def _sha256_hex(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _registry_lookup_sha(sha256: str) -> dict | None:
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT sha256, file_type, file_name, file_size, target_date, status, "
+                "received_at, loaded_at, moved_path, record_count "
+                "FROM uploaded_file_registry WHERE sha256 = %s",
+                (sha256,),
+            )
+            return cur.fetchone()
+
+
+def _registry_record_received(
+    sha256: str,
+    file_type: str,
+    file_name: str,
+    file_size: int,
+    target_date,
+    source_key: str | None,
+) -> None:
+    """Idempotent insert. Safe to call after _registry_lookup_sha returned None."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO uploaded_file_registry "
+                "(sha256, file_type, file_name, file_size, target_date, source_key, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s, 'received') "
+                "ON CONFLICT (sha256) DO NOTHING",
+                (sha256, file_type, file_name, file_size, target_date, source_key),
+            )
+        conn.commit()
+
+
+def _registry_mark_loaded(
+    sha256: str,
+    record_count: int | None,
+    moved_path: str | None,
+    target_date=None,
+) -> None:
+    """Called by the extract step once rows reach the DB. Flips status to
+    'loaded', stamps loaded_at, records final path under done/."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE uploaded_file_registry SET "
+                "status = 'loaded', loaded_at = NOW(), "
+                "record_count = COALESCE(%s, record_count), "
+                "moved_path = COALESCE(%s, moved_path), "
+                "target_date = COALESCE(%s, target_date) "
+                "WHERE sha256 = %s",
+                (record_count, moved_path, target_date, sha256),
+            )
+        conn.commit()
+
+
+def _parse_iso_date_or_400(s: str):
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="date must be ISO YYYY-MM-DD")
+
+
 def _resolve_packs_target_dir() -> Path:
     """Pick the directory to write incoming daily-packs files into. Mirrors
     `_resolve_upload_target_dir` but for the daily-packs watched folder."""
@@ -3338,14 +3566,37 @@ async def v1_xlsx_upload(file: UploadFile = File(...), key_label: str = Depends(
         raise HTTPException(status_code=400, detail="upload is not a valid .xlsx (zip magic missing)")
     if len(content) > 50 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="file too large (>50 MB)")
+    sha = _sha256_hex(content)
+    existing = _registry_lookup_sha(sha)
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "status": "duplicate",
+                "reason": "sha256 already registered",
+                "sha256": sha,
+                "registry": {
+                    "file_name": existing.get("file_name"),
+                    "file_type": existing.get("file_type"),
+                    "target_date": existing["target_date"].isoformat() if existing.get("target_date") else None,
+                    "status": existing.get("status"),
+                    "received_at": existing["received_at"].isoformat() if existing.get("received_at") else None,
+                    "loaded_at": existing["loaded_at"].isoformat() if existing.get("loaded_at") else None,
+                    "moved_path": existing.get("moved_path"),
+                    "record_count": existing.get("record_count"),
+                },
+            },
+        )
     dest.write_bytes(content)
     # One-file-per-day cleanup
     target_date = _extract_date_from_filename(safe_name)
     removed_same_date = _delete_same_date_older_files(target_dir, dest, target_date)
+    _registry_record_received(sha, "production", safe_name, len(content), target_date, key_label)
     return {
         "ok": True,
         "filename": safe_name,
         "size": len(content),
+        "sha256": sha,
         "stored_in": str(target_dir),
         "received_from_key": key_label,
         "extracted_date": target_date.isoformat() if target_date else None,
@@ -3373,13 +3624,36 @@ async def v1_pdf_upload(file: UploadFile = File(...), key_label: str = Depends(r
     dest = target_dir / safe_name
     content = await file.read()
     validate_pdf_content(content)
+    sha = _sha256_hex(content)
+    existing = _registry_lookup_sha(sha)
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "status": "duplicate",
+                "reason": "sha256 already registered",
+                "sha256": sha,
+                "registry": {
+                    "file_name": existing.get("file_name"),
+                    "file_type": existing.get("file_type"),
+                    "target_date": existing["target_date"].isoformat() if existing.get("target_date") else None,
+                    "status": existing.get("status"),
+                    "received_at": existing["received_at"].isoformat() if existing.get("received_at") else None,
+                    "loaded_at": existing["loaded_at"].isoformat() if existing.get("loaded_at") else None,
+                    "moved_path": existing.get("moved_path"),
+                    "record_count": existing.get("record_count"),
+                },
+            },
+        )
     dest.write_bytes(content)
     target_date = _extract_date_from_filename(safe_name)
     removed_same_date = _delete_same_date_older_files(target_dir, dest, target_date)
+    _registry_record_received(sha, "attendance", safe_name, len(content), target_date, key_label)
     return {
         "ok": True,
         "filename": safe_name,
         "size": len(content),
+        "sha256": sha,
         "stored_in": str(target_dir),
         "received_from_key": key_label,
         "extracted_date": target_date.isoformat() if target_date else None,
@@ -7105,6 +7379,7 @@ def _line_push_button_template(
     )
 
 
+
 @app.post("/api/line/send-mobile-link")
 async def line_send_mobile_link(
     file: UploadFile = File(...),
@@ -7167,6 +7442,53 @@ async def line_send_mobile_link(
         "ok": ok,
         "image_url": img_url,        # the branded card thumbnail used in chat
         "snapshot_url": snapshot_url,  # the per-day numbers snapshot kept on disk
+        "link_url": link_url,
+        "results": results,
+    }
+
+
+@app.post("/api/line/send-message")
+async def line_send_message(body: dict = Body(...)):
+    # Always-send endpoint: posts a Buttons-Template card to every registered
+    # recipient. No upload — uses the branded default card image on the Pi at
+    # static/line_card_default/{attendance,summary}_card.jpg. Tap target is
+    # the mobile viewer (/m/report or /m/summary) — same as the locked
+    # send-mobile-link flow.
+    cfg = _line_load()
+    token = cfg.get("channel_access_token", "")
+    if not token:
+        raise HTTPException(status_code=500, detail="LINE not configured")
+    recipients = cfg.get("recipients", []) or []
+    if not recipients:
+        raise HTTPException(status_code=400, detail="no LINE recipients yet — have a user message the bot first")
+    report_date = (body.get("report_date") or "").strip()
+    rtype = (body.get("type") or "attendance").strip()
+    if not report_date:
+        raise HTTPException(status_code=400, detail="report_date required (YYYY-MM-DD)")
+    safe_date = _LINE_FILENAME_RE.sub("", report_date)[:20] or "report"
+    safe_type = _LINE_FILENAME_RE.sub("", rtype)[:20] or "attendance"
+    base = cfg.get("public_base_url", "").rstrip("/")
+    branded_card = "attendance_card.jpg" if safe_type == "attendance" else "summary_card.jpg"
+    img_url = f"{base}/static/line_card_default/{branded_card}"
+    page = "report" if safe_type == "attendance" else "summary"
+    link_url = f"{base}/m/{page}?date={safe_date}"
+    label_ja = "勤怠記録" if safe_type == "attendance" else "月次サマリー"
+    label_en = "Attendance Report" if safe_type == "attendance" else "Monthly Summary"
+    title = f"{label_ja} · {label_en}"
+    body_text = f"📅 {safe_date}　タップで詳細を表示"
+    btn_label = "📊 View Report" if safe_type == "attendance" else "📈 View Summary"
+    alt_text = f"{label_en} {safe_date} — {link_url}"
+    results = []
+    for r in recipients:
+        rid = r["id"]
+        s_card, resp_card = _line_push_button_template(
+            rid, img_url, title, body_text, btn_label, link_url, alt_text, token,
+        )
+        results.append({"id": rid, "card_status": s_card, "response": resp_card[:200]})
+    ok = all(200 <= r["card_status"] < 300 for r in results)
+    return {
+        "ok": ok,
+        "image_url": img_url,
         "link_url": link_url,
         "results": results,
     }

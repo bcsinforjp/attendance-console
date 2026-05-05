@@ -658,6 +658,7 @@ All `/api/line/...` endpoints are **unauthenticated** (no `X-API-Key`) — same 
 | `POST` | `/api/line/send` | Body `{report_date, type}`. Pushes a plain text message with the gantt URL to every recipient. Older flow — kept for compatibility; UI now uses `send-mobile-link`. |
 | `POST` | `/api/line/upload-and-send` | Multipart: `file` (PDF, ≤12 MB, must start with `%PDF-`), `report_date`, `type`. Saves to `static/line_pdfs/<type>_<date>.pdf` and pushes the public URL. Used by the gantt-page **💬 Send PDF to LINE** button. |
 | `POST` | `/api/line/send-mobile-link` | Multipart: `file` (PNG or JPEG, ≤5 MB), `report_date`, `type`. Saves to `static/line_images/<type>_<date>.<ext>`, sends a single **Buttons Template card** (`thumbnail + title + body + tap button`) per recipient with `defaultAction = uri to /m/<type>`. Used by Reports-page **💬 Send to LINE** buttons. |
+| `POST` | `/api/line/send-message` | JSON body `{report_date, type}`. **No upload** — uses the branded default thumbnail at `static/line_card_default/{attendance,summary}_card.jpg`. Sends the same Buttons Template card per recipient with the tap target on `/m/report` or `/m/summary`. Designed for **desktop app integrations** that don't have a snapshot image to upload. |
 | `POST` | `/api/line/test-hi` | Pushes "Hi 👋 (test from V3 Attendance Console)" to all recipients. No body. |
 | `GET` | `/api/line/recipients` | Lists registered recipients (id, kind, display_name, registered_at). |
 | `POST` | `/api/line/recipients/rename` | Body `{id, display_name}`. Renames a recipient (max 60 chars). |

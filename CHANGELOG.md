@@ -7,6 +7,195 @@ Format: `YYYY-MM-DD — [area] what changed (why) → files`
 
 ---
 
+## v4.0 — Stable Release (2026-05-06)
+
+Cumulative roll-up of every change since v3.5. Tagged `v4.0` on `dev` and
+pushed to origin. From this version onward, the desktop agent + report
+date math + internal health check are all in their stable shape.
+
+Highlights since v3.5:
+
+- **Pre-upload protocol replaced by a single decision endpoint.** The two
+  legacy probes (`/api/v1/status/check` + `/api/v1/status/check-sha`) are gone;
+  desktop now calls `GET /api/v1/status/precheck?type=&date=&sha256=` and gets
+  back one of `upload | skip | confirm_replace`. The endpoint reconciles
+  `uploaded_file_registry` against the data tables on every call, so a manual
+  `DELETE FROM attendance_records` no longer leaves the registry lying. See
+  [DESKTOP_AGENT_TASK.md](DESKTOP_AGENT_TASK.md).
+- **Plan A: `/gantt?date=` is the report date end-to-end.** Attendance and
+  temp_staff queries fetch at `record_date − 1`; daily_packs at `record_date`.
+  One URL, one page, both halves of the day visible together. See §1 of
+  [DATE_RULES.md](DATE_RULES.md).
+- **Internal health check (`doctor.py`) running on a 5-hour systemd timer.**
+  Row counts every table, finds orphan registry rows, validates sidecar JSONs,
+  drains pending files in watched folders. Output appended to
+  `logs/internal_health_logs.log`. Install instructions in [systemd/INSTALL.md](systemd/INSTALL.md).
+- **Date rules consolidated in `date_service.py` with full reference doc.**
+  PDF date / shift / production / report / pack — all derived from one anchor
+  with constants you can change in one place. See [DATE_RULES.md](DATE_RULES.md).
+- **Cross-app database documentation.** All 7 tables, every column, every
+  sidecar JSON, every filesystem path, every env var, with worked examples.
+  See [/var/www/DATABASES.md](../DATABASES.md).
+- **Roster / sections / batch-upload polish** carried in from in-flight
+  work (`employee_roster.json`, `sections.json`, `upload_latest.bat`,
+  `API_APP_GUIDE.md`).
+
+Known issues left open in v4.0:
+
+- Auto-extract path doesn't transition `uploaded_file_registry.status` from
+  `received` → `loaded`. Data lands in tables correctly, but registry stays
+  stale. Self-heals on next precheck call; doctor.py also flags it. Tracked
+  for v4.0.x patch.
+
+Backup of the v4.0 source tree (excluding venv) lives at
+`/var/www/backups/attendance_app_v4.0_<timestamp>/`.
+
+---
+
+## 2026-05-06 — Plan A: gantt URL date is the report date
+
+The `/gantt?date=YYYY-MM-DD` URL is now interpreted as the **report (= production) date**
+end-to-end. Background: the desktop team uploaded `就業日報2026.04.07.pdf` +
+`夜勤用日報２６．０４．０８.xlsm` (one logical day of work, two calendar dates per
+DATE_RULES.md). Old code queried `attendance_records` and `daily_packs` with the same
+URL value, so the two halves could never appear on one page. Plan A reads the URL as
+the report date, queries `daily_packs` at it directly, and queries
+`attendance_records` + `temp_staff` at `report_date − 1` (the shift date).
+
+- **[api]** `_gantt_compute_for_date` now pulls attendance/temp_staff with
+  `WHERE record_date = (%s::date - 1)` while daily_packs stays `= %s`.
+  → `attendance_app/main.py:2208-2243`
+- **[api]** `/api/gantt/latest-date` returns `GREATEST(MAX(attendance.record_date) + 1,
+  MAX(daily_packs.record_date))` so the picker default is the most recent **report**
+  day (not the most recent shift day).
+  → `attendance_app/main.py:2149-2168`
+- **[api]** `/api/gantt/dates-with-data` returns report dates by `UNION`-ing
+  `attendance_records.record_date + 1` with `daily_packs.record_date`.
+  → `attendance_app/main.py:2170-2196`
+- **[verify]** `GET /api/gantt/2026-04-08` now returns `total_packs=11434` (4/8
+  daily_packs) + 93 attendance rows + temp_staff 10 ppl / 90h (4/7) — both halves
+  on the same response.
+- **[backup]** `main.py.bak_20260506_planA` saved before the edit.
+- **[no change needed]** Frontend (`gantt.html`) already shows
+  `Attendance Report｜${url_date}` and `シフト ${url_date − 1}（曜日）`, which
+  matches Plan A.
+- **[separate small bug, not fixed in this commit]** When ingestion succeeds via
+  the auto-extract path, `uploaded_file_registry.status` stays at `received` instead
+  of flipping to `loaded` (and `loaded_at` / `record_count` stay NULL). The data
+  IS in the tables, but the registry lies. Flagged for a follow-up commit —
+  doctor.py's `registry_consistency` check will catch it and the
+  `/api/v1/status/precheck` endpoint already self-heals on the next probe.
+
+→ `attendance_app/main.py`, `attendance_app/CHANGELOG.md`
+
+## 2026-05-06 — Single precheck endpoint + doctor.py periodic health check
+
+Replaced the two-call dance (`/api/v1/status/check` + `/api/v1/status/check-sha`)
+with one decision endpoint and added a 5-hourly self-healing health check.
+Background: a manual `DELETE FROM attendance_records` left
+`uploaded_file_registry` claiming the data was still loaded, so the desktop
+agent's SHA probe kept returning `exists:true` and refused to re-upload.
+Fix is to make the data table the source of truth and reconcile the registry
+on every probe; doctor.py catches any stale rows that slip through and also
+drains files that landed in the watched folder but never reached `done/`.
+
+- **[api]** New `GET /api/v1/status/precheck?type=&date=&sha256=` returning one
+  of `{"action":"upload"|"skip"|"confirm_replace", "reason":...}`. Logic:
+  probe the data table by `type`; if empty, `DELETE FROM uploaded_file_registry
+  WHERE target_date=date OR sha256=sha` then return `upload`; if data exists,
+  registry hit on (sha,date) → `skip`, miss/diff → `confirm_replace`.
+  → `attendance_app/main.py` (replaces lines previously holding `/check` and
+  `/check-sha`)
+- **[api breaking]** Removed `GET /api/v1/status/check` and
+  `GET /api/v1/status/check-sha`. Desktop agent must switch to `/precheck`.
+  → `attendance_app/main.py`, `attendance_app/DESKTOP_AGENT_TASK.md`
+- **[ops]** New `attendance_app/doctor.py` standalone script: row-counts every
+  table, finds orphan registry rows (status=loaded but data row count=0),
+  validates sidecar JSON configs, lists files sitting in watched folders that
+  never reached `done/`, optionally hits `/api/attendance/auto-upload` and
+  `/api/daily-packs/auto-extract*` to drain them. Append-only log at
+  `logs/internal_health_logs.log`. Exit 0 always (watcher, not a gate).
+  → `attendance_app/doctor.py`
+- **[ops]** Systemd unit + 5h timer (`OnUnitActiveSec=5h`) under
+  `attendance_app/systemd/`. Install: `sudo cp` the two files into
+  `/etc/systemd/system/` and `systemctl enable --now attendance-doctor.timer`.
+  See `attendance_app/systemd/INSTALL.md`.
+  → `attendance_app/systemd/{attendance-doctor.service,attendance-doctor.timer,INSTALL.md}`
+- **[docs]** `/var/www/DATABASES.md` gains §4 (precheck contract) and §5
+  (doctor responsibilities + log location). `DESKTOP_AGENT_TASK.md` rewritten
+  to single-call flow, with a new acceptance test for the manual-DELETE
+  self-heal case.
+- **[backup]** `main.py.bak_20260506_precheck` saved before the endpoint swap.
+- **[deploy reminder]** `sudo systemctl restart attendance.service` is required
+  for the new endpoint to go live (uvicorn doesn't hot-reload).
+
+→ `attendance_app/main.py`, `attendance_app/doctor.py`,
+   `attendance_app/systemd/*`, `attendance_app/DESKTOP_AGENT_TASK.md`,
+   `/var/www/DATABASES.md`
+
+## 2026-05-05 — Activate pre-upload routes (BACKEND_FIX_REQUEST resolution)
+
+Desktop team reported HTTP 404 on `/api/v1/status/check` and `/api/v1/status/check-sha`
+through `https://rnd.asiakawaii.com/attendance/...`. Cause: `attendance.service`
+had not been restarted since the route additions earlier today, so the running
+uvicorn (started 2026-05-04 09:09) was serving the pre-edit code.
+
+- **[ops]** `sudo systemctl restart attendance.service`. New start
+  2026-05-05 20:20:12. Route count in live `/openapi.json` jumped to 105 incl.
+  the two new `status/check*` paths. → no code change.
+- **[verify]** All three §5 acceptance curls in `BACKEND_FIX_REQUEST.md` now
+  return HTTP 200 with `{"exists":false,…}` through the public URL, including
+  the real-world SHA from the desktop log
+  (`076514…7757`). → no code change.
+- **[note — separate, NOT acted on]** Audit of port 8003 found a stale
+  `uvicorn main:app` (PID 553808, started 2026-04-25) running an older
+  snapshot of `attendance_app/main.py` (only 6 routes). It is squatting on
+  the port that `upload.service` is configured to bind. **This is unrelated
+  to today's desktop fix** (nginx routes `/attendance/` to 8002, not 8003)
+  but should be cleaned up — flagged for a follow-up decision from the owner.
+
+→ no files changed (operational restart only)
+
+## 2026-05-05 — Pre-upload status check + SHA-256 dedup registry
+
+Backend-side support for the desktop agent's `API_CHECK_SPEC.md` (Section 1
+of that doc). Two layered protections so the same file is never processed
+twice and a date that already has rows is never silently overwritten.
+
+- **[db]** New table `uploaded_file_registry`: `(sha256 UNIQUE, file_type,
+  file_name, file_size, target_date, record_count, received_at, loaded_at,
+  moved_path, source_key, status)`. Indexes on `(file_type, target_date)`
+  and `status`. Created idempotently from `init_db()`. → `main.py`
+- **[helpers]** `_sha256_hex`, `_registry_lookup_sha`,
+  `_registry_record_received`, `_registry_mark_loaded`, `_parse_iso_date_or_400`.
+  All single-purpose, all reuse the existing `get_db_connection()` pool. The
+  existing flat `_move_to_done(src, kind)` from 2026-05-02 is kept as-is —
+  no YYYY-MM nesting, no signature change, no collision. → `main.py`
+- **[api]** New `GET /api/v1/status/check?type={attendance|production}&date=YYYY-MM-DD`
+  per the original `API_CHECK_SPEC.md`. Always 200 (or 400/401) so the desktop
+  client's fail-open contract holds. attendance → reads `attendance_records`,
+  production → reads `daily_packs` first then falls back to
+  `daily_pack_items`. Response carries `records` (attendance) or `pack_count`
+  (production) plus `uploaded_at`. → `main.py`
+- **[api]** New `GET /api/v1/status/check-sha?sha256=<64-hex>`. Byte-exact
+  dedup probe so the desktop agent can skip the network upload entirely
+  when the same file has already been processed. Returns full registry
+  metadata (status, target_date, moved_path, record_count) on hit. → `main.py`
+- **[api]** `POST /api/v1/pdf/upload` and `POST /api/v1/xlsx/upload` now
+  SHA-256 the bytes server-side. On hit the request is **rejected with 409
+  Conflict** carrying the existing registry row in `detail.registry`. Desktop
+  client must treat 409 as terminal (no retry). On miss, file is saved as
+  before and a `received` row is inserted into the registry. Success
+  responses gained a `sha256` field. → `main.py`
+- **[hand-off]** `DESKTOP_AGENT_TASK.md`: full integration spec for the
+  desktop AI agent that owns `watch.js`. Includes endpoint contracts, the
+  pre-check decision flow, a 5 s probe budget, the 409 branch, and a 5-row
+  acceptance-test matrix. → `attendance_app/DESKTOP_AGENT_TASK.md`
+- **[ops]** Backup of pre-change `main.py` saved as
+  `main.py.bak_20260505_133723` so the change is fully reversible.
+
+→ `main.py`, `DESKTOP_AGENT_TASK.md`
+
 ## 2026-05-02 — Retrievable move-to-done warnings (key-protected)
 
 The move-to-done step that runs after a successful DB save is best-effort —

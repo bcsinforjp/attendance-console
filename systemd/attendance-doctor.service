@@ -1,0 +1,24 @@
+[Unit]
+Description=Attendance app — internal health check (doctor.py)
+After=network.target attendance.service
+Wants=attendance.service
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/var/www/attendance_app
+# Reuse the FastAPI app's env. Override here if you rotate the DB password
+# or want auto-processing disabled:
+#   Environment=ATTENDANCE_DOCTOR_AUTO_PROCESS=0
+Environment=ATTENDANCE_DB_HOST=127.0.0.1
+Environment=ATTENDANCE_DB_PORT=5432
+Environment=ATTENDANCE_DB_NAME=attendance_db
+Environment=ATTENDANCE_DB_USER=attendance
+Environment=ATTENDANCE_DB_PASSWORD=attendance2026
+Environment=ATTENDANCE_API_BASE=http://127.0.0.1:8002
+# Set to a real API key from api_keys.json to enable auto-ingest of pending files:
+#   Environment=ATTENDANCE_DOCTOR_KEY=app-XXXX
+ExecStart=/var/www/attendance_app/venv/bin/python /var/www/attendance_app/doctor.py
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=attendance-doctor

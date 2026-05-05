@@ -8,24 +8,12 @@
     "name": "朴 みかん"
   },
   {
-    "employee_code": "00000575",
-    "name": "ｻﾝﾖｯｸﾝ ﾁﾃｨﾊﾟｯﾄ"
-  },
-  {
     "employee_code": "00000576",
     "name": "ｼｶﾞｷ ﾀﾞﾆｴﾘ ﾅｵﾐ"
   },
   {
-    "employee_code": "00000577",
-    "name": "ﾑｯﾗ ｳﾞｨﾀﾞﾅﾗｹﾞ ﾌﾞｯﾃﾞｨｶ ｼﾞｬﾔﾙﾜﾝ"
-  },
-  {
     "employee_code": "00000340",
     "name": "ﾐﾅｶﾞﾜ ﾁｮﾑ ﾁｬﾔ-ﾅﾂﾄﾞ"
-  },
-  {
-    "employee_code": "00000344",
-    "name": "ﾏﾂﾀﾞ ﾗﾝﾌﾟ-"
   },
   {
     "employee_code": "00000351",
@@ -40,12 +28,12 @@
     "name": "ｺﾝﾍﾟｯﾄ ﾏﾘｰ"
   },
   {
-    "employee_code": "00000378",
-    "name": "浜 茂樹"
+    "employee_code": "00000575",
+    "name": "ｻﾝﾖｯｸﾝ ﾁﾃｨﾊﾟｯﾄ"
   },
   {
-    "employee_code": "00000386",
-    "name": "ｲﾄｳ ｼﾘﾏ"
+    "employee_code": "00000577",
+    "name": "ﾑｯﾗ ｳﾞｨﾀﾞﾅﾗｹﾞ ﾌﾞｯﾃﾞｨｶ ｼﾞｬﾔﾙﾜﾝ"
   },
   {
     "employee_code": "00001703",
@@ -120,6 +108,74 @@
     "name": "ﾄｩﾗｼ"
   },
   {
+    "employee_code": "00003016",
+    "name": "ﾄﾞﾗﾝｼﾞｪﾅ"
+  },
+  {
+    "employee_code": "00003017",
+    "name": "ｻﾊﾝ"
+  },
+  {
+    "employee_code": "00003018",
+    "name": "ｵｼｬｰﾝ"
+  },
+  {
+    "employee_code": "00003019",
+    "name": "ﾗﾃｨｶ"
+  },
+  {
+    "employee_code": "00003020",
+    "name": "ﾗﾝﾃﾞｨｶ"
+  },
+  {
+    "employee_code": "00003021",
+    "name": "ﾆｰﾒｰｼｭ"
+  },
+  {
+    "employee_code": "00003022",
+    "name": "ｻﾁｯﾄ"
+  },
+  {
+    "employee_code": "00003023",
+    "name": "ﾊｼﾀ"
+  },
+  {
+    "employee_code": "00003024",
+    "name": "ﾍﾟﾚｰﾗ"
+  },
+  {
+    "employee_code": "00003025",
+    "name": "ﾔｼｯﾄ"
+  },
+  {
+    "employee_code": "00003026",
+    "name": "ﾙﾁﾗ"
+  },
+  {
+    "employee_code": "00003027",
+    "name": "ﾏﾃｨｰｼｬ"
+  },
+  {
+    "employee_code": "00003028",
+    "name": "ﾋﾞﾑｻﾗ"
+  },
+  {
+    "employee_code": "00003029",
+    "name": "ｾﾇﾘ"
+  },
+  {
+    "employee_code": "00003030",
+    "name": "ｾﾆｯﾄ"
+  },
+  {
+    "employee_code": "00003031",
+    "name": "ﾅｵﾃﾞｨｱ"
+  },
+  {
+    "employee_code": "00005043",
+    "name": "ｱﾝﾄﾞﾗ ｸｽﾏ ﾗﾏﾀﾞﾆ"
+  },
+  {
     "employee_code": "00005018",
     "name": "ﾘｽｷ ﾘｱﾝ ﾇｸﾞﾛﾎ"
   },
@@ -156,12 +212,20 @@
     "name": "ﾓﾊﾏﾄ ｲﾙﾜﾝ ｱﾝｶﾞ ｻﾌﾟﾄﾗ"
   },
   {
+    "employee_code": "00005046",
+    "name": "ﾌｨﾄﾘ ｲﾝﾀﾞｰ ﾗﾊﾙﾃｨ"
+  },
+  {
     "employee_code": "00005047",
     "name": "ｳｨﾝﾀﾞ ﾗﾊﾕ ｽﾘ ﾚｽﾀﾘ"
   },
   {
     "employee_code": "00005048",
     "name": "ｱｸﾞｽﾃｨﾅ ｼｮﾚｶ"
+  },
+  {
+    "employee_code": "00005049",
+    "name": "ﾘｽｶ ﾌﾟｼﾞｬﾔﾝﾃｨ"
   },
   {
     "employee_code": "00000309",
@@ -208,10 +272,6 @@
     "name": "矢島 美和"
   },
   {
-    "employee_code": "00000495",
-    "name": "楊 鳳祥"
-  },
-  {
     "employee_code": "00002403",
     "name": "矢崎 崇子"
   },
@@ -222,6 +282,10 @@
   {
     "employee_code": "00007001",
     "name": "ﾚｻﾞ ﾑｰｼﾇﾙ ﾌｧｳｻﾞﾝ"
+  },
+  {
+    "employee_code": "00000495",
+    "name": "楊 鳳祥"
   },
   {
     "employee_code": "00007002",
@@ -302,5 +366,9 @@
   {
     "employee_code": "00005057",
     "name": "ﾕﾆﾀ ｸﾙﾆｱ ﾜﾃｨ"
+  },
+  {
+    "employee_code": "00000578",
+    "name": "ｶｸ ｷﾝｾｲ"
   }
 ]

@@ -1,0 +1,208 @@
+/* ================================================================
+   theme.css — Industrial Futurism (dark)
+   ================================================================
+   Drop-in dark theme for the attendance app static pages. Reuses the
+   same CSS-variable names already in reports.html / gantt.html / etc.
+   so each page can switch by adding ONE <link> after the inline style:
+
+       <style>:root { --bg: #eef3f5; ... }</style>      ← existing
+       <link rel="stylesheet" href="/static/theme.css">  ← add this
+
+   The `:root` below wins because it loads after the inline block.
+
+   Palette source: portfolio site (rnd.asiakawaii.com).
+   ================================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  /* ---------- Industrial Futurism palette ---------- */
+  --bg:            #0a0a0f;           /* near-black canvas               */
+  --bg-grid:       #11121a;           /* circuit-grid line colour        */
+  --surface:       #12131c;           /* card / panel surface            */
+  --surface-soft:  #181a25;           /* hovered / nested surface        */
+  --line:          #2a2d3d;           /* dividers, borders               */
+
+  --ink:           #e6edf3;           /* primary text                    */
+  --ink-strong:    #ffffff;           /* headings                        */
+  --muted:         #8a93a6;           /* secondary text                  */
+
+  /* Accents (use sparingly — they glow) */
+  --cyan:          #00e5ff;           /* primary accent                  */
+  --purple:        #7c5cfc;           /* secondary accent                */
+  --neon-green:    #7fff00;           /* status / OK indicators          */
+
+  /* Aliases that match the existing pages' variable names */
+  --brand:         var(--cyan);
+  --brand-strong:  #33ecff;
+  --accent:        var(--purple);
+  --warn:          #ffb454;
+  --danger:        #ff5c7a;
+
+  /* Glow / shadow */
+  --shadow:        0 10px 32px rgba(0, 229, 255, 0.06);
+  --glow-cyan:     0 0 0 1px rgba(0, 229, 255, 0.35),
+                   0 0 18px rgba(0, 229, 255, 0.18);
+  --glow-purple:   0 0 0 1px rgba(124, 92, 252, 0.35),
+                   0 0 18px rgba(124, 92, 252, 0.18);
+
+  /* Typography */
+  --font-sans: "Space Grotesk", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Radii */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+}
+
+/* ---------- Canvas + circuit-board grid ---------- */
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+body {
+  background-image:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+    radial-gradient(ellipse at top, rgba(124, 92, 252, 0.08), transparent 60%),
+    radial-gradient(ellipse at bottom right, rgba(0, 229, 255, 0.06), transparent 60%);
+  background-size: 48px 48px, 48px 48px, 100% 100%, 100% 100%;
+  background-attachment: fixed;
+}
+
+/* ---------- Headings ---------- */
+h1, h2, h3, h4 {
+  color: var(--ink-strong);
+  letter-spacing: 0.01em;
+}
+h1 { font-weight: 700; }
+h2, h3 { font-weight: 600; }
+
+/* ---------- Mono / data / tags ---------- */
+code, kbd, samp, pre, .mono, .tag, .chip {
+  font-family: var(--font-mono);
+}
+
+/* ---------- Cards / panels ---------- */
+.card, .panel, .surface, [class*="card"], [class*="panel"] {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.card:hover, .panel:hover {
+  border-color: rgba(0, 229, 255, 0.45);
+  box-shadow: var(--glow-cyan);
+}
+
+/* ---------- Buttons ---------- */
+button, .btn, input[type="button"], input[type="submit"] {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--cyan), #00b8d4);
+  color: #001218;
+  border: 0;
+  border-radius: var(--r-md);
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+button:hover, .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--glow-cyan);
+  filter: brightness(1.05);
+}
+button.ghost, .btn.ghost, button.secondary, .btn.secondary {
+  background: transparent;
+  color: var(--cyan);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+}
+button.ghost:hover, .btn.ghost:hover {
+  background: rgba(0, 229, 255, 0.06);
+}
+button.danger, .btn.danger {
+  background: linear-gradient(135deg, var(--danger), #c93450);
+  color: #fff;
+}
+button:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; transform: none; }
+
+/* ---------- Form fields ---------- */
+input, select, textarea {
+  font-family: var(--font-sans);
+  background: var(--surface-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 0.5rem 0.75rem;
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.15);
+}
+input::placeholder { color: var(--muted); }
+
+/* ---------- Tables ---------- */
+table { border-collapse: collapse; width: 100%; color: var(--ink); }
+th, td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+}
+th {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--surface-soft);
+}
+tr:hover td { background: rgba(0, 229, 255, 0.03); }
+
+/* ---------- Status pills ---------- */
+.tag, .chip, .pill, .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--ink);
+  letter-spacing: 0.04em;
+}
+.tag.ok,    .chip.ok,    .pill.ok,    .badge.ok    { color: var(--neon-green); border-color: rgba(127,255,0,0.35); }
+.tag.warn,  .chip.warn,  .pill.warn,  .badge.warn  { color: var(--warn);       border-color: rgba(255,180,84,0.35); }
+.tag.error, .chip.error, .pill.error, .badge.error { color: var(--danger);     border-color: rgba(255,92,122,0.45); }
+.tag.info,  .chip.info,  .pill.info,  .badge.info  { color: var(--cyan);       border-color: rgba(0,229,255,0.35); }
+
+/* ---------- Links ---------- */
+a { color: var(--cyan); text-decoration: none; transition: color 140ms ease; }
+a:hover { color: var(--brand-strong); text-shadow: 0 0 8px rgba(0, 229, 255, 0.4); }
+
+/* ---------- Scrollbar (WebKit) ---------- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 229, 255, 0.4); }
+
+/* ---------- Selection ---------- */
+::selection { background: rgba(0, 229, 255, 0.25); color: var(--ink-strong); }
+
+/* ---------- Utility helpers (optional, used by some pages) ---------- */
+.muted   { color: var(--muted); }
+.mono    { font-family: var(--font-mono); }
+.glow    { box-shadow: var(--glow-cyan); }
+.hidden  { display: none !important; }

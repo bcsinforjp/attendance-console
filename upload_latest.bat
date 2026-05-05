@@ -5,7 +5,7 @@ REM  - No admin rights, no PowerShell policy issues
 REM  - Uses curl.exe (built into Windows 10 1803+)
 REM  - All paths relative to this .bat file
 REM
-REM  Two SEPARATE upload flows in one script:
+REM  Three SEPARATE flows in one script:
 REM
 REM    [A] Attendance PDFs                  → /api/v1/pdf/upload
 REM        then trigger /api/v1/pdf/auto-upload?save=true
@@ -13,8 +13,19 @@ REM
 REM    [B] Daily-packs フルキャスト Excel    → /api/v1/xlsx/upload
 REM        then trigger /api/daily-packs/auto-extract-excel
 REM
+REM    [C] Send LINE card                   → /api/line/send-message
+REM        Posts the same Buttons-Template card the web GUI sends
+REM        (Reports / Gantt / Summary "Send to LINE" buttons), but
+REM        uses the branded default card image on the Pi instead of
+REM        a per-day screenshot. Tap target is /m/report or /m/summary
+REM        — identical to the locked web flow.
+REM
 REM  Each flow is its own labelled subroutine and can be invoked
 REM  independently — see "Run a specific flow" below.
+REM
+REM  IMPORTANT: flow [C] is INTENTIONALLY EXCLUDED from "all".
+REM  A double-click of this .bat must NEVER spam LINE recipients;
+REM  the LINE card is operator-triggered only via `line` arg.
 REM
 REM  HOW TO USE
 REM    1. Put this .bat in a folder, e.g.  C:\AttendanceUpload\
@@ -22,12 +33,17 @@ REM    2. First run will create config.txt — edit it, paste your API key.
 REM    3. Drop files into:
 REM         C:\AttendanceUpload\watch\pdf\   ← attendance PDFs (.pdf)
 REM         C:\AttendanceUpload\watch\xlsx\  ← daily-packs Excel (.xlsx/.xlsm)
-REM    4. Double-click the .bat to run BOTH flows in order.
+REM    4. Double-click the .bat to run BOTH upload flows in order.
+REM       (The LINE card is NOT sent by a double-click — see below.)
 REM
 REM  Run a specific flow only:
-REM       upload_latest.bat pdf      :: only flow [A]
-REM       upload_latest.bat xlsx     :: only flow [B]
-REM       upload_latest.bat all      :: both (default)
+REM       upload_latest.bat pdf                          :: only flow [A]
+REM       upload_latest.bat xlsx                         :: only flow [B]
+REM       upload_latest.bat all                          :: [A]+[B] (default)
+REM       upload_latest.bat line                         :: [C] attendance, yesterday
+REM       upload_latest.bat line summary                 :: [C] summary,    yesterday
+REM       upload_latest.bat line attendance 2026-05-03   :: [C] explicit date
+REM       upload_latest.bat line summary    2026-05-03   :: [C] explicit date
 REM ============================================================
 
 setlocal enabledelayedexpansion
@@ -100,12 +116,18 @@ if /i "%MODE%"=="xlsx" (
     goto :done
 )
 if /i "%MODE%"=="all" (
-    echo [INFO] Running BOTH flows — Attendance PDF then Daily-packs Excel
+    echo [INFO] Running BOTH upload flows — Attendance PDF then Daily-packs Excel
+    echo [INFO] LINE flow is NOT included in "all" — run `upload_latest.bat line` to send.
     call :upload_pdf
     call :upload_xlsx
     goto :done
 )
-echo [ERROR] Unknown mode "%MODE%". Use: pdf ^| xlsx ^| all
+if /i "%MODE%"=="line" (
+    echo [INFO] Running flow [C] only — Send LINE card
+    call :DO_LINE "%~2" "%~3"
+    goto :done
+)
+echo [ERROR] Unknown mode "%MODE%". Use: pdf ^| xlsx ^| all ^| line
 pause
 exit /b 1
 
@@ -191,6 +213,103 @@ echo Triggering /api/daily-packs/auto-extract-excel >> "%LOG%"
 curl -s -X POST -H "X-API-Key: %KEY%" ^
     "%BASE%/api/daily-packs/auto-extract-excel" >> "%LOG%" 2>&1
 echo. >> "%LOG%"
+goto :eof
+
+
+REM ============================================================
+REM  [C]  LINE FLOW  ──  send Buttons-Template card to recipients
+REM
+REM  Endpoint: POST /api/line/send-message   (no upload, no API key)
+REM  Body:     {"report_date":"YYYY-MM-DD","type":"attendance"|"summary"}
+REM
+REM  Notes:
+REM   - /api/line/* endpoints are intentionally UNAUTHENTICATED on
+REM     this deployment (see API_APP_GUIDE.md §8.2). Do NOT add an
+REM     X-API-Key header — the server rejects unknown auth shapes.
+REM   - The recipient sees the same card the web GUI's "Send to LINE"
+REM     buttons render, except the image is the branded default card
+REM     (static/line_card_default/{attendance,summary}_card.jpg)
+REM     instead of a screenshot.
+REM   - Date defaults to YESTERDAY (operator usually sends after the
+REM     day closes). Computed via PowerShell because cmd.exe's
+REM     locale-dependent %date% parsing is unreliable across regions.
+REM
+REM  Args (positional, both optional):
+REM    %1 = "attendance" | "summary"  (default: attendance)
+REM    %2 = "YYYY-MM-DD"              (default: yesterday)
+REM ============================================================
+:DO_LINE
+echo.
+echo --- [C] LINE send flow ---
+echo --- [C] LINE send flow --- >> "%LOG%"
+
+REM --- arg 1: type ---
+set "LINE_TYPE=%~1"
+if "%LINE_TYPE%"=="" set "LINE_TYPE=attendance"
+if /i not "%LINE_TYPE%"=="attendance" if /i not "%LINE_TYPE%"=="summary" (
+    echo [ERROR] LINE type must be "attendance" or "summary" — got "%LINE_TYPE%"
+    echo [ERROR] LINE type must be "attendance" or "summary" — got "%LINE_TYPE%" >> "%LOG%"
+    exit /b 1
+)
+
+REM --- arg 2: report_date ---
+REM PowerShell is the only reliable cross-locale way to do "yesterday in
+REM YYYY-MM-DD" on Windows. cmd's %date% parsing breaks on JP/EU locales.
+set "LINE_DATE=%~2"
+if "%LINE_DATE%"=="" (
+    for /f "usebackq delims=" %%D in (`powershell -NoProfile -Command "(Get-Date).AddDays(-1).ToString('yyyy-MM-dd')"`) do set "LINE_DATE=%%D"
+)
+if "%LINE_DATE%"=="" (
+    echo [ERROR] Could not compute yesterday's date and no date was passed.
+    echo [ERROR] Could not compute yesterday's date and no date was passed. >> "%LOG%"
+    exit /b 1
+)
+
+REM --- Build JSON body in a temp file ---
+REM cmd.exe escaping of nested double-quotes inside `curl -d "..."` is
+REM unreliable (carets, doubled quotes, parentheses inside if-blocks all
+REM interact badly). Writing the body to a temp file and using
+REM `--data-binary @file` sidesteps the entire mess.
+set "LINE_BODY=%TEMP%\upload_latest_line_body.json"
+> "%LINE_BODY%" echo {"report_date":"%LINE_DATE%","type":"%LINE_TYPE%"}
+
+set "LINE_RESP=%TEMP%\upload_latest_line_resp.txt"
+if exist "%LINE_RESP%" del "%LINE_RESP%" >nul 2>&1
+
+echo Sending LINE card: type=%LINE_TYPE% date=%LINE_DATE%
+echo Sending LINE card: type=%LINE_TYPE% date=%LINE_DATE% >> "%LOG%"
+echo Endpoint: %BASE%/api/line/send-message >> "%LOG%"
+echo Body: >> "%LOG%"
+type "%LINE_BODY%" >> "%LOG%"
+echo. >> "%LOG%"
+
+REM -w prints HTTP status on its own line after the body so we can grep it.
+curl -s -X POST ^
+    -H "Content-Type: application/json" ^
+    --data-binary "@%LINE_BODY%" ^
+    -w "\nHTTP_STATUS=%%{http_code}\n" ^
+    "%BASE%/api/line/send-message" > "%LINE_RESP%" 2>&1
+
+REM Append response to main log
+echo --- response --- >> "%LOG%"
+type "%LINE_RESP%" >> "%LOG%"
+echo --- /response --- >> "%LOG%"
+
+REM Pull HTTP status out of the response file
+set "LINE_HTTP="
+for /f "tokens=2 delims==" %%S in ('findstr /b "HTTP_STATUS=" "%LINE_RESP%" 2^>nul') do set "LINE_HTTP=%%S"
+if "%LINE_HTTP%"=="" set "LINE_HTTP=000"
+
+if "%LINE_HTTP%"=="200" (
+    echo [OK] LINE card sent — HTTP %LINE_HTTP% type=%LINE_TYPE% date=%LINE_DATE%
+    echo [OK] LINE card sent — HTTP %LINE_HTTP% type=%LINE_TYPE% date=%LINE_DATE% >> "%LOG%"
+) else (
+    echo [ERROR] LINE send failed — HTTP %LINE_HTTP%. See %LOG%
+    echo [ERROR] LINE send failed — HTTP %LINE_HTTP% type=%LINE_TYPE% date=%LINE_DATE% >> "%LOG%"
+)
+
+REM Cleanup temp body (keep response file for post-mortem if needed)
+del "%LINE_BODY%" >nul 2>&1
 goto :eof
 
 

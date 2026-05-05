@@ -1,11 +1,105 @@
 # Progress & Bug Status — Attendance App
 # 進捗・不具合対応状況 — 勤怠アプリ
 
-**Date / 日付:** 2026-05-02
+**Date / 日付:** 2026-05-06
 
-**Version / バージョン:** 3.4 (post-tag work on `dev`)
+**Version / バージョン:** 4.0 (stable, tagged 2026-05-06)
 
-**Latest update / 最新更新 (2026-05-02 — Processed-files (Done) folder + Restore/Delete)**
+**Latest update / 最新更新 (2026-05-06 evening — Report URL now pairs attendance + packs correctly)**
+
+The Attendance Report page now correctly combines the labor data and the
+pack data on a single date. Until today, when the attendance PDF was for
+one day and the daily-pack Excel was for the next day (which is how the
+production cycle actually works), opening the report only showed half
+of the picture. Now opening "Report 2026-04-08" pulls labor from the
+2026-04-07 shift PDF and packs from the 2026-04-08 Excel together, just
+as you would expect from looking at the printed report. No action is
+required — existing bookmarks may now show one day's data shifted by a
+day, but the totals are now meaningful.
+
+勤怠レポート画面で、勤怠データと日報パックデータが正しく
+1 つの日付に揃って表示されるようになりました。これまでは、
+勤怠PDFと日報Excelが1日ずれている本来の運用に対し、
+レポートのどちらか半分しか表示されない状態でした。今後は
+「レポート 2026-04-08」を開くと、2026-04-07 のシフトPDFと
+2026-04-08 のExcelの両方が同じ画面にまとめて表示されます。
+利用者側の操作は不要です。既存のブックマークは、表示が
+1 日ずれて見える場合がありますが、合計値は正しい意味に
+なっています。
+
+---
+
+**Previous update / 前回の更新 (2026-05-06 — Smarter pre-upload check + automatic health monitor)**
+
+The desktop app's pre-upload check is now a single quick question to the
+server instead of two. The server looks at the actual data first and
+gives one of three answers: "please upload", "skip — already have it",
+or "ask the user before replacing". This fixes a confusing case where
+deleting a day's data on the server still made the desktop think the
+file was already loaded; now the server self-heals that mismatch.
+A new internal health monitor also runs every five hours: it checks
+the database, the configuration files, and any files that got stuck
+in the watched folder, and writes a report to an internal log so we
+catch problems before users notice. No action is required from staff.
+
+デスクトップアプリのアップロード前チェックが、2 回の問い合
+わせから 1 回の質問に統合されました。サーバーは実データを先
+に確認してから、「アップロードしてください」「すでにあるの
+でスキップ」「上書きする前にユーザーに確認」のいずれかを返
+します。これにより、サーバー上で当日のデータを削除した場合
+にもアプリが「すでに登録済み」と勘違いする不具合が解消され
+ました。さらに、5 時間ごとに自動で動く社内ヘルスチェックを
+新設しました。データベース・設定ファイル・処理待ちのファイ
+ルを点検し、問題があれば内部ログに記録します。利用者側の操
+作は不要です。
+
+---
+
+**Previous update / 前回の更新 (2026-05-05 evening — Pre-check routes activated)**
+
+The pre-upload check endpoints went live at 20:20 after the attendance
+service was restarted. The three acceptance tests requested by the
+desktop team (SHA probe, attendance date, production date) now all
+return HTTP 200 with the expected response shape from the public URL.
+Desktop activity logs should now show `decide-skip` events for any
+file the server already has, and no more `404 Not Found` warnings.
+
+事前チェック API は 20:20 のサービス再起動で有効になりまし
+た。デスクトップチームから依頼された 3 つの確認テスト（SHA
+チェック・勤怠日付・生産日付）はすべて公開 URL で HTTP 200
+を返すことを確認済みです。デスクトップのログには重複ファイ
+ルに対する `decide-skip` が記録され、`404 Not Found` の警告
+は出なくなります。
+
+---
+
+**Previous update / 前回の更新 (2026-05-05 — Pre-upload status check & duplicate-file guard)**
+
+The desktop app no longer needs to send a file the server already has.
+Before any upload the desktop agent asks the Pi two quick questions:
+"have you seen this exact file?" and "do you already have data for
+this date?" If the answer is yes, the file is skipped, no network
+upload happens, and the local copy is moved to the handled folder.
+If the desktop agent does send a duplicate by mistake the server now
+refuses it with a clear message instead of overwriting good data.
+The whole check finishes in well under five seconds, and any network
+problem during the check still lets the upload go through (fail-open),
+so nothing gets lost.
+
+デスクトップアプリは、サーバーが既に持っているファイルを送
+信する必要がなくなりました。アップロード前にデスクトップ・
+エージェントが Pi に二つの質問を送ります：「このファイルを
+処理済みですか？」「この日付のデータは既に取り込まれていま
+すか？」どちらかが「はい」なら、そのファイルはスキップされ
+ネットワーク送信は発生せず、ローカルファイルは処理済みフォ
+ルダへ移動します。万一重複ファイルが送られてもサーバー側で
+エラーを返して既存データを上書きしません。確認は 5 秒以内
+に完了し、ネットワーク障害時はそのままアップロードを試行し
+ます（フェイルオープン）ので取りこぼしはありません。
+
+---
+
+**Previous update / 前回の更新 (2026-05-02 — Processed-files (Done) folder + Restore/Delete)**
 
 After a successful "Confirm & Save" the imported PDF or Excel is now
 automatically moved into a Done sub-folder, so the watched folder
