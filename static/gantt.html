@@ -299,7 +299,7 @@ body.mobile{background:#f4f7f9;}
   @page{size:A4 portrait;margin:4mm;}
 }
 </style>
-<script src="static/site_header.js?v=2026050104" defer></script>
+<script src="static/site_header.js?v=20260513-genbalink" defer></script>
 </head>
 <body>
 
@@ -308,7 +308,7 @@ body.mobile{background:#f4f7f9;}
 <div class="toolbar no-print" id="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;">
   <label>Date: <input type="date" id="dateInput"></label>
   <button id="refreshBtn" type="button">Refresh</button>
-  <button id="printBtn" class="primary" type="button">⬇ Download PDF</button>
+  <button id="printBtn" class="primary" type="button">PDF View</button>
   <button id="lineBtn" type="button" title="Capture the productivity 4-box and send a card to LINE recipients (same flow as the Summary page)">💬 Send to LINE</button>
   <span id="lineStatus" style="font-size:11px;color:#5a6b73;"></span>
 </div>
@@ -380,16 +380,19 @@ body.mobile{background:#f4f7f9;}
 const WIN_START=10, WIN_HOURS=22.5, MN_AX=24-WIN_START, MN_PCT=(MN_AX/WIN_HOURS)*100;
 const params=new URLSearchParams(location.search);
 if(params.get('embed')==='1')document.body.classList.add('embed');
-const MOBILE_MODE=/^\/.*\/m\/(report|summary|gantt)\/?$/.test(location.pathname)||params.get('mobile')==='1';
+const MOBILE_MODE=/\/m\/(report|summary|gantt)\/?$/.test(location.pathname)||params.get('mobile')==='1';
 if(MOBILE_MODE){
   document.body.classList.add('mobile');
   // The page's relative fetch('api/…') paths are anchored against the URL.
   // Served at /attendance/m/report they would resolve to /attendance/m/api/…
   // (404). Inject a <base> so they resolve back to /attendance/api/… instead.
-  const m=location.pathname.match(/^(\/.*?)\/m\/(report|summary|gantt)\/?$/);
+  // Bare /m/report (served on genbafms.com / link.genbafms.com) → base = "/"
+  // so api/… resolves to /api/… at the root.
+  const m=location.pathname.match(/^(.*?)\/m\/(report|summary|gantt)\/?$/);
   if(m){
     const b=document.createElement('base');
-    b.href=m[1].replace(/\/$/,'')+'/';
+    const prefix=(m[1]||'').replace(/\/$/,'');
+    b.href=(prefix?prefix:'')+'/';
     document.head.insertBefore(b,document.head.firstChild);
   }
 }
@@ -527,11 +530,17 @@ function renderRow(emp, sectionLabel){
 
   if(cls==='absent'){
     // Day-off overlay: distinguish scheduled day-off vs unauthorized absence.
+    // Muted ('*' marked in sections.json) = display-only employee — never flagged.
+    const isMuted = !!emp.muted;
     const isScheduled = _isScheduledOff(emp.code, _GanttDayoff.currentDate);
-    const showRedFlag = _GanttDayoff.highlight && !isScheduled;
+    const showRedFlag = _GanttDayoff.highlight && !isScheduled && !isMuted;
     const ab=document.createElement('div');
     ab.style.cssText='position:absolute;inset:0;display:flex;align-items:center;padding-left:6px;';
-    if (isScheduled) {
+    if (isMuted) {
+      // Disabled / display-only employee — calm gray pill, never red.
+      ab.innerHTML='<span style="font-size:7px;color:#5a6b73;background:#eef1f3;border:1px solid #d8e0e4;padding:1px 5px;border-radius:6px;font-weight:700;">Disabled</span>';
+      tc.innerHTML='<span style="font-size:7px;color:#8a9ba3;font-weight:700;">—</span>';
+    } else if (isScheduled) {
       // Calm "scheduled off" pill — even when the toggle is off
       ab.innerHTML='<span style="font-size:7px;color:#0b6f58;background:#ecfaf4;border:1px solid #b8e4d8;padding:1px 5px;border-radius:6px;font-weight:700;">休 scheduled</span>';
       tc.innerHTML='<span style="font-size:7px;color:#0b6f58;font-weight:700;">休</span>';
@@ -1048,7 +1057,7 @@ async function init(){
     const d=e.target.value;if(d){history.replaceState(null,'','?date='+d+(params.get('embed')?'&embed=1':''));load(d);}
   });
   $('refreshBtn').addEventListener('click',()=>load($('dateInput').value));
-  $('printBtn').addEventListener('click',()=>window.print());
+  $('printBtn').addEventListener('click',()=>window.open('/pdf/gantt?date='+encodeURIComponent($('dateInput').value),'_blank'));
   $('lineBtn').addEventListener('click',sendPdfToLine);
   load(date);
 }

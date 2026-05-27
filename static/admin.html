@@ -162,12 +162,16 @@
 <nav class="tabs" role="tablist">
   <button class="tab active" data-tab="overview">Overview</button>
   <button class="tab" data-tab="access">Access Log</button>
+  <button class="tab" data-tab="debug">Debug Log</button>
+  <button class="tab" data-tab="agent">Agent</button>
+  <button class="tab" data-tab="partner">Partner API</button>
   <button class="tab" data-tab="apistatus">API Status</button>
   <button class="tab" data-tab="visitors">Visitors</button>
   <button class="tab" data-tab="alerts">Alerts</button>
   <button class="tab" data-tab="security">Security</button>
   <button class="tab" data-tab="announcement">Announcement</button>
   <button class="tab" data-tab="bridge">Bridge</button>
+  <button class="tab" data-tab="autodoc">AutoDoc</button>
 </nav>
 
 <main>
@@ -265,6 +269,164 @@
       <table>
         <thead><tr><th>When</th><th>IP</th><th>Label</th><th>Device</th><th class="mono">Method</th><th>Path</th><th class="num">Status</th><th class="num">ms</th></tr></thead>
         <tbody id="logTbody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ DEBUG LOG ============================ -->
+<section id="panel-debug" class="panel">
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:1rem;padding:0.7rem 1rem;">
+    <div>
+      <strong style="color:var(--brand);">Verbose API debug log</strong>
+      <span class="mono" style="color:var(--muted);font-size:0.78rem;margin-left:0.5rem;">
+        path <span id="dbgPath">—</span> · size <span id="dbgSize">—</span>
+      </span>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <span class="pill" id="dbgState">—</span>
+      <button class="button" id="btnToggleDebug">Toggle</button>
+      <button class="button" id="btnRefreshDebug">Refresh</button>
+    </div>
+  </div>
+  <div class="card">
+    <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.6rem;">
+      When the toggle is <strong>OFF</strong>, only failed requests (status ≥ 400) are written to <span class="mono">api_debug.jsonl</span>.
+      When <strong>ON</strong>, every request is written with full details (headers, body snippet, response body for errors). Disk impact is significant — flip it on for short troubleshooting windows only.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>When</th><th class="mono">Method</th><th>Path</th><th class="num">Status</th><th>Key</th><th>Body / err</th></tr></thead>
+        <tbody id="dbgTbody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ AGENT ============================ -->
+<section id="panel-agent" class="panel">
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:1rem;padding:0.7rem 1rem;">
+    <div>
+      <strong style="color:var(--brand);">Desktop Agent</strong>
+      <span class="mono" style="color:var(--muted);font-size:0.78rem;margin-left:0.5rem;">
+        log <span id="agPath">—</span> · size <span id="agSize">—</span>
+      </span>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <span class="pill" id="agState">—</span>
+      <button class="button" id="btnAgentPause">Deactivate app</button>
+      <button class="button" id="btnRefreshAgent">Refresh</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:1rem;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.7rem;">
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">STATUS</div><div id="agOnline" style="font-weight:700;">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">LAST SEEN</div><div id="agSeen" class="mono">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">LAST UPLOAD</div><div id="agUp" class="mono">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">LAST ERROR</div><div id="agErr" class="mono">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">CALLS / ERRORS</div><div id="agCnt" class="mono">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">FROM IP · KEY</div><div id="agWho" class="mono">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">AGENT VERSION</div><div id="agVer" class="mono">—</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:.6rem;">
+      <strong style="color:var(--brand);">Desktop app update</strong>
+      <a class="button" href="/admin/agent-spec" target="_blank" rel="noopener">View integration spec (MD)</a>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.7rem;margin-bottom:.8rem;">
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">PUBLISHED VERSION</div><div id="upVer" class="mono">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">FILE</div><div id="upFile" class="mono">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">SIZE</div><div id="upSize" class="mono">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">SHA-256</div><div id="upSha" class="mono">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">MANDATORY</div><div id="upMand" class="mono">—</div></div>
+      <div><div class="mono" style="color:var(--muted);font-size:.72rem;">UPDATED</div><div id="upWhen" class="mono">—</div></div>
+    </div>
+    <div id="upNotesWrap" style="color:var(--muted);font-size:.8rem;margin-bottom:.7rem;display:none;">Notes: <span id="upNotes" class="mono"></span></div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding-top:.7rem;">
+      <input type="text" id="upVerIn" placeholder="version e.g. 2026.05.19-1" style="padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+      <input type="text" id="upNotesIn" placeholder="notes (optional)" style="flex:1;min-width:150px;padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+      <label class="mono" style="font-size:.78rem;display:flex;align-items:center;gap:.3rem;"><input type="checkbox" id="upMandIn" /> mandatory</label>
+      <button class="button" id="btnUpPublish">⚡ Open LAN uploader →</button>
+      <button class="button" id="btnUpClear">Clear</button>
+    </div>
+    <p style="color:var(--muted);font-size:0.72rem;margin:0.45rem 0 0;">
+      The big-file upload moved to the <strong>LAN uploader</strong> (no Cloudflare 100 MB cap). It opens in a new tab. For files already on the Pi, use ⚡ Fast register below.
+    </p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding-top:.7rem;margin-top:.7rem;">
+      <strong style="color:var(--brand);font-size:.82rem;">⚡ Fast register</strong>
+      <select id="upLocalSel" style="min-width:220px;padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;"><option value="">— file in app_updates/ —</option></select>
+      <button class="button" id="btnUpLocalRefresh">↻</button>
+      <button class="button" id="btnUpRegister">Register (no upload)</button>
+      <span class="mono" style="font-size:.74rem;color:var(--muted);">uses the version / notes / mandatory above</span>
+    </div>
+    <p style="color:var(--muted);font-size:0.78rem;margin:0.6rem 0 0;">
+      Admin uploads any file (watch.js / .zip / installer). The PC agent polls <span class="mono">/api/v1/app-update</span>, verifies SHA-256, downloads, applies &amp; restarts — see the integration spec.
+      <br><strong>Big installer / slow upload?</strong> Copy it onto the Pi over LAN —
+      <span class="mono">scp build.exe pi@&lt;pi&gt;:/var/www/attendance_app/app_updates/</span> — then pick it in <strong>⚡ Fast register</strong> (instant, no HTTP upload, bypasses the size limit).
+    </p>
+  </div>
+
+  <div class="card">
+    <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.6rem;">
+      Every <span class="mono">/api/v1/*</span> call from the PC Desktop Agent. When ingestion is <strong>paused</strong>, precheck returns <span class="mono">action:"paused"</span> and uploads return <span class="mono">HTTP 423</span> — nothing is ingested until resumed.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>When</th><th>IP</th><th>Key</th><th class="mono">Method</th><th>Path</th><th class="num">Status</th><th class="num">ms</th></tr></thead>
+        <tbody id="agTbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PARTNER API ============================ -->
+<section id="panel-partner" class="panel">
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:1rem;padding:0.7rem 1rem;">
+    <div>
+      <strong style="color:var(--brand);">External Partner API</strong>
+      <span class="mono" style="color:var(--muted);font-size:0.78rem;margin-left:0.5rem;">
+        base <span class="mono">/partner/v1</span> · log <span id="ptPath">—</span> · size <span id="ptSize">—</span>
+      </span>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <span class="pill" id="ptState">—</span>
+      <a class="button" href="/admin/partner-spec" target="_blank" rel="noopener">View API doc (MD)</a>
+      <button class="button" id="btnPtToggle">Enable API</button>
+      <button class="button" id="btnPtRefresh">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.6rem;">
+      Company-to-company read-only API. <strong>Deny-by-default</strong>: disabled until you enable it, and no data without a per-partner token. Curated datasets only — no users/keys/config. Each partner is individually revocable, rate-limited, optional IP allowlist.
+    </p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding-top:.7rem;">
+      <input type="text" id="ptName" placeholder="partner / company name" style="padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+      <input type="number" id="ptRate" placeholder="rate/min" value="60" style="width:90px;padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+      <input type="number" id="ptQuota" placeholder="quota/mo (0=∞)" value="0" style="width:120px;padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+      <input type="text" id="ptIps" placeholder="IP allowlist (optional, space/comma)" style="flex:1;min-width:170px;padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+      <button class="button" id="btnPtAdd">Add partner</button>
+    </div>
+    <div id="ptNewTok" class="mono" style="display:none;margin-top:.6rem;padding:.5rem .7rem;border:1px solid var(--line);border-radius:4px;background:var(--surface);font-size:.8rem;"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Partner</th><th class="mono">ID</th><th>Token</th><th class="num">Rate/min</th><th class="num">Usage t/mo</th><th class="num">Quota/mo</th><th>IP allowlist</th><th class="num">Calls</th><th>Last seen</th><th>State</th><th></th></tr></thead>
+        <tbody id="ptTbody"><tr><td colspan="11" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.6rem;">Request log — every <span class="mono">/partner/v1/*</span> call.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>When</th><th>Partner</th><th>IP</th><th>Path</th><th class="num">Status</th><th class="num">ms</th></tr></thead>
+        <tbody id="ptLogTbody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -470,6 +632,32 @@
   </div>
 </section>
 
+<!-- ============================ AUTODOC ============================ -->
+<section id="panel-autodoc" class="panel">
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:1rem;padding:0.7rem 1rem;">
+    <div>
+      <strong style="color:var(--brand);">AutoDoc — attendance-doctor.timer runs</strong>
+      <span class="mono" style="color:var(--muted);font-size:0.78rem;margin-left:0.5rem;">
+        log <span id="autodocPath">—</span> · size <span id="autodocSize">—</span> · next <span id="autodocNext">—</span>
+      </span>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <span class="pill" id="autodocLastClone">last clone —</span>
+      <button class="button" id="btnRefreshAutodoc">Refresh</button>
+    </div>
+  </div>
+  <div class="card">
+    <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.6rem;">
+      <code>doctor.py</code> runs every 5h via systemd and reports DB health, registry consistency,
+      sidecar configs, stuck files (auto-ingested on the spot), and a DB clone to SD + USB when row counts change.
+      Click a run to expand its sections; problems doctor auto-solved are highlighted under <strong>ingest_trigger</strong>.
+    </p>
+    <div id="autodocRuns" class="scroll" style="font-size:0.85rem;">
+      <p class="empty" style="text-align:center;padding:1rem;color:var(--muted);">Loading…</p>
+    </div>
+  </div>
+</section>
+
 </main>
 
 <script>
@@ -497,7 +685,7 @@ function pill(ok, label){ return `<span class="pill ${ok?'ok':'bad'}">${label}</
 function setKV(el, rows){ el.innerHTML = rows.map(([k,v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(""); }
 
 /* ----------- Tab routing (hash-based) ----------- */
-const PANELS = ["overview","access","apistatus","visitors","alerts","security","announcement","bridge"];
+const PANELS = ["overview","access","debug","agent","partner","apistatus","visitors","alerts","security","announcement","bridge","autodoc"];
 function showTab(name){
   if (!PANELS.includes(name)) name = "overview";
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
@@ -505,11 +693,15 @@ function showTab(name){
   if (location.hash !== `#/${name}`) history.replaceState(null,"",`#/${name}`);
   /* fire panel-specific refresh */
   if (name === "access")        refreshLog();
+  else if (name === "debug")    refreshDebugLog();
+  else if (name === "agent")    { refreshAgent(); loadLocalFiles(); }
+  else if (name === "partner")  refreshPartner();
   else if (name === "apistatus") refreshApiStatus();
   else if (name === "visitors") refreshVisitors();
   else if (name === "alerts")   refreshAlerts();
   else if (name === "security") refreshSecurity();
   else if (name === "announcement") loadAnnouncement();
+  else if (name === "autodoc")  refreshAutodoc();
   else if (name === "overview") refreshOverview();
 }
 document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -722,6 +914,269 @@ async function refreshLog(){
 }
 $("btnRefreshLog").addEventListener("click", refreshLog);
 $("logFilter").addEventListener("input", () => refreshLog());
+
+/* ----------- Debug Log ----------- */
+function fmtBytes(n){
+  if (n == null) return "—";
+  if (n < 1024) return n + " B";
+  if (n < 1024*1024) return (n/1024).toFixed(1) + " KB";
+  return (n/(1024*1024)).toFixed(1) + " MB";
+}
+async function refreshDebugLog(){
+  try{
+    const r = await fetch("/admin/api/debug-log?limit=200", {credentials:"same-origin"});
+    const j = await r.json();
+    const enabled = !!j.enabled;
+    const pill = $("dbgState");
+    pill.textContent = enabled ? "ON — full logging" : "OFF — critical only";
+    pill.className = "pill " + (enabled ? "warn" : "");
+    $("dbgPath").textContent = j.path || "—";
+    $("dbgSize").textContent = fmtBytes(j.file_size_bytes);
+    const items = j.items || [];
+    if (!items.length){ $("dbgTbody").innerHTML = `<tr><td colspan="6" class="empty">No debug entries yet.</td></tr>`; return; }
+    $("dbgTbody").innerHTML = items.map(it => {
+      const detail = it.resp_body || it.req_body || "";
+      const trimmed = detail.length > 220 ? detail.slice(0,220) + "…" : detail;
+      return `<tr>
+        <td title="${fmt.esc(it.ts)}">${fmt.rel(it.ts)}</td>
+        <td class="mono">${fmt.esc(it.method)}</td>
+        <td class="mono">${fmt.esc(it.path)}</td>
+        <td class="num">${it.status}</td>
+        <td class="mono">${fmt.esc(it.api_key_label || "")}</td>
+        <td class="mono" style="white-space:pre-wrap;word-break:break-all;">${fmt.esc(trimmed)}</td>
+      </tr>`;
+    }).join("");
+  } catch(e){
+    $("dbgTbody").innerHTML = `<tr><td colspan="6" class="empty">Failed to load: ${fmt.esc(String(e))}</td></tr>`;
+  }
+}
+async function toggleDebugLog(){
+  try{
+    const cur = $("dbgState").textContent.startsWith("ON");
+    const r = await fetch("/admin/api/debug-log", {
+      method:"POST", credentials:"same-origin",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({enabled: !cur}),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    await refreshDebugLog();
+  } catch(e){
+    alert("Toggle failed: " + e);
+  }
+}
+$("btnRefreshDebug").addEventListener("click", refreshDebugLog);
+$("btnToggleDebug").addEventListener("click", toggleDebugLog);
+
+/* ----------- Agent ----------- */
+async function refreshAgent(){
+  try{
+    const r = await fetch("/admin/api/agent-log?limit=200", {credentials:"same-origin"});
+    const j = await r.json();
+    const s = j.status || {};
+    const paused = !!s.paused, online = !!s.online;
+    const pill = $("agState");
+    pill.textContent = paused ? "DEACTIVATED — agent idle" : (online ? "ONLINE" : "OFFLINE");
+    pill.className = "pill " + (paused ? "bad" : (online ? "ok" : "warn"));
+    $("btnAgentPause").textContent = paused ? "Activate app" : "Deactivate app";
+    if (s.lan_upload_url){
+      const lb = $("btnUpPublish");
+      lb.dataset.lanUrl = s.lan_upload_url;
+      lb.title = "Opens " + s.lan_upload_url + " (LAN only)";
+    }
+    $("agPath").textContent = j.path || "—";
+    $("agSize").textContent = fmtBytes(j.file_size_bytes);
+    $("agOnline").textContent = paused ? "Deactivated (idle)" : (online ? "Online" : "Offline");
+    $("agSeen").textContent = s.last_seen ? fmt.rel(s.last_seen) : "—";
+    $("agUp").textContent = (s.last_upload && s.last_upload.ts) ? fmt.rel(s.last_upload.ts) : "—";
+    $("agErr").textContent = (s.last_error && s.last_error.ts)
+      ? (fmt.rel(s.last_error.ts) + " · " + s.last_error.status) : "—";
+    $("agCnt").textContent = (s.calls || 0) + " / " + (s.errors || 0);
+    $("agWho").textContent = (s.last_ip || "—") + " · " + (s.last_key || "—");
+    $("agVer").textContent = s.agent_version || "— (not reported)";
+    const u = s.update || {};
+    const hasU = !!u.filename;
+    $("upVer").textContent  = hasU ? (u.version || "—") : "— none published";
+    $("upFile").textContent = hasU ? u.filename : "—";
+    $("upSize").textContent = hasU ? fmtBytes(u.size) : "—";
+    $("upSha").textContent  = hasU && u.sha256 ? (String(u.sha256).slice(0,16) + "…") : "—";
+    $("upMand").textContent = hasU ? (u.mandatory ? "yes" : "no") : "—";
+    $("upWhen").textContent = (hasU && u.updated_at) ? fmt.rel(u.updated_at) : "—";
+    if (hasU && u.notes){ $("upNotesWrap").style.display=""; $("upNotes").textContent=u.notes; }
+    else { $("upNotesWrap").style.display="none"; }
+    const items = j.items || [];
+    if (!items.length){ $("agTbody").innerHTML = `<tr><td colspan="7" class="empty">No agent calls logged yet.</td></tr>`; return; }
+    $("agTbody").innerHTML = items.map(it => `<tr>
+      <td title="${fmt.esc(it.ts)}">${fmt.rel(it.ts)}</td>
+      <td class="mono">${fmt.esc(it.ip || "")}</td>
+      <td class="mono">${fmt.esc(it.key || "")}</td>
+      <td class="mono">${fmt.esc(it.method || "")}</td>
+      <td class="mono">${fmt.esc(it.path || "")}</td>
+      <td class="num">${it.status}</td>
+      <td class="num">${it.duration_ms}</td>
+    </tr>`).join("");
+  } catch(e){
+    $("agTbody").innerHTML = `<tr><td colspan="7" class="empty">Failed to load: ${fmt.esc(String(e))}</td></tr>`;
+  }
+}
+async function toggleAgentPause(){
+  const willPause = $("btnAgentPause").textContent.startsWith("Deactivate");
+  if (willPause && !confirm("Deactivate the app? The Desktop Agent goes IDLE — it stops watching/uploading (precheck → deactivated, uploads → HTTP 423) until you Activate it again. Pending files are left untouched.")) return;
+  try{
+    const r = await fetch("/admin/api/ingestion-toggle", {
+      method:"POST", credentials:"same-origin",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({paused: willPause}),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    await refreshAgent();
+  } catch(e){ alert("Toggle failed: " + e); }
+}
+function openLanUploader(){
+  // In-admin browser upload is replaced by the LAN uploader (no Cloudflare cap).
+  // The Pi's LAN URL is provided by the server in refreshAgent (data-lan-url).
+  const b = $("btnUpPublish");
+  const url = b.dataset.lanUrl || "";
+  if (!url){
+    alert("LAN upload URL not detected. Open the Agent tab and try again, or use:\nhttp://<pi-lan-ip>/lan-upload");
+    return;
+  }
+  window.open(url, "_blank", "noopener");
+}
+async function clearUpdate(){
+  if (!confirm("Clear the published desktop-app update? The agent will see no update.")) return;
+  try{
+    const fd = new FormData(); fd.append("clear", "1");
+    const r = await fetch("/admin/api/app-update", {method:"POST", credentials:"same-origin", body: fd});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    await refreshAgent();
+  } catch(e){ alert("Clear failed: " + e); }
+}
+async function loadLocalFiles(){
+  try{
+    const r = await fetch("/admin/api/app-update/local-files", {credentials:"same-origin"});
+    const j = await r.json();
+    const sel = $("upLocalSel"); const cur = sel.value;
+    const opts = ['<option value="">— file in app_updates/ —</option>']
+      .concat((j.files||[]).map(f => `<option value="${fmt.esc(f.name)}">${fmt.esc(f.name)} (${fmtBytes(f.size)})</option>`));
+    sel.innerHTML = opts.join("");
+    if (cur) sel.value = cur;
+  }catch(e){ /* non-fatal */ }
+}
+async function registerLocal(){
+  const name = $("upLocalSel").value;
+  if (!name){ alert("Pick a file from app_updates/ (scp it onto the Pi first)."); return; }
+  const b = $("btnUpRegister"); const old = b.textContent;
+  b.disabled = true; b.textContent = "Registering…";
+  try{
+    const fd = new FormData();
+    fd.append("local_filename", name);
+    fd.append("version", $("upVerIn").value.trim());
+    fd.append("notes", $("upNotesIn").value.trim());
+    fd.append("mandatory", $("upMandIn").checked ? "1" : "0");
+    const r = await fetch("/admin/api/app-update", {method:"POST", credentials:"same-origin", body: fd});
+    if (!r.ok){ const t = await r.text().catch(()=>r.status); throw new Error(t); }
+    $("upVerIn").value=""; $("upNotesIn").value=""; $("upMandIn").checked=false;
+    await refreshAgent();
+  } catch(e){ alert("Register failed: " + e); }
+  finally { b.disabled = false; b.textContent = old; }
+}
+$("btnRefreshAgent").addEventListener("click", refreshAgent);
+$("btnAgentPause").addEventListener("click", toggleAgentPause);
+$("btnUpPublish").addEventListener("click", openLanUploader);
+$("btnUpClear").addEventListener("click", clearUpdate);
+$("btnUpLocalRefresh").addEventListener("click", loadLocalFiles);
+$("btnUpRegister").addEventListener("click", registerLocal);
+
+/* ----------- Partner API ----------- */
+async function refreshPartner(){
+  try{
+    const r = await fetch("/admin/api/partner-log?limit=200", {credentials:"same-origin"});
+    const j = await r.json();
+    const st = j.status || {};
+    const on = !!st.enabled;
+    const pill = $("ptState");
+    pill.textContent = on ? "ENABLED" : "DISABLED";
+    pill.className = "pill " + (on ? "ok" : "warn");
+    $("btnPtToggle").textContent = on ? "Disable API" : "Enable API";
+    $("ptPath").textContent = j.path || "—";
+    $("ptSize").textContent = fmtBytes(j.file_size_bytes);
+    const ps = st.partners || [];
+    $("ptTbody").innerHTML = ps.length ? ps.map(p => `<tr>
+      <td>${fmt.esc(p.name||"")}</td>
+      <td class="mono">${fmt.esc(p.id)}</td>
+      <td class="mono">${fmt.esc(p.token_tail||"")}</td>
+      <td class="num">${p.rate_per_min}</td>
+      <td class="num">${p.usage_today||0}/${p.usage_month||0}</td>
+      <td class="num">${p.monthly_quota?p.monthly_quota:"∞"}</td>
+      <td class="mono">${fmt.esc((p.ip_allowlist||[]).join(", ")||"any")}</td>
+      <td class="num">${p.calls||0}</td>
+      <td title="${fmt.esc(p.last_seen||"")}">${p.last_seen?fmt.rel(p.last_seen):"—"}</td>
+      <td>${p.disabled?'<span class="pill bad">disabled</span>':'<span class="pill ok">active</span>'}</td>
+      <td style="white-space:nowrap;">
+        <button class="button" data-pt-toggle="${fmt.esc(p.id)}" data-dis="${p.disabled?0:1}">${p.disabled?"Enable":"Disable"}</button>
+        <button class="button" data-pt-quota="${fmt.esc(p.id)}" data-q="${p.monthly_quota||0}">Quota</button>
+        <button class="button" data-pt-revoke="${fmt.esc(p.id)}">Revoke</button>
+      </td></tr>`).join("") : `<tr><td colspan="11" class="empty">No partners. Add one to issue a token.</td></tr>`;
+    $("ptTbody").querySelectorAll("[data-pt-revoke]").forEach(b=>b.addEventListener("click",()=>revokePartner(b.dataset.ptRevoke)));
+    $("ptTbody").querySelectorAll("[data-pt-toggle]").forEach(b=>b.addEventListener("click",()=>updatePartner(b.dataset.ptToggle, b.dataset.dis==="1")));
+    $("ptTbody").querySelectorAll("[data-pt-quota]").forEach(b=>b.addEventListener("click",()=>setQuota(b.dataset.ptQuota, b.dataset.q)));
+    const items = j.items || [];
+    $("ptLogTbody").innerHTML = items.length ? items.map(it=>`<tr>
+      <td title="${fmt.esc(it.ts)}">${fmt.rel(it.ts)}</td>
+      <td>${fmt.esc(it.partner||"")}</td>
+      <td class="mono">${fmt.esc(it.ip||"")}</td>
+      <td class="mono">${fmt.esc(it.path||"")}</td>
+      <td class="num">${it.status}</td>
+      <td class="num">${it.duration_ms}</td></tr>`).join("") : `<tr><td colspan="6" class="empty">No partner calls yet.</td></tr>`;
+  }catch(e){ $("ptTbody").innerHTML = `<tr><td colspan="11" class="empty">Failed: ${fmt.esc(String(e))}</td></tr>`; }
+}
+async function togglePartnerApi(){
+  const on = $("btnPtToggle").textContent.startsWith("Enable");
+  if (on && !confirm("Enable the external Partner API? It stays deny-by-default per partner, but the endpoint becomes reachable.")) return;
+  try{
+    const r = await fetch("/admin/api/partner-enable",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:on})});
+    if(!r.ok) throw new Error("HTTP "+r.status); await refreshPartner();
+  }catch(e){ alert("Toggle failed: "+e); }
+}
+async function addPartner(){
+  const name = $("ptName").value.trim();
+  if(!name){ alert("Enter a partner name."); return; }
+  try{
+    const r = await fetch("/admin/api/partner-add",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({name, rate_per_min:Number($("ptRate").value)||60, monthly_quota:Number($("ptQuota").value)||0, ip_allowlist:$("ptIps").value})});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const j = await r.json();
+    const box = $("ptNewTok");
+    box.style.display=""; box.textContent = `Token for "${j.name}" (shown once — copy now): ${j.token}`;
+    $("ptName").value=""; $("ptIps").value=""; $("ptQuota").value="0";
+    await refreshPartner();
+  }catch(e){ alert("Add failed: "+e); }
+}
+async function revokePartner(id){
+  if(!confirm("Revoke this partner? Their token stops working immediately.")) return;
+  try{
+    const r=await fetch("/admin/api/partner-revoke",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});
+    if(!r.ok) throw new Error("HTTP "+r.status); await refreshPartner();
+  }catch(e){ alert("Revoke failed: "+e); }
+}
+async function updatePartner(id, disable){
+  try{
+    const r=await fetch("/admin/api/partner-update",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id, disabled:disable})});
+    if(!r.ok) throw new Error("HTTP "+r.status); await refreshPartner();
+  }catch(e){ alert("Update failed: "+e); }
+}
+async function setQuota(id, cur){
+  const v = prompt("Monthly call quota for this partner (0 = unlimited):", cur||"0");
+  if(v===null) return;
+  const q = Math.max(0, parseInt(v,10)||0);
+  try{
+    const r=await fetch("/admin/api/partner-update",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id, monthly_quota:q})});
+    if(!r.ok) throw new Error("HTTP "+r.status); await refreshPartner();
+  }catch(e){ alert("Set quota failed: "+e); }
+}
+$("btnPtRefresh").addEventListener("click", refreshPartner);
+$("btnPtToggle").addEventListener("click", togglePartnerApi);
+$("btnPtAdd").addEventListener("click", addPartner);
 
 /* ----------- API Status ----------- */
 let _apsTimer = null;
@@ -938,6 +1393,102 @@ $("btnAnnSave").addEventListener("click", async () => {
     $("annUpdatedAt").textContent = j.announcement?.updated_at || "—";
   } catch(e){ $("annStatus").textContent = "✗ " + e.message; }
 });
+
+/* ----------- AutoDoc (attendance-doctor.timer history) ----------- */
+const _DOC_STATUS_PILL = { ok: "good", warn: "warn", err: "danger" };
+const _DOC_STATUS_LABEL = { ok: "OK", warn: "WARN", err: "ERROR" };
+function _docSectionIcon(name, status) {
+  if (status === "err") return "✗";
+  if (status === "warn") return "!";
+  if (name === "ingest_trigger") return "⤓";
+  if (name === "db_clone") return "⎘";
+  if (name === "db_health") return "▦";
+  if (name === "registry_consistency") return "≡";
+  if (name === "sidecar_configs") return "⚙";
+  if (name === "unprocessed_files") return "⌛";
+  if (name === "routine_events") return "·";
+  return "✓";
+}
+function _docLineClass(line) {
+  const u = line.toUpperCase();
+  if (/ERROR|FAILED|FATAL|INVALID|MISSING|WRONG_TYPE/.test(u)) return "danger";
+  if (/WARNING/.test(u)) return "warn";
+  if (/OK|TRIGGERED|EXTRACT\+SAVE/.test(u)) return "good";
+  return "";
+}
+function _docFmtBytes(n) {
+  if (!n && n !== 0) return "—";
+  if (n < 1024) return n + " B";
+  if (n < 1024*1024) return (n/1024).toFixed(1) + " KB";
+  return (n/1024/1024).toFixed(2) + " MB";
+}
+async function refreshAutodoc() {
+  const root = $("autodocRuns");
+  if (!root) return;
+  root.innerHTML = `<p class="empty" style="text-align:center;padding:1rem;color:var(--muted);">Loading…</p>`;
+  let j;
+  try {
+    const r = await fetch("/admin/api/doctor-runs?limit=20", {credentials: "same-origin"});
+    j = await r.json();
+    if (!r.ok) throw new Error(j.detail || "doctor-runs fetch failed");
+  } catch (e) {
+    root.innerHTML = `<p class="empty" style="color:var(--danger,#d33);">✗ ${e.message}</p>`;
+    return;
+  }
+  $("autodocPath").textContent = j.log_path || "—";
+  $("autodocSize").textContent = _docFmtBytes(j.file_size_bytes);
+  $("autodocNext").textContent = j.next_run || "—";
+  const lc = j.last_clone;
+  $("autodocLastClone").textContent = lc
+    ? `last clone ${lc.cloned_at} · ${_docFmtBytes(lc.size_bytes)} · ${(lc.targets_ok||[]).length} target(s)`
+    : "last clone —";
+  if (!j.runs || j.runs.length === 0) {
+    root.innerHTML = `<p class="empty" style="color:var(--muted);">No doctor runs in log yet.</p>`;
+    return;
+  }
+  const parts = [];
+  j.runs.forEach((run, idx) => {
+    const overall = run.overall_status || "ok";
+    const pillCls = _DOC_STATUS_PILL[overall] || "good";
+    const dur = (run.duration_seconds == null) ? "" : ` · ${run.duration_seconds}s`;
+    const detailsOpen = idx === 0 ? " open" : "";
+    parts.push(
+      `<details${detailsOpen} style="border:1px solid var(--border,#2a2f3a);border-radius:6px;margin:0 0 0.5rem;padding:0.5rem 0.7rem;background:var(--card,#161a22);">
+        <summary style="cursor:pointer;display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;list-style:none;">
+          <span class="pill ${pillCls}">${_DOC_STATUS_LABEL[overall] || "OK"}</span>
+          <span class="mono" style="color:var(--text,#eaeaea);">${run.started_at}</span>
+          <span class="mono" style="color:var(--muted);font-size:0.78rem;">${dur}</span>
+          <span style="margin-left:auto;color:var(--muted);font-size:0.78rem;">${run.sections.length} section(s)</span>
+        </summary>
+        <div style="margin-top:0.5rem;padding-left:0.3rem;">`
+    );
+    run.sections.forEach(sec => {
+      const sCls = _DOC_STATUS_PILL[sec.status] || "good";
+      const icon = _docSectionIcon(sec.name, sec.status);
+      parts.push(
+        `<div style="margin:0.4rem 0;padding:0.35rem 0.5rem;border-left:3px solid var(--border,#2a2f3a);">
+          <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.82rem;">
+            <span class="pill ${sCls}" style="min-width:auto;">${icon} ${sec.name}</span>
+          </div>
+          <ul style="margin:0.3rem 0 0;padding-left:1.2rem;list-style:none;">`
+      );
+      sec.lines.forEach(line => {
+        const cls = _docLineClass(line);
+        const style = cls === "danger" ? "color:var(--danger,#d33);"
+                    : cls === "warn"   ? "color:var(--warn,#e0a020);"
+                    : cls === "good"   ? "color:var(--good,#3a9);"
+                    : "color:var(--text,#eaeaea);";
+        // Escape HTML
+        const esc = line.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+        parts.push(`<li class="mono" style="font-size:0.78rem;line-height:1.45;${style}">${esc}</li>`);
+      });
+      parts.push(`</ul></div>`);
+    });
+    parts.push(`</div></details>`);
+  });
+  root.innerHTML = parts.join("");
+}
+$("btnRefreshAutodoc")?.addEventListener("click", refreshAutodoc);
 
 /* ----------- Logout & boot ----------- */
 $("btnLogout").addEventListener("click", async () => {

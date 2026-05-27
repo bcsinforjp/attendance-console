@@ -66,12 +66,14 @@
 
   // ---------- Active link detection ----------
   function activeKey() {
-    if (PATH.endsWith("/dashboard")) return "dashboard";
-    if (PATH.endsWith("/console") || PATH === BASE || PATH === "" || PATH === "/") return "console";
-    if (PATH.endsWith("/gantt") || PATH.endsWith("/m/report") || PATH.endsWith("/m/gantt")) return "gantt";
-    if (PATH.endsWith("/summary") || PATH.endsWith("/m/summary")) return "summary";
+    // Tabs collapsed to 4: status / reports / setup / intake.
+    // Gantt + Summary pages live under Reports — they highlight the Reports tab.
+    if (PATH.endsWith("/dashboard")) return "status";
+    if (PATH.endsWith("/console") || PATH === BASE || PATH === "" || PATH === "/") return "intake";
+    if (PATH.endsWith("/gantt") || PATH.endsWith("/m/report") || PATH.endsWith("/m/gantt")) return "reports";
+    if (PATH.endsWith("/summary") || PATH.endsWith("/m/summary")) return "reports";
     if (PATH.endsWith("/reports")) return "reports";
-    if (PATH.endsWith("/management")) return "management";
+    if (PATH.endsWith("/management")) return "setup";
     return "";
   }
 
@@ -79,20 +81,38 @@
   const style = document.createElement("style");
   style.id = "site-header-css";
   style.textContent = `
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+    :root{
+      --gf-accent:#0d9488; --gf-accent-strong:#0b6f58; --gf-accent-soft:#ecfaf4; --gf-accent-line:#b8e4d8;
+      --gf-indigo:#6366f1;
+      --gf-bg:#f6f8fa; --gf-surface:#ffffff; --gf-surface-2:#f1f4f7;
+      --gf-line:#e3e8ee; --gf-line-soft:#eef2f5;
+      --gf-ink:#1f2933; --gf-ink-2:#5a6b73; --gf-ink-3:#8a99a3;
+      --gf-ok:#0b6f58; --gf-ok-bg:#ecfaf4; --gf-ok-line:#b8e4d8;
+      --gf-warn:#9b640f; --gf-warn-bg:#fff8ea; --gf-warn-line:#f0dbb8;
+      --gf-err:#b42318; --gf-err-bg:#fff2f1; --gf-err-line:#f0c8c4;
+      --gf-radius:10px; --gf-radius-lg:16px;
+      --gf-font:"Inter","Noto Sans JP","Segoe UI",system-ui,sans-serif;
+      --gf-mono:"JetBrains Mono","IBM Plex Mono",ui-monospace,monospace;
+      --gf-shadow:0 1px 2px rgba(16,32,40,.04),0 8px 24px rgba(16,32,40,.06);
+    }
     .site-topbar {
       position: sticky; top: 0; z-index: 50;
       display: grid;
       grid-template-columns: auto 1fr auto;
       align-items: center;
-      padding: 0.7rem 1rem;
-      border-bottom: 1px solid #d4e2e8;
-      background: rgba(255,255,255,.94);
-      backdrop-filter: blur(8px);
+      padding: 0.78rem 1.15rem;
+      border-bottom: 1px solid #e3e8ee;
+      background: rgba(255,255,255,.92);
+      backdrop-filter: saturate(140%) blur(10px);
+      -webkit-backdrop-filter: saturate(140%) blur(10px);
+      box-shadow: 0 1px 0 rgba(16,32,40,.02), 0 6px 22px rgba(16,32,40,.05);
       gap: 0.9rem;
-      font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
-      color: #132026;
+      font-family: "Inter","Noto Sans JP","Segoe UI",system-ui,sans-serif;
+      color: #1f2933;
     }
-    .site-topbar .brand { font-weight: 700; letter-spacing: .03em; color: #0b6f58; font-size: .95rem; }
+    .site-topbar .brand { display:flex; align-items:center; gap:.5rem; font-weight: 700; letter-spacing: .015em; color: #0b6f58; font-size: 1rem; font-family:"Inter","Noto Sans JP",system-ui,sans-serif; }
+    .site-topbar .brand::before { content:""; width:7px; height:18px; border-radius:3px; background:linear-gradient(160deg,#0d9488,#6366f1); flex:0 0 auto; }
     .site-topbar .topnav { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; justify-content: flex-start; }
     .site-topbar .topnav a {
       text-decoration: none; color: #5a6b73;
@@ -101,13 +121,13 @@
       padding: .35rem .55rem; border-radius: 8px;
       transition: all .2s ease;
     }
-    .site-topbar .topnav a:hover { color: #0b6f58; border-color: #d4e2e8; background: #f7fbfc; }
+    .site-topbar .topnav a:hover { color: #0b6f58; border-color: #e3e8ee; background: #f5f9fa; }
     .site-topbar .topnav a.active { color: #0b6f58; border-color: #b8e4d8; background: #ecfaf4; }
-    .site-topbar .topnav a.dash-link { background: #10b981; color: #fff; border-color: #10b981; font-weight: 700; }
-    .site-topbar .topnav a.dash-link:hover { background: #059669; border-color: #059669; color: #fff; }
+    .site-topbar .topnav a.dash-link { background: linear-gradient(135deg,#0d9488,#0b6f58); color: #fff; border-color: transparent; font-weight: 700; box-shadow: 0 2px 8px rgba(13,148,136,.28); }
+    .site-topbar .topnav a.dash-link:hover { background: linear-gradient(135deg,#0b6f58,#0a5c49); border-color: transparent; color: #fff; }
     .site-topbar .pill {
       border-radius: 999px; padding: .35rem .7rem; font-size: .76rem;
-      border: 1px solid #d4e2e8; background: #f7fbfc; color: #5a6b73;
+      border: 1px solid #e3e8ee; background: #f5f9fa; color: #5a6b73;
       font-family: "IBM Plex Mono", monospace; white-space: nowrap;
     }
     .site-topbar .pill.ok   { color: #0b6f58; border-color: #b8e4d8; background: #ecfaf4; }
@@ -116,10 +136,10 @@
     .site-topbar .clockbox {
       display: flex; align-items: center; gap: .5rem;
       padding: .3rem .55rem .3rem .65rem;
-      border: 1px solid #d4e2e8; background: #f7fbfc; border-radius: 12px;
-      font-family: "IBM Plex Mono", monospace; font-size: .78rem; color: #132026; line-height: 1.2;
+      border: 1px solid #e3e8ee; background: #f5f9fa; border-radius: 12px;
+      font-family: "IBM Plex Mono", monospace; font-size: .78rem; color: #1f2933; line-height: 1.2;
     }
-    .site-topbar .clockbox .now { display: flex; flex-direction: column; align-items: flex-start; gap: .08rem; padding-right: .55rem; border-right: 1px solid #d4e2e8; }
+    .site-topbar .clockbox .now { display: flex; flex-direction: column; align-items: flex-start; gap: .08rem; padding-right: .55rem; border-right: 1px solid #e3e8ee; }
     .site-topbar .clockbox .now .tm { font-size: .95rem; font-weight: 600; color: #0b6f58; }
     .site-topbar .clockbox .now .dt { font-size: .7rem; color: #5a6b73; }
     .site-topbar .clockbox .pair { display: flex; flex-direction: column; gap: .08rem; }
@@ -149,7 +169,7 @@
       padding: 0.55rem 1rem;
       border-bottom: 1px solid transparent;
       font-size: 0.82rem; line-height: 1.35;
-      font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+      font-family: "Inter","Noto Sans JP","Segoe UI",system-ui,sans-serif;
     }
     .ann-banner.amber  { background: linear-gradient(90deg,#fff7e6 0%,#fff2d1 100%); border-bottom-color:#f0c67a; color:#6a4a12; }
     .ann-banner.red    { background: linear-gradient(90deg,#fdecec 0%,#fad4d1 100%); border-bottom-color:#e8a39c; color:#7a1c12; }
@@ -180,7 +200,7 @@
       font-size: 0.72rem; padding: 0.25rem 0.6rem;
       border: 1px solid #d5e2ea; border-radius: 999px;
       background: #f5fbfd; color: #5f7078; cursor: pointer;
-      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-family: "Inter","Noto Sans JP",system-ui,sans-serif;
     }
     .ann-restore:hover { color: #12618f; border-color: #12618f; }
     @media (max-width: 680px) { .ann-banner { font-size: 0.75rem; padding: 0.5rem 0.75rem; } }
@@ -199,15 +219,15 @@
   const header = document.createElement("header");
   header.className = "site-topbar";
   header.innerHTML = `
-    <div class="brand">V3 Attendance Console</div>
+    <div class="brand">現場 FMS</div>
     <nav class="topnav">
-      ${link("dashboard", BASE + "/dashboard", "🌐 Dashboard", "dash-link")}
-      ${link("console",   BASE + "/console",   "Console")}
-      ${link("gantt",     BASE + "/gantt",     "Gantt")}
-      ${link("summary",   BASE + "/summary",   "Summary")}
-      ${link("reports",   BASE + "/reports",   "Reports")}
-      ${link("management",BASE + "/management","Management")}
+      ${link("status",  BASE + "/dashboard",  "Status",  "dash-link")}
+      ${link("reports", BASE + "/reports",    "Reports")}
+      ${link("setup",   BASE + "/management", "Setup")}
+      ${link("intake",  BASE + "/console",    "Intake")}
       <span id="healthPill" class="pill">checking…</span>
+      <span id="agentPill" class="pill" style="display:none;"></span>
+      <span id="userPill" class="pill" style="display:none;"></span>
     </nav>
     <div class="clockbox" id="clockBox" title="Live clock and computed shift / production dates">
       <div class="now">
@@ -296,7 +316,7 @@
       background: linear-gradient(135deg, #0d8f71 0%, #0b6f58 100%);
       color: #fff;
       border: 0; border-radius: 999px;
-      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-family: "Inter","Noto Sans JP",system-ui,sans-serif;
       font-weight: 700; font-size: .85rem;
       cursor: pointer;
       box-shadow: 0 6px 20px rgba(11, 111, 88, .35), 0 2px 6px rgba(0,0,0,.12);
@@ -325,11 +345,11 @@
     @keyframes fbFade { from { opacity: 0; } to { opacity: 1; } }
     #demoFeedbackModal.show { display: flex !important; }
     #demoFeedbackModal .fb-card {
-      background: #fff; color: #132026;
+      background: #fff; color: #1f2933;
       border-radius: 14px; padding: 1.2rem 1.4rem 1rem;
       max-width: 540px; width: 100%;
       box-shadow: 0 18px 48px rgba(0,0,0,.32), 0 4px 12px rgba(0,0,0,.18);
-      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-family: "Inter","Noto Sans JP",system-ui,sans-serif;
       animation: fbSlide .22s ease;
     }
     @keyframes fbSlide { from { transform: translateY(8px) scale(.985); opacity: .85; } to { transform: none; opacity: 1; } }
@@ -340,7 +360,7 @@
     }
     #demoFeedbackModal .fb-head > div { flex: 1; }
     #demoFeedbackModal h3 {
-      margin: 0; font-size: 1.1rem; font-weight: 700; color: #132026;
+      margin: 0; font-size: 1.1rem; font-weight: 700; color: #1f2933;
       letter-spacing: -.01em;
     }
     #demoFeedbackModal .fb-sub { margin: .1rem 0 0; font-size: .78rem; color: #5a6b73; font-weight: 500; }
@@ -350,7 +370,7 @@
       color: #5a6b73; font-size: 1.4rem; line-height: 1;
       cursor: pointer; padding: 0;
     }
-    #demoFeedbackModal .fb-x:hover { background: #e2eaee; color: #132026; }
+    #demoFeedbackModal .fb-x:hover { background: #e2eaee; color: #1f2933; }
     #demoFeedbackModal .fb-help { font-size: .82rem; color: #5a6b73; margin: 0 0 .8rem; line-height: 1.45; }
     #demoFeedbackModal .fb-help small { display: block; margin-top: .15rem; opacity: .85; }
     #demoFeedbackModal .fb-label {
@@ -363,8 +383,8 @@
     #demoFeedbackModal input, #demoFeedbackModal textarea {
       width: 100%;
       padding: .55rem .7rem;
-      border: 1px solid #d4e2e8; border-radius: 8px;
-      font: inherit; color: #132026; background: #f9fbfc;
+      border: 1px solid #e3e8ee; border-radius: 8px;
+      font: inherit; color: #1f2933; background: #f9fbfc;
       box-sizing: border-box;
       transition: border-color .15s, background .15s, box-shadow .15s;
     }
@@ -390,7 +410,7 @@
     #demoFeedbackModal button {
       padding: .5rem 1rem; border-radius: 8px; font-weight: 600;
       font-size: .85rem; cursor: pointer;
-      border: 1px solid #d4e2e8; background: #fff; color: #132026;
+      border: 1px solid #e3e8ee; background: #fff; color: #1f2933;
       transition: all .15s;
     }
     #demoFeedbackModal .fb-cancel:hover { background: #f0f5f7; }
@@ -561,16 +581,45 @@
   // ---------- Health pill ----------
   function pingHealth() {
     const p = header.querySelector("#healthPill");
+    const ap = header.querySelector("#agentPill");
     fetch(api("/api/health")).then(r => r.json()).then(j => {
       p.classList.remove("ok","warn","err");
       if (j.status === "healthy") { p.textContent = "API healthy"; p.classList.add("ok"); }
       else { p.textContent = "API degraded"; p.classList.add("warn"); }
+      if (ap && j.agent) {
+        ap.style.display = "";
+        ap.classList.remove("ok","warn","err");
+        if (j.agent.deactivated || j.agent.paused) { ap.textContent = "agent: deactivated (idle)"; ap.classList.add("err"); }
+        else if (j.agent.online) { ap.textContent = "agent ● online"; ap.classList.add("ok"); }
+        else                     { ap.textContent = "agent offline"; ap.classList.add("warn"); }
+      } else if (ap) {
+        ap.style.display = "none";
+      }
     }).catch(() => {
       p.classList.remove("ok","warn","err");
       p.textContent = "API offline"; p.classList.add("err");
     });
   }
   setInterval(() => pingHealth(), 60_000);
+
+  // ---------- GenbaLink user pill (only shows when logged in via genbafms.com) ----------
+  // The /api/auth/whoami endpoint returns {authenticated:false} when accessed
+  // via the unauthenticated /attendance/ vhost — in that case we hide the pill.
+  function refreshUserPill() {
+    const p = header.querySelector("#userPill");
+    if (!p) return;
+    fetch("/api/auth/whoami").then(r => r.ok ? r.json() : null).then(j => {
+      if (!j || !j.authenticated) { p.style.display = "none"; return; }
+      p.style.display = "";
+      p.textContent = `👤 ${j.username}${j.is_admin ? " ★" : ""}  ↪`;
+      p.title = "Click to log out";
+      p.style.cursor = "pointer";
+      p.onclick = () => {
+        fetch("/api/auth/logout", { method: "POST" }).finally(() => location.href = "/login");
+      };
+    }).catch(() => { p.style.display = "none"; });
+  }
+  refreshUserPill();
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", placeHeader);

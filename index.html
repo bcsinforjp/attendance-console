@@ -3,24 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>V3 Attendance Console</title>
+    <title>現場 FMS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #eef3f5;
-            --ink: #132026;
-            --muted: #5a6b73;
-            --surface: #ffffff;
-            --surface-soft: #f7fbfc;
-            --brand: #0d8f71;
-            --brand-strong: #0b6f58;
-            --accent: #125e91;
-            --warn: #9b640f;
-            --danger: #b42318;
-            --line: #d4e2e8;
-            --shadow: 0 10px 32px rgba(11, 35, 46, 0.08);
+            --bg: #0b1226;
+            --ink: #e8eef8;
+            --muted: #8794ad;
+            --surface: #1a2440;
+            --surface-soft: #20304f;
+            --brand: #5eead4;
+            --brand-strong: #2dd4bf;
+            --accent: #818cf8;
+            --warn: #fbbf24;
+            --danger: #f87171;
+            --line: #2a3a5c;
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 24px 60px rgba(0, 0, 0, 0.4);
         }
 
         * {
@@ -34,14 +34,14 @@
         }
 
         body {
-            font-family: "Space Grotesk", "Segoe UI", sans-serif;
+            font-family: "Inter", "Noto Sans JP", "Segoe UI", sans-serif;
             color: var(--ink);
             background:
-                radial-gradient(circle at 10% 15%, rgba(18, 94, 145, 0.09), transparent 35%),
-                radial-gradient(circle at 90% 20%, rgba(13, 143, 113, 0.11), transparent 40%),
-                var(--bg);
+                radial-gradient(1200px 600px at 80% -10%, rgba(94, 234, 212, 0.10), transparent 60%),
+                radial-gradient(900px 400px at 10% 110%, rgba(129, 140, 248, 0.12), transparent 60%),
+                linear-gradient(180deg, #0b1226, #111c3a 70%);
             min-height: 100vh;
-            line-height: 1.5;
+            line-height: 1.55;
         }
 
         .topbar {
@@ -1064,12 +1064,31 @@
                 transition: none !important;
             }
         }
+        /* ---- aurora background (brand, matches login) ---- */
+        .bg{position:fixed;inset:0;overflow:hidden;z-index:-1;pointer-events:none;}
+        .bg .orb{position:absolute;border-radius:50%;filter:blur(70px);opacity:.5;mix-blend-mode:screen;will-change:transform;}
+        .bg .o1{width:42vmax;height:42vmax;left:-12vmax;top:-14vmax;background:radial-gradient(circle at 30% 30%,rgba(94,234,212,.55),transparent 70%);animation:gfDrift1 22s ease-in-out infinite;}
+        .bg .o2{width:38vmax;height:38vmax;right:-12vmax;bottom:-14vmax;background:radial-gradient(circle at 70% 70%,rgba(129,140,248,.55),transparent 70%);animation:gfDrift2 26s ease-in-out infinite;}
+        .bg .o3{width:30vmax;height:30vmax;left:50%;top:55%;background:radial-gradient(circle at 50% 50%,rgba(45,212,191,.35),transparent 70%);animation:gfDrift3 30s ease-in-out infinite;}
+        .bg .grid{position:absolute;inset:-2px;background-image:linear-gradient(rgba(94,234,212,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(94,234,212,.05) 1px,transparent 1px);background-size:46px 46px;-webkit-mask-image:radial-gradient(ellipse 72% 60% at 50% 40%,#000 35%,transparent 80%);mask-image:radial-gradient(ellipse 72% 60% at 50% 40%,#000 35%,transparent 80%);animation:gfGridPan 28s linear infinite;}
+        @keyframes gfDrift1{50%{transform:translate(8vmax,6vmax) scale(1.12);}}
+        @keyframes gfDrift2{50%{transform:translate(-7vmax,-5vmax) scale(1.10);}}
+        @keyframes gfDrift3{50%{transform:translate(-6vmax,4vmax) scale(1.15);}}
+        @keyframes gfGridPan{to{background-position:46px 46px;}}
+        /* aurora motion reserved for the public home page only — static here */
+        .bg .orb,.bg .grid{animation:none!important;}
     </style>
   <script defer src="/js/i18n.js"></script>
 </head>
 <body>
+    <div class="bg" aria-hidden="true">
+      <span class="orb o1"></span>
+      <span class="orb o2"></span>
+      <span class="orb o3"></span>
+      <div class="grid"></div>
+    </div>
     <header class="topbar">
-        <div class="brand" data-i18n="att.brand">V3 Attendance Console</div>
+        <div class="brand" data-i18n="att.brand">現場 FMS</div>
         <button class="icon-button lang-toggle" type="button" aria-label="Toggle language" data-lang-toggle onclick="I18N.toggle()" style="border:1px solid var(--line);background:var(--surface-soft);color:var(--brand-strong);padding:.4rem .7rem;border-radius:999px;cursor:pointer;font:700 .75rem 'IBM Plex Mono',monospace;letter-spacing:.06em;min-width:2.5rem;text-align:center">JP</button>
         <nav class="topnav" aria-label="Quick navigation">
             <a href="/" data-i18n="att.nav_home">Home</a>
@@ -1337,7 +1356,7 @@
     </main>
 
     <footer>
-        <p data-i18n="att.footer">V3 Attendance Console | FastAPI, PostgreSQL, Grafana | Optimized for Raspberry Pi</p>
+        <p data-i18n="att.footer">現場 FMS | FastAPI, PostgreSQL, Grafana | Optimized for Raspberry Pi</p>
     </footer>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

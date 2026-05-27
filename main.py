@@ -37,7 +37,22 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 # Create app
-app = FastAPI(title="V3 Attendance Console", version="3.5")
+app = FastAPI(title="V3 Attendance Console", version="4.1")
+
+# External company-to-company data API — self-contained separate module
+# (deny-by-default; managed from /admin → Partner API).
+from partner_api import (
+    router as partner_router,
+    partner_status as _partner_status,
+    partner_set_enabled as _partner_set_enabled,
+    partner_add as _partner_add,
+    partner_update as _partner_update,
+    partner_revoke as _partner_revoke,
+    partner_log_tail as _partner_log_tail,
+    register_partner_error_handler as _register_partner_errs,
+)
+app.include_router(partner_router)
+_register_partner_errs(app)   # scoped enveloped errors for /partner/v1 only
 
 BASE_DIR = Path(__file__).resolve().parent
 EMPLOYEE_ROSTER_PATH = BASE_DIR / "employee_roster.json"
@@ -52,8 +67,110 @@ EXCEL_SECTION_INSERT_BEFORE = "00000401"
 EXCEL_SECTION_LABEL = "Section Two 2 Depanment"
 SECTIONS_PATH = BASE_DIR / "sections.json"
 SECTIONS = json.loads(SECTIONS_PATH.read_text(encoding="utf-8"))["sections"]
-SECTION_OF_CODE = {c: s["id"] for s in SECTIONS for c in s["codes"]}
+
+
+def clean_code(raw: str) -> str:
+    """Strip the '*' display-only marker from a sections.json code entry."""
+    return raw.rstrip("*").strip()
+
+
+def _build_section_indexes(sections: list[dict]) -> tuple[dict, set, set, list, dict]:
+    """Derive every section-related lookup from a sections.json `sections` list.
+
+    Returns (section_of_code, muted_codes, active_codes, muted_placements, position_in_section)
+      • section_of_code: code -> sid. Each code's "home" section. First non-muted
+        appearance wins; if a code only ever appears as muted, its first appearance wins.
+        DB attendance rows are routed here.
+      • muted_codes: every clean code that has at least one '*' placement anywhere.
+      • active_codes: every clean code that has at least one non-'*' placement.
+        DB rows are dropped entirely if a code has only muted placements (no active home).
+      • muted_placements: list of (clean_code, sid). One entry per '*' appearance.
+        Each becomes a "Disabled" ghost row in that section, independent of where the
+        code's active home is. Lets the same employee show as a ghost in section 1 and
+        as the real worker in section 2 (or wherever else).
+      • position_in_section: {sid: {code: pos}} — first position wins per code per section.
+        Drives in-bucket sort order so each section preserves the user's hand-edited order.
+    """
+    section_of_code: dict[str, int] = {}
+    for s in sections:
+        for raw in s["codes"]:
+            c = clean_code(raw)
+            if c not in section_of_code and not raw.endswith("*"):
+                section_of_code[c] = s["id"]
+    for s in sections:
+        for raw in s["codes"]:
+            c = clean_code(raw)
+            if c not in section_of_code:
+                section_of_code[c] = s["id"]
+
+    muted_codes = {
+        clean_code(raw) for s in sections for raw in s["codes"] if raw.endswith("*")
+    }
+    active_codes = {
+        clean_code(raw) for s in sections for raw in s["codes"] if not raw.endswith("*")
+    }
+    muted_placements = [
+        (clean_code(raw), s["id"])
+        for s in sections
+        for raw in s["codes"]
+        if raw.endswith("*")
+    ]
+
+    pos_by_sec: dict[int, dict[str, int]] = {0: {}}
+    for s in sections:
+        sid = s["id"]
+        pos_by_sec[sid] = {}
+        for pos, raw in enumerate(s["codes"]):
+            c = clean_code(raw)
+            if c not in pos_by_sec[sid]:
+                pos_by_sec[sid][c] = pos
+
+    return section_of_code, muted_codes, active_codes, muted_placements, pos_by_sec
+
+
+SECTION_OF_CODE, MUTED_CODES, ACTIVE_CODES, MUTED_PLACEMENTS, SECTION_POSITIONS = (
+    _build_section_indexes(SECTIONS)
+)
 SECTION_LABEL_BY_ID = {section["id"]: section["label"] for section in SECTIONS}
+
+
+def is_muted_code(code: str) -> bool:
+    return clean_code(code) in MUTED_CODES
+
+
+def name_for_code(code: str) -> str:
+    # "???" surfaces typos in sections.json visually instead of silently dropping the row.
+    return EMPLOYEE_ROSTER_BY_ID.get(clean_code(code), "???")
+
+
+def iter_codes_in_section_order():
+    """Yield each unique (code, section_id, section_label) in sections.json order.
+
+    Each code is yielded once at its **effective** section (where SECTION_OF_CODE
+    points it). Cross-section ghost placements are skipped here so Excel exports,
+    member lists, and the management UI never show the same employee twice.
+    Followed by roster codes that aren't in any section (section_id=0 / Unassigned).
+    """
+    seen: set[str] = set()
+    for section in SECTIONS:
+        sid = section["id"]
+        label = section["label"]
+        for raw in section["codes"]:
+            code = clean_code(raw)
+            if code in seen:
+                continue
+            # Skip if this isn't the code's effective home section (it's a ghost here).
+            if SECTION_OF_CODE.get(code) != sid:
+                continue
+            seen.add(code)
+            yield code, sid, label
+    for employee in EMPLOYEE_ROSTER:
+        code = employee["employee_code"]
+        if code not in seen:
+            seen.add(code)
+            yield code, 0, "Unassigned"
+
+
 SECTION_TEXT_PATTERNS = {
     1: [
         re.compile(r"製造\s*[1１一]\s*課"),
@@ -111,9 +228,15 @@ except PermissionError:
     ACCESS_LOG_DIR = BASE_DIR / "logs"
     ACCESS_LOG_DIR.mkdir(parents=True, exist_ok=True)
 ACCESS_LOG_PATH = ACCESS_LOG_DIR / "access.jsonl"
+API_DEBUG_LOG_PATH = ACCESS_LOG_DIR / "api_debug.jsonl"
 KNOWN_CLIENTS_PATH = BASE_DIR / "known_clients.json"
 KNOWN_IPS_PATH = BASE_DIR / "known_ips.json"
 ANNOUNCEMENT_PATH = BASE_DIR / "announcement.json"
+AGENT_LOG_PATH = ACCESS_LOG_DIR / "agent_requests.jsonl"
+APP_UPDATE_DIR = BASE_DIR / "app_updates"
+APP_UPDATE_CONFIG_PATH = BASE_DIR / "app_update.json"
+DESKTOP_SPEC_PATH = BASE_DIR / "DESKTOP_AGENT_INTEGRATION.md"
+PARTNER_SPEC_PATH = BASE_DIR / "PARTNER_API.md"
 
 def _load_json(path: Path, default):
     try:
@@ -191,6 +314,211 @@ def _admin_session_valid(token: str | None) -> bool:
         return False
     return hmac.compare_digest(ADMIN_CONFIG.get("session_token", ""), token)
 
+
+# ---- Desktop Agent: request log, live state, pause switch ------------------
+# Every /api/v1/* call is appended to agent_requests.jsonl and folded into
+# AGENT_STATE (used by the /admin Agent tab + the header pill via /api/health).
+# INGESTION_PAUSED (admin-toggled, persisted in admin_config.json) makes the
+# precheck answer {"action":"paused"} and uploads return HTTP 423 Locked.
+AGENT_ONLINE_WINDOW_SEC = 1800  # "online" if a v1 call within this many seconds
+
+def _initial_ingestion_paused() -> bool:
+    env = os.environ.get("ATTENDANCE_INGESTION_PAUSED")
+    if env is not None:
+        return env.strip() in ("1", "true", "TRUE", "yes", "on")
+    return bool(ADMIN_CONFIG.get("ingestion_paused", False))
+
+INGESTION_PAUSED = _initial_ingestion_paused()
+print(f"[AGENT] ingestion_paused={INGESTION_PAUSED}  log={AGENT_LOG_PATH}")
+
+_agent_lock = threading.Lock()
+AGENT_STATE: dict = {
+    "last_seen": None, "last_ip": None, "last_key": None,
+    "last_precheck": None, "last_upload": None,
+    "last_error": None, "last_error_at": None,
+    "calls": 0, "errors": 0, "agent_version": None,
+}
+
+# Desktop-app update channel: admin uploads a file (any type) into APP_UPDATE_DIR;
+# metadata persists in app_update.json; the agent polls /api/v1/app-update.
+try:
+    APP_UPDATE_DIR.mkdir(parents=True, exist_ok=True)
+except Exception as _exc:
+    print(f"[APP_UPDATE] mkdir failed: {_exc}")
+APP_UPDATE_META: dict = _load_json(APP_UPDATE_CONFIG_PATH, {}) or {}
+
+def _record_agent(path: str, method: str, status: int, ip: str,
+                   key_label: str | None, query: str, dur_ms: int,
+                   agent_version: str | None = None) -> None:
+    """Append one Desktop Agent API call to the log + update live state."""
+    ts = datetime.now().isoformat(timespec="seconds")
+    entry = {
+        "ts": ts, "ip": ip, "key": key_label or "?",
+        "method": method, "path": path, "query": (query or "")[:300],
+        "status": status, "duration_ms": dur_ms,
+    }
+    try:
+        with AGENT_LOG_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        if AGENT_LOG_PATH.stat().st_size > 5 * 1024 * 1024:  # ~5 MB cap
+            lines = AGENT_LOG_PATH.read_text(encoding="utf-8").splitlines()[-4000:]
+            AGENT_LOG_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception as exc:
+        print(f"[AGENT_LOG] write failed: {exc}")
+    with _agent_lock:
+        AGENT_STATE["last_seen"] = ts
+        AGENT_STATE["last_ip"] = ip
+        AGENT_STATE["last_key"] = key_label or "?"
+        AGENT_STATE["calls"] += 1
+        if "/status/precheck" in path:
+            AGENT_STATE["last_precheck"] = ts
+        if "/upload" in path and method == "POST" and status < 400:
+            AGENT_STATE["last_upload"] = {"ts": ts, "path": path}
+        if agent_version:
+            AGENT_STATE["agent_version"] = agent_version[:60]
+        if status >= 400:
+            AGENT_STATE["errors"] += 1
+            AGENT_STATE["last_error"] = {"ts": ts, "path": path, "status": status}
+            AGENT_STATE["last_error_at"] = ts
+
+def _agent_status_summary() -> dict:
+    with _agent_lock:
+        s = dict(AGENT_STATE)
+    online = False
+    if s.get("last_seen"):
+        try:
+            age = (datetime.now() - datetime.fromisoformat(s["last_seen"])).total_seconds()
+            online = age <= AGENT_ONLINE_WINDOW_SEC
+        except Exception:
+            online = False
+    s["online"] = online
+    s["paused"] = INGESTION_PAUSED
+    s["update"] = dict(APP_UPDATE_META)
+    s["lan_upload_url"] = f"http://{_detect_lan_ip()}/lan-upload"
+    return s
+
+
+# ============================================================================
+# GenbaLink multi-user auth (separate from /admin's single-password scheme).
+# Stores users in users.json with PBKDF2-SHA256 hashes (200k iterations, no
+# bcrypt dependency). Sessions live in-memory — restart = everyone re-logs-in.
+# Auth is host-gated: requests arriving with Host=genbafms.com require a valid
+# `gbl_session` cookie; existing /attendance/* access (default vhost) stays
+# unauthenticated so office bookmarks keep working.
+# ============================================================================
+USERS_PATH = BASE_DIR / "users.json"
+GBL_HASH_ALGO = "pbkdf2_sha256"
+GBL_HASH_ITERS = 200_000
+GBL_SESSION_TTL_SECONDS = 12 * 3600
+GBL_AUTH_HOSTS = {"genbafms.com", "www.genbafms.com", "link.genbafms.com"}  # host-gated auth
+
+
+def _gbl_hash_password(password: str, salt: str | None = None) -> str:
+    if salt is None:
+        salt = secrets.token_hex(16)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), GBL_HASH_ITERS).hex()
+    return f"{GBL_HASH_ALGO}${GBL_HASH_ITERS}${salt}${h}"
+
+
+def _gbl_verify_password(password: str, stored: str) -> bool:
+    try:
+        algo, iters_s, salt, expected = stored.split("$", 3)
+        if algo != GBL_HASH_ALGO:
+            return False
+        candidate = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), int(iters_s)).hex()
+        return hmac.compare_digest(candidate, expected)
+    except Exception:
+        return False
+
+
+def _gbl_load_users() -> list[dict]:
+    if not USERS_PATH.exists():
+        return []
+    try:
+        data = json.loads(USERS_PATH.read_text(encoding="utf-8"))
+        return list(data.get("users") or [])
+    except Exception as exc:
+        print(f"[GBL_AUTH] users.json load error: {exc}")
+        return []
+
+
+def _gbl_save_users(users: list[dict]) -> None:
+    payload = {
+        "_note": "GenbaLink user store. Passwords are PBKDF2-SHA256, 200k iterations. Edit via Setup UI; do NOT hand-edit hashes.",
+        "users": users,
+    }
+    tmp = USERS_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, USERS_PATH)
+    try:
+        os.chmod(USERS_PATH, 0o600)
+    except Exception:
+        pass
+
+
+GBL_USERS: list[dict] = _gbl_load_users()
+print(f"[GBL_AUTH] Loaded {len(GBL_USERS)} user(s) from {USERS_PATH}")
+
+# Sessions: token -> {"username", "is_admin", "created_at", "expires_at"}
+_gbl_sessions: dict[str, dict] = {}
+_gbl_sessions_lock = threading.Lock()
+
+
+def _gbl_session_create(username: str, is_admin: bool) -> str:
+    import time
+    token = secrets.token_urlsafe(32)
+    now = time.time()
+    with _gbl_sessions_lock:
+        _gbl_sessions[token] = {
+            "username": username,
+            "is_admin": is_admin,
+            "created_at": now,
+            "expires_at": now + GBL_SESSION_TTL_SECONDS,
+        }
+        # Opportunistic cleanup of expired sessions on every create.
+        for tok in [t for t, s in _gbl_sessions.items() if s["expires_at"] < now]:
+            del _gbl_sessions[tok]
+    return token
+
+
+def _gbl_session_lookup(token: str | None) -> dict | None:
+    import time
+    if not token:
+        return None
+    with _gbl_sessions_lock:
+        s = _gbl_sessions.get(token)
+        if not s:
+            return None
+        if s["expires_at"] < time.time():
+            del _gbl_sessions[token]
+            return None
+        return dict(s)
+
+
+def _gbl_session_revoke(token: str | None) -> None:
+    if not token:
+        return
+    with _gbl_sessions_lock:
+        _gbl_sessions.pop(token, None)
+
+
+def _gbl_request_user(request: "Request") -> dict | None:
+    return _gbl_session_lookup(request.cookies.get("gbl_session"))
+
+
+def _gbl_host_requires_auth(request: "Request") -> bool:
+    """Auth is required only when the request arrives via the new GenbaLink
+    domain; existing /attendance/ access via the default vhost stays open."""
+    host = (request.headers.get("host") or "").split(":")[0].lower()
+    return host in GBL_AUTH_HOSTS
+
+
+def _gbl_find_user(username: str) -> dict | None:
+    for u in GBL_USERS:
+        if u.get("username", "").lower() == username.lower():
+            return u
+    return None
+
 # ---- Access tracking --------------------------------------------------------
 # Lightweight ring buffer (last 500) + JSONL file. Separate "known clients" set
 # (IP+UA hash) so brand-new logins can be flagged in the admin panel.
@@ -247,22 +575,122 @@ def _record_access(entry: dict) -> None:
     except Exception as exc:
         print(f"[ACCESS_LOG] write failed: {exc}")
 
+# ---- Verbose API debug log --------------------------------------------------
+# A second log file that captures full request / response details for
+# troubleshooting auth issues, malformed bodies, etc. Two modes:
+#   * Default (toggle OFF): only writes entries for status >= 400 (critical only).
+#   * Toggle ON: writes every non-static request with full details.
+# Toggle is persisted in admin_config.json under "debug_api_log" and can be
+# overridden at process start via env var ATTENDANCE_DEBUG_LOG=0|1. Flippable
+# live (no restart) via POST /admin/api/debug-log.
+_REDACTED_HEADERS = {"x-api-key", "authorization", "cookie", "set-cookie"}
+_SAFE_BODY_TYPE_PREFIXES = ("application/json", "application/x-www-form-urlencoded", "text/")
+_MAX_REQ_BODY_BYTES = 1024
+_MAX_RESP_BODY_BYTES = 2048
+_MAX_REQ_BODY_CAPTURE_BYTES = 32 * 1024  # never read more than this off the wire
+
+def _initial_debug_flag() -> bool:
+    env = os.environ.get("ATTENDANCE_DEBUG_LOG")
+    if env is not None:
+        return env.strip() in ("1", "true", "TRUE", "yes", "on")
+    return bool(ADMIN_CONFIG.get("debug_api_log", False))
+
+DEBUG_API_LOG_ENABLED = _initial_debug_flag()
+print(f"[API_DEBUG_LOG] enabled={DEBUG_API_LOG_ENABLED}  path={API_DEBUG_LOG_PATH}")
+
+def _redact_headers(headers) -> dict:
+    out = {}
+    for k, v in headers.items():
+        out[k] = "<redacted>" if k.lower() in _REDACTED_HEADERS else v
+    return out
+
+def _capture_body_snippet(content_type: str, body_bytes: bytes, limit: int) -> str:
+    if not body_bytes:
+        return ""
+    ct = (content_type or "").lower()
+    if not any(ct.startswith(p) for p in _SAFE_BODY_TYPE_PREFIXES):
+        return f"<{len(body_bytes)} bytes of {ct or 'unknown'} skipped>"
+    snippet = body_bytes[:limit]
+    return snippet.decode("utf-8", errors="replace")
+
+def _should_capture_request_body(content_type: str, content_length: str | None) -> bool:
+    ct = (content_type or "").lower()
+    if not ct or ct.startswith("multipart/"):
+        return False
+    try:
+        cl = int(content_length) if content_length else 0
+    except ValueError:
+        cl = 0
+    if cl > _MAX_REQ_BODY_CAPTURE_BYTES:
+        return False
+    return any(ct.startswith(p) for p in _SAFE_BODY_TYPE_PREFIXES)
+
+def _record_debug(entry: dict) -> None:
+    try:
+        with API_DEBUG_LOG_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        print(f"[API_DEBUG_LOG] write failed: {exc}")
+
 class AccessTrackingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start = time.time()
-        ip = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "?")
+        # Real client IP: CF-Connecting-IP wins (Cloudflare Tunnel "rnd-pi" sets
+        # this with the original client's IP); otherwise fall back to X-Real-IP /
+        # X-Forwarded-For. The raw request.client.host is the loopback peer of
+        # nginx (always ::1 for tunneled traffic) so it's the last resort.
+        ip = (request.headers.get("cf-connecting-ip")
+              or request.headers.get("x-real-ip")
+              or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+              or (request.client.host if request.client else "?"))
         ua = request.headers.get("user-agent", "")
         path = request.url.path
         # Skip noisy static asset hits from the log file (still tracked in-memory? no — too noisy).
         skip = path.startswith("/static/") or path.endswith(".ico") or path.endswith(".css") or path.endswith(".js")
+
+        # Cache request body up-front so we can both log it AND let the handler
+        # read it. Only capture for safe text-ish content types and small sizes.
+        req_body_bytes = b""
+        if not skip and _should_capture_request_body(
+            request.headers.get("content-type", ""),
+            request.headers.get("content-length"),
+        ):
+            try:
+                req_body_bytes = await request.body()
+            except Exception:
+                req_body_bytes = b""
+
+            async def _replay_receive() -> dict:
+                return {"type": "http.request", "body": req_body_bytes, "more_body": False}
+
+            request._receive = _replay_receive  # type: ignore[attr-defined]
+
+        response = None
+        status = 500
         try:
             response = await call_next(request)
             status = response.status_code
         except Exception:
-            status = 500
             raise
         finally:
             if not skip:
+                resp_body_bytes = b""
+                want_resp_body = (status >= 400) or DEBUG_API_LOG_ENABLED
+                if want_resp_body and response is not None:
+                    try:
+                        chunks = []
+                        async for chunk in response.body_iterator:
+                            chunks.append(chunk)
+                        resp_body_bytes = b"".join(chunks)
+                        response = Response(
+                            content=resp_body_bytes,
+                            status_code=status,
+                            headers=dict(response.headers),
+                            media_type=response.media_type,
+                        )
+                    except Exception:
+                        resp_body_bytes = b""
+
                 fp = _client_fingerprint(ip, ua)
                 is_new = fp not in KNOWN_CLIENTS
                 entry = {
@@ -278,6 +706,45 @@ class AccessTrackingMiddleware(BaseHTTPMiddleware):
                     "new_client": is_new,
                 }
                 _record_access(entry)
+
+                # Desktop Agent activity → dedicated log + live state.
+                if path.startswith("/api/v1/"):
+                    try:
+                        _record_agent(
+                            path, request.method, status, ip,
+                            _resolve_key_label(request.headers.get("x-api-key")),
+                            request.url.query or "",
+                            entry["duration_ms"],
+                            request.headers.get("x-agent-version"),
+                        )
+                    except Exception as exc:
+                        print(f"[AGENT_LOG] hook failed: {exc}")
+
+                # Verbose debug log — every request when toggle ON, otherwise
+                # only 4xx/5xx so admins still see the failure detail without
+                # paying the disk cost of full logging in steady state.
+                if DEBUG_API_LOG_ENABLED or status >= 400:
+                    debug_entry = {
+                        **entry,
+                        "query": request.url.query or "",
+                        "headers": _redact_headers(request.headers),
+                        "api_key_label": _resolve_key_label(request.headers.get("x-api-key")),
+                        "referer": request.headers.get("referer"),
+                        "content_type": request.headers.get("content-type"),
+                        "content_length": request.headers.get("content-length"),
+                        "req_body": _capture_body_snippet(
+                            request.headers.get("content-type", ""),
+                            req_body_bytes,
+                            _MAX_REQ_BODY_BYTES,
+                        ),
+                    }
+                    if status >= 400 and resp_body_bytes:
+                        resp_ct = response.headers.get("content-type", "") if response is not None else ""
+                        debug_entry["resp_body"] = _capture_body_snippet(
+                            resp_ct, resp_body_bytes, _MAX_RESP_BODY_BYTES
+                        )
+                    _record_debug(debug_entry)
+
                 if is_new:
                     KNOWN_CLIENTS.add(fp)
                     try:
@@ -292,7 +759,82 @@ class AccessTrackingMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(AccessTrackingMiddleware)
+
+
+# ----------------------------------------------------------------------------
+# GenbaLink host-gated auth middleware. Runs only for requests arriving via
+# `genbafms.com` (or `www.genbafms.com`) — existing /attendance/* via the
+# default vhost is untouched. Public allow-list (mobile + LINE + assets +
+# auth endpoints) is matched BEFORE the gate, so LINE webhooks and the
+# mobile report views keep working without a session.
+# ----------------------------------------------------------------------------
+GBL_PUBLIC_PREFIXES = (
+    "/login", "/logout",
+    "/api/auth/",          # login/logout/whoami POST endpoints
+    "/api/announcement",
+    "/api/line/",
+    "/api/health",
+    "/api/data-status/",                # dashboard + agent verify (browser-facing)
+    "/api/daily-packs/auto-extract",    # Auto-update PDF + Excel triggers (browser-facing)
+                                        # — startswith match also covers /auto-extract-excel
+    "/api/daily-packs/items/",          # GET-only — used by /m/report to load pack data
+    "/api/gantt/",          # GET-only family: /latest-date, /dates-with-data, /{date} — used by /m/report
+    "/api/members/",        # GET-only family: /list, /compare — used by /m/report comparison panel
+    "/api/productivity",    # GET — used by /m/summary
+    "/api/m/",              # GET — used by /m/summary (rolling 30d summary feed)
+    "/m/",                  # mobile report pages (employees access via LINE)
+    "/static/",
+    "/favicon",
+    "/admin",               # legacy /admin has its own password
+    "/partner/v1",          # external partner API — self-protected (per-partner tokens)
+    "/api/v1",              # desktop-agent API — self-protected (X-API-Key, deny-by-default)
+)
+
+
+@app.middleware("http")
+async def genbalink_host_auth(request: Request, call_next):
+    if not _gbl_host_requires_auth(request):
+        return await call_next(request)
+    path = request.url.path
+    if any(path == p.rstrip("/") or path.startswith(p) for p in GBL_PUBLIC_PREFIXES):
+        return await call_next(request)
+    if _gbl_request_user(request) is not None:
+        return await call_next(request)
+    # HTML navigation → redirect to /login; AJAX/API → 401 JSON
+    accepts_html = "text/html" in (request.headers.get("accept") or "")
+    if accepts_html:
+        from fastapi.responses import RedirectResponse
+        nxt = path
+        if request.url.query:
+            nxt = f"{path}?{request.url.query}"
+        from urllib.parse import quote
+        return RedirectResponse(url=f"/login?next={quote(nxt)}", status_code=302)
+    return JSONResponse({"detail": "authentication required"}, status_code=401)
 # ============================================================================
+
+
+# ----------------------------------------------------------------------------
+# Strip the `/attendance` URL prefix when requests arrive directly from the
+# Cloudflare tunnel (which bypasses the nginx vhost that would normally strip
+# it). Registered AFTER the auth middleware so it runs FIRST in the chain,
+# meaning the auth middleware sees the already-cleaned path.
+# ----------------------------------------------------------------------------
+@app.middleware("http")
+async def strip_attendance_prefix(request: Request, call_next):
+    path = request.scope.get("path", "")
+    if path == "/attendance" or path.startswith("/attendance/"):
+        new_path = path[len("/attendance"):] or "/"
+        request.scope["path"] = new_path
+        raw = request.scope.get("raw_path")
+        if isinstance(raw, (bytes, bytearray)):
+            try:
+                raw_str = raw.decode("latin-1")
+                if raw_str.startswith("/attendance"):
+                    request.scope["raw_path"] = (raw_str[len("/attendance"):] or "/").encode("latin-1")
+            except Exception:
+                pass
+    return await call_next(request)
+
 
 def write_json_atomic(path: Path, payload: object) -> None:
     """Write JSON through a temp file so roster saves never leave half-written data."""
@@ -307,6 +849,7 @@ def refresh_management_data(roster: list[dict], sections_payload: list[dict]) ->
     """Refresh global roster/section caches after management saves."""
     global EMPLOYEE_ROSTER, EMPLOYEE_ROSTER_BY_ID, EMPLOYEE_CODES
     global SECTIONS, SECTION_OF_CODE, SECTION_LABEL_BY_ID
+    global MUTED_CODES, ACTIVE_CODES, MUTED_PLACEMENTS, SECTION_POSITIONS
 
     EMPLOYEE_ROSTER = roster
     EMPLOYEE_ROSTER_BY_ID = {
@@ -315,20 +858,21 @@ def refresh_management_data(roster: list[dict], sections_payload: list[dict]) ->
     }
     EMPLOYEE_CODES = set(EMPLOYEE_ROSTER_BY_ID)
     SECTIONS = sections_payload
-    SECTION_OF_CODE = {code: section["id"] for section in SECTIONS for code in section["codes"]}
     SECTION_LABEL_BY_ID = {section["id"]: section["label"] for section in SECTIONS}
+    SECTION_OF_CODE, MUTED_CODES, ACTIVE_CODES, MUTED_PLACEMENTS, SECTION_POSITIONS = (
+        _build_section_indexes(SECTIONS)
+    )
 
 def management_payload_from_files() -> dict:
-    """Build the management UI payload from the current roster and section maps."""
-    section_lookup = {section["id"]: section["label"] for section in SECTIONS}
+    """Build the management UI payload — employees emitted in sections.json order."""
     employees = [
         {
-            "code": employee["employee_code"],
-            "name": employee["name"],
-            "section_id": SECTION_OF_CODE.get(employee["employee_code"]),
-            "section_label": section_lookup.get(SECTION_OF_CODE.get(employee["employee_code"])),
+            "code": code,
+            "name": name_for_code(code),
+            "section_id": section_id,
+            "section_label": section_label,
         }
-        for employee in EMPLOYEE_ROSTER
+        for code, section_id, section_label in iter_codes_in_section_order()
     ]
     sections = [
         {
@@ -1126,7 +1670,7 @@ def export_records_to_excel(
     return excel_filename, excel_path, records_processed, batch_id
 
 def apply_employee_roster(records: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Return rows in the exact master roster order, with blanks for missing data."""
+    """Return rows in sections.json order (then any roster-only codes), blanks for missing."""
     records_by_id = {
         record["employee_code"]: record
         for record in records
@@ -1134,15 +1678,15 @@ def apply_employee_roster(records: list[dict[str, str]]) -> list[dict[str, str]]
     }
 
     rostered_records = []
-    for employee in EMPLOYEE_ROSTER:
-        code = employee["employee_code"]
+    for code, _sid, _label in iter_codes_in_section_order():
         parsed_record = records_by_id.get(code, {})
+        muted = code in MUTED_CODES
         rostered_records.append({
             "employee_code": code,
-            "name": employee["name"],
-            "commute_time": parsed_record.get("commute_time", ""),
-            "leave_time": parsed_record.get("leave_time", ""),
-            "working_hours": parsed_record.get("working_hours", ""),
+            "name": name_for_code(code),
+            "commute_time": "" if muted else parsed_record.get("commute_time", ""),
+            "leave_time": "" if muted else parsed_record.get("leave_time", ""),
+            "working_hours": "" if muted else parsed_record.get("working_hours", ""),
         })
 
     return rostered_records
@@ -1357,6 +1901,23 @@ async def root():
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+
+# ----------------------------------------------------------------------------
+# Mount the Upload Hub as a sub-app at /upload so that
+# https://rnd.asiakawaii.com/upload/ works while Cloudflare bypasses nginx.
+# `upload.service` still runs on port 8003 for direct/LAN access; this is an
+# in-process duplicate that shares the same on-disk UPLOAD_DIR.
+# ----------------------------------------------------------------------------
+try:
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location("upload_hub_main", "/var/www/upload_app/main.py")
+    _upload_hub = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_upload_hub)
+    app.mount("/upload", _upload_hub.app, name="upload_hub")
+except Exception as _e:
+    print(f"[upload mount] failed to mount Upload Hub at /upload: {_e}")
+
+
 @app.get("/gantt")
 async def gantt_page():
     """Standalone attendance Gantt chart (A4 portrait, printable).
@@ -1421,6 +1982,26 @@ async def management_page():
     """Mockup user-management GUI for roster reassignment approval."""
     return FileResponse(
         STATIC_DIR / "management.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.get("/pdf/gantt")
+async def pdf_gantt_page():
+    """Standalone A4 PDF view for the daily Gantt — Print + one-click download.
+    Embeds the existing /gantt page chrome-less (report=1); works for any date."""
+    return FileResponse(
+        STATIC_DIR / "pdf_view.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
+@app.get("/pdf/summary")
+async def pdf_summary_page():
+    """Standalone A4 PDF view for the productivity Summary — Print + one-click
+    download. Embeds the existing /summary page chrome-less; any date/report."""
+    return FileResponse(
+        STATIC_DIR / "pdf_view.html",
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
@@ -2029,14 +2610,21 @@ async def management_bootstrap():
 
 @app.put("/api/management/roster")
 async def management_save_roster(payload: dict = Body(...)):
-    """Persist the management board into employee_roster.json and sections.json."""
+    """Persist the management board.
+
+    sections.json: rebuilt from incoming order — drag-reorder in UI becomes the
+                   authoritative display order across the whole app.
+    employee_roster.json: name-only registry. Existing roster ORDER is preserved
+                   (never reordered from UI). Names update for known codes; new
+                   codes are appended at the end; codes removed from UI are dropped.
+    """
     raw_employees = payload.get("employees")
     if not isinstance(raw_employees, list):
         raise HTTPException(status_code=400, detail="employees must be a list.")
 
     section_by_id = {int(section["id"]): section for section in SECTIONS}
     next_codes_by_section = {section_id: [] for section_id in section_by_id}
-    next_roster: list[dict[str, str]] = []
+    incoming_pairs: list[tuple[str, str]] = []  # (code, name) in UI order
     seen_codes: set[str] = set()
 
     for index, raw_employee in enumerate(raw_employees, start=1):
@@ -2071,17 +2659,37 @@ async def management_save_roster(payload: dict = Body(...)):
             raise HTTPException(status_code=400, detail=f"Employee {code} has an invalid section.")
 
         seen_codes.add(code)
-        next_roster.append({"employee_code": code, "name": name})
+        incoming_pairs.append((code, name))
         next_codes_by_section[section_id].append(code)
+
+    # Re-apply '*' mute markers from the existing sections.json so a UI save
+    # never silently strips them (the management UI doesn't surface mutes yet).
+    def _reapply_mute(code: str) -> str:
+        return f"{code}*" if code in MUTED_CODES else code
 
     next_sections = [
         {
             "id": int(section["id"]),
             "label": section["label"],
-            "codes": next_codes_by_section[int(section["id"])],
+            "codes": [_reapply_mute(c) for c in next_codes_by_section[int(section["id"])]],
         }
         for section in SECTIONS
     ]
+
+    incoming_by_code = dict(incoming_pairs)
+    next_roster: list[dict[str, str]] = []
+    appended: set[str] = set()
+    # Phase 1: keep current roster order for codes still present (name updates allowed).
+    for emp in EMPLOYEE_ROSTER:
+        code = emp["employee_code"]
+        if code in incoming_by_code:
+            next_roster.append({"employee_code": code, "name": incoming_by_code[code]})
+            appended.add(code)
+    # Phase 2: brand-new codes added via UI go to the end of the roster registry.
+    for code, name in incoming_pairs:
+        if code not in appended:
+            next_roster.append({"employee_code": code, "name": name})
+            appended.add(code)
 
     try:
         write_json_atomic(EMPLOYEE_ROSTER_PATH, next_roster)
@@ -2216,7 +2824,7 @@ def _gantt_hours_to_hhmm(hours: float) -> str:
     return f"{h}:{m:02d}"
 
 
-def _gantt_compute_for_date(cursor, record_date: str, roster_index: dict) -> tuple[list[dict], dict]:
+def _gantt_compute_for_date(cursor, record_date: str) -> tuple[list[dict], dict]:
     """Pull attendance + packs for one day's REPORT, bucket by section, compute productivity.
 
     `record_date` is the **report / production date** (= the date in the URL).
@@ -2271,9 +2879,16 @@ def _gantt_compute_for_date(cursor, record_date: str, roster_index: dict) -> tup
     buckets: dict[int, list[dict]] = {s["id"]: [] for s in SECTIONS}
     buckets[0] = []  # Unassigned
     for r in rows:
-        sid = SECTION_OF_CODE.get(r["code"], 0)
+        code = r["code"]
+        # If a code only ever appears as muted ('*') in sections.json, it has no
+        # active home — drop the DB row entirely; the ghost injection below
+        # represents it. Codes with at least one non-'*' placement route to
+        # SECTION_OF_CODE (their effective active section).
+        if code not in ACTIVE_CODES and code in MUTED_CODES:
+            continue
+        sid = SECTION_OF_CODE.get(code, 0)
         buckets[sid].append({
-            "code": r["code"],
+            "code": code,
             "name": r["name"] or "",
             "in": (r["commute_time"] or "").strip() or None,
             "out": (r["time_to_leave"] or "").strip() or None,
@@ -2281,11 +2896,28 @@ def _gantt_compute_for_date(cursor, record_date: str, roster_index: dict) -> tup
             "is_temp": False,
         })
 
-    # Sort each bucket by roster index (authoritative order from employee_roster.json)
-    # BEFORE appending temp-staff rows so they stay pinned at the end.
+    # Inject one Disabled ghost per '*' placement at the section the user wrote
+    # it into (independent of where the code's active home is). This lets the
+    # same employee appear as a ghost in section 1 AND as the real worker in
+    # section 2 if both placements exist in sections.json.
+    for muted_code, muted_sid in MUTED_PLACEMENTS:
+        buckets[muted_sid].append({
+            "code": muted_code,
+            "name": name_for_code(muted_code),
+            "in": None,
+            "out": None,
+            "wh": None,
+            "is_temp": False,
+            "muted": True,
+        })
+
+    # Sort each bucket by **per-section** position so the order in sections.json
+    # is preserved within each section, even when the same code is also placed
+    # elsewhere. BEFORE appending temp-staff rows so they stay pinned at the end.
     for sid in buckets:
+        pos_map = SECTION_POSITIONS.get(sid, {})
         buckets[sid].sort(
-            key=lambda row: (roster_index.get(row["code"], 10**9), row["code"])
+            key=lambda row: (pos_map.get(row["code"], 10**9), bool(row.get("muted")), row["code"])
         )
 
     # Append temp_staff as synthetic rows at the end of Section 2 (製造２課).
@@ -2347,24 +2979,27 @@ def _gantt_compute_for_date(cursor, record_date: str, roster_index: dict) -> tup
     combined_present = 0
     for s in SECTIONS:
         sect_rows = buckets[s["id"]]
+        # Muted rows ('*' marked codes) are display-only — exclude from every
+        # productivity metric so they neither inflate denominators nor pollute totals.
+        active_rows = [r for r in sect_rows if not r.get("muted")]
         # For temp-staff rows we use the group total_hours (= headcount × hours);
         # for regular rows we parse "H:MM" working_hours to a decimal.
         sect_hours = sum(
             (float(r["total_hours"]) if r.get("is_temp") else _gantt_wh_to_hours(r["wh"]))
-            for r in sect_rows
+            for r in active_rows
         )
         # staff_present counts: temp rows contribute their full headcount;
         # regular rows count as 1 if they actually clocked in.
         sect_present = sum(
             (int(r.get("headcount") or 0) if r.get("is_temp")
              else (1 if _gantt_wh_to_hours(r["wh"]) > 0 else 0))
-            for r in sect_rows
+            for r in active_rows
         )
         # staff_total: temp rows also contribute headcount (a 5-person
         # フルキャスト group is 5 slots), regular rows contribute 1 each.
         sect_total = sum(
             (int(r.get("headcount") or 0) if r.get("is_temp") else 1)
-            for r in sect_rows
+            for r in active_rows
         )
         sect_lp = (total_packs / sect_hours) if sect_hours > 0 else 0.0
         prod_sections.append({
@@ -2407,10 +3042,11 @@ async def gantt_for_date(record_date: str):
     """Attendance rows for one date, grouped by section, with productivity summary
     and a *previous-day* productivity block so the frontend can draw delta arrows.
 
-    Row order within each section is driven by the order of entries in
-    employee_roster.json (single source of truth). When the JSON is updated and
-    the service is restarted, every downstream output — Gantt display, reports,
-    Excel exports — reflects the new ordering automatically.
+    Row order within each section is driven by the position of each code inside
+    sections.json (single source of truth). When that file is updated and the
+    service is restarted, every downstream output — Gantt display, reports,
+    Excel exports — reflects the new ordering automatically. employee_roster.json
+    is now a name-only registry; its order does not affect display.
     """
     try:
         current_dt = datetime.strptime(record_date, "%Y-%m-%d").date()
@@ -2418,19 +3054,10 @@ async def gantt_for_date(record_date: str):
         raise HTTPException(status_code=400, detail="record_date must be YYYY-MM-DD")
     prev_date_str = (current_dt - timedelta(days=1)).isoformat()
 
-    roster_index = {
-        employee["employee_code"]: idx
-        for idx, employee in enumerate(EMPLOYEE_ROSTER)
-    }
-
     with get_db_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
-            sections_out, productivity = _gantt_compute_for_date(
-                cursor, record_date, roster_index
-            )
-            _, prev_productivity = _gantt_compute_for_date(
-                cursor, prev_date_str, roster_index
-            )
+            sections_out, productivity = _gantt_compute_for_date(cursor, record_date)
+            _, prev_productivity = _gantt_compute_for_date(cursor, prev_date_str)
 
     productivity["previous_date"] = prev_date_str
     productivity["previous"] = {
@@ -2445,6 +3072,288 @@ async def gantt_for_date(record_date: str):
         "productivity": productivity,
     }
 
+# ============================================================================
+# Dashboard — single-call snapshot for the Status page (production plan +
+# today's actuals + 7-day trend + per-section productivity) plus a cached
+# wttr.in proxy so the browser doesn't make a cross-origin request itself.
+# ============================================================================
+_WEATHER_CACHE: dict = {"data": None, "fetched_at": 0.0}
+_WEATHER_TTL_SECONDS = 30 * 60  # wttr.in is generous but unmetered — 30 min is plenty.
+_WEATHER_LOCATION = "Yamanashi"  # Pi sits in Yamanashi prefecture; override via env if needed.
+
+
+def _wttr_fetch() -> dict | None:
+    """Fetch a 3-day forecast from wttr.in. Returns None on any failure so the
+    dashboard degrades gracefully (the card just shows '—' instead of crashing)."""
+    import urllib.request
+    import urllib.parse
+    loc = urllib.parse.quote(os.environ.get("DASHBOARD_WEATHER_LOC", _WEATHER_LOCATION))
+    url = f"https://wttr.in/{loc}?format=j1"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "IMMS-Dashboard/1.0"})
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:  # network error, JSON error, timeout — all degrade silently
+        print(f"[DASHBOARD_WEATHER] fetch failed: {exc}")
+        return None
+
+    days_out = []
+    for d in (payload.get("weather") or [])[:3]:
+        try:
+            day_iso = d.get("date")
+            avg_c = int(d.get("avgtempC") or 0)
+            max_c = int(d.get("maxtempC") or 0)
+            min_c = int(d.get("mintempC") or 0)
+            hourly = d.get("hourly") or []
+            # Pick the noon entry (or the middle slot) for an at-a-glance condition.
+            noon = next((h for h in hourly if h.get("time") in ("1200", "1100", "1300")), None) or (hourly[len(hourly)//2] if hourly else {})
+            desc = ""
+            try:
+                desc = (noon.get("weatherDesc") or [{}])[0].get("value", "").strip()
+            except Exception:
+                desc = ""
+            days_out.append({
+                "date": day_iso,
+                "avg_c": avg_c, "max_c": max_c, "min_c": min_c,
+                "desc": desc or "—",
+                "wind_kph": int(noon.get("windspeedKmph") or 0),
+                "humidity": int(noon.get("humidity") or 0),
+                "rain_chance": int(noon.get("chanceofrain") or 0),
+            })
+        except Exception:
+            continue
+    return {"location": loc, "days": days_out}
+
+
+@app.get("/api/dashboard/weather")
+async def dashboard_weather():
+    """Cached wttr.in proxy. Returns at most _WEATHER_TTL_SECONDS-stale data."""
+    import time
+    now = time.time()
+    cached = _WEATHER_CACHE.get("data")
+    if cached and (now - _WEATHER_CACHE.get("fetched_at", 0)) < _WEATHER_TTL_SECONDS:
+        return {**cached, "cached": True, "age_seconds": int(now - _WEATHER_CACHE["fetched_at"])}
+    fresh = _wttr_fetch()
+    if fresh is None:
+        # If we have ANY stale data, prefer it over an empty card.
+        if cached:
+            return {**cached, "cached": True, "age_seconds": int(now - _WEATHER_CACHE["fetched_at"]), "stale": True}
+        return {"location": _WEATHER_LOCATION, "days": [], "error": "fetch_failed"}
+    _WEATHER_CACHE["data"] = fresh
+    _WEATHER_CACHE["fetched_at"] = now
+    return {**fresh, "cached": False, "age_seconds": 0}
+
+
+@app.get("/api/dashboard/snapshot")
+async def dashboard_snapshot(date: str | None = None):
+    """Aggregate data the Status dashboard needs in one round-trip.
+
+    Returns:
+      • report_date  — the dashboard's anchor date (defaults to latest daily_packs row)
+      • plan         — production_plan grouped by line (A/B/C) with item rows
+      • today        — total + per-section actual packs for `report_date`
+      • last_30_days — daily totals (date, packs, n, y) for the trailing 30 days
+      • last_30_days_hours — per-section labor hours per day for productivity trend
+      • productivity — today's per-section p/h with delta vs previous date
+    """
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Anchor: explicit date if given, else latest daily_packs row, else today.
+            if date:
+                try:
+                    anchor = datetime.strptime(date, "%Y-%m-%d").date()
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD") from exc
+            else:
+                cur.execute("SELECT MAX(record_date) AS d FROM daily_packs")
+                row = cur.fetchone() or {}
+                anchor = row.get("d") or datetime.now().date()
+
+            anchor_iso = anchor.isoformat()
+            prev_iso = (anchor - timedelta(days=1)).isoformat()
+            month_start = anchor - timedelta(days=29)
+
+            # Production plan for anchor date, grouped by line.
+            cur.execute(
+                """
+                SELECT line_code, item_name, planned_qty, n_qty, y_qty, combined_qty,
+                       start_time, takt_time, pph_target, required_staff
+                FROM production_plan
+                WHERE record_date = %s
+                ORDER BY line_code, id
+                """,
+                (anchor,),
+            )
+            plan_rows = cur.fetchall() or []
+
+            # Today's actual: total packs + per-section split (n_total = section 1 marker
+            # in 製造予定表 ＮＹ; y_total = section 2 marker — naming is historical).
+            cur.execute(
+                "SELECT number_of_packs, n_total, y_total FROM daily_packs WHERE record_date = %s",
+                (anchor,),
+            )
+            today_pack = cur.fetchone() or {}
+
+            # 30-day trend: pad missing dates with 0 so the chart x-axis stays even.
+            cur.execute(
+                "SELECT record_date, number_of_packs, n_total, y_total FROM daily_packs "
+                "WHERE record_date BETWEEN %s AND %s ORDER BY record_date",
+                (month_start, anchor),
+            )
+            trend_by_date: dict[str, dict] = {}
+            for r in (cur.fetchall() or []):
+                ds = r["record_date"].isoformat() if hasattr(r["record_date"], "isoformat") else str(r["record_date"])
+                trend_by_date[ds] = {
+                    "packs": int(r["number_of_packs"] or 0),
+                    "n": int(r["n_total"] or 0) if r.get("n_total") is not None else None,
+                    "y": int(r["y_total"] or 0) if r.get("y_total") is not None else None,
+                }
+
+            # Per-section labor hours per day, last 30 days (shift_date = report_date - 1
+            # so the hours align with the report dates above). Aggregated server-side
+            # so the dashboard renders a productivity trend without N round-trips.
+            cur.execute(
+                """
+                SELECT DISTINCT ON (personal_code, record_date)
+                       personal_code, record_date, working_hours
+                FROM attendance_records
+                WHERE record_date BETWEEN (%s::date - 1) AND (%s::date - 1)
+                ORDER BY personal_code, record_date, upload_date DESC
+                """,
+                (month_start, anchor),
+            )
+            hours_rows = cur.fetchall() or []
+            cur.execute(
+                "SELECT record_date, headcount, hours_per_person, total_hours "
+                "FROM temp_staff WHERE record_date BETWEEN (%s::date - 1) AND (%s::date - 1)",
+                (month_start, anchor),
+            )
+            temp_rows = cur.fetchall() or []
+
+    # Plan grouping (group AFTER closing the cursor so the connection releases sooner).
+    plan_by_line: dict[str, dict] = {}
+    for r in plan_rows:
+        ln = (r.get("line_code") or "").upper()
+        bucket = plan_by_line.setdefault(ln, {"line_code": ln, "items": [], "total_planned": 0, "item_count": 0})
+        bucket["items"].append(r)
+        bucket["total_planned"] += int(r.get("planned_qty") or 0)
+        bucket["item_count"] += 1
+    plan_lines = [plan_by_line[k] for k in sorted(plan_by_line)]
+    total_planned_all = sum(b["total_planned"] for b in plan_lines)
+
+    # Reuse the gantt productivity computer for today + previous so the dashboard's
+    # per-section p/h, hours, and headcount match the gantt page exactly.
+    productivity_today = None
+    productivity_prev = None
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                _, productivity_today = _gantt_compute_for_date(cur, anchor_iso)
+                _, productivity_prev = _gantt_compute_for_date(cur, prev_iso)
+    except Exception as exc:
+        # Productivity is a nice-to-have — never fail the whole snapshot for it.
+        print(f"[DASHBOARD_SNAPSHOT] productivity compute skipped: {exc}")
+
+    # Per-section delta vs previous day.
+    sections_perf = []
+    today_secs = {s["id"]: s for s in (productivity_today or {}).get("sections", [])}
+    prev_secs = {s["id"]: s for s in (productivity_prev or {}).get("sections", [])}
+    for sid in sorted(today_secs):
+        t = today_secs[sid]
+        p = prev_secs.get(sid, {})
+        today_lp = float(t.get("lp") or 0)
+        prev_lp = float(p.get("lp") or 0)
+        delta_pct = ((today_lp - prev_lp) / prev_lp * 100.0) if prev_lp > 0 else None
+        sections_perf.append({
+            "id": sid,
+            "label": t.get("label"),
+            "lp": today_lp,
+            "lp_prev": prev_lp,
+            "delta_pct": round(delta_pct, 1) if delta_pct is not None else None,
+            "staff_present": t.get("staff_present"),
+            "staff_total": t.get("staff_total"),
+            "total_hours_hhmm": t.get("total_hours_hhmm"),
+        })
+
+    # Aggregate per-section hours per shift_date (then expose them keyed by REPORT
+    # date = shift_date + 1, matching the daily_packs/report-date convention).
+    hours_by_report_date: dict[str, dict[int, float]] = {}
+    for r in hours_rows:
+        code = r["personal_code"]
+        sid = SECTION_OF_CODE.get(code)
+        if sid is None or code in MUTED_CODES and code not in ACTIVE_CODES:
+            continue
+        shift_d = r["record_date"]
+        report_d = (shift_d + timedelta(days=1)).isoformat() if hasattr(shift_d, "isoformat") else None
+        if not report_d:
+            continue
+        hrs = _gantt_wh_to_hours(_gantt_clean_wh(r["working_hours"]))
+        if hrs <= 0:
+            continue
+        hours_by_report_date.setdefault(report_d, {})
+        hours_by_report_date[report_d][sid] = hours_by_report_date[report_d].get(sid, 0.0) + hrs
+    for r in temp_rows:
+        shift_d = r["record_date"]
+        report_d = (shift_d + timedelta(days=1)).isoformat() if hasattr(shift_d, "isoformat") else None
+        if not report_d:
+            continue
+        hpp = float(r["hours_per_person"] or 0)
+        hc = int(r["headcount"] or 0)
+        group_total = float(r["total_hours"] if r["total_hours"] is not None else (hpp * hc))
+        if group_total <= 0:
+            continue
+        # フルキャスト attaches to section 2 (製造２課) per the gantt convention.
+        hours_by_report_date.setdefault(report_d, {})
+        hours_by_report_date[report_d][2] = hours_by_report_date[report_d].get(2, 0.0) + group_total
+
+    # Build padded 30-day series (packs + per-section hours + computed p/h).
+    days_series = []
+    for i in range(30):
+        d = (month_start + timedelta(days=i)).isoformat()
+        rec = trend_by_date.get(d) or {}
+        hours = hours_by_report_date.get(d) or {}
+        sec1_hours = round(hours.get(1, 0.0), 2)
+        sec2_hours = round(hours.get(2, 0.0), 2)
+        total_hours = sec1_hours + sec2_hours
+        packs = rec.get("packs") if rec else 0
+        days_series.append({
+            "date": d,
+            "packs": packs or 0,
+            "n_packs": rec.get("n"),
+            "y_packs": rec.get("y"),
+            "sec1_hours": sec1_hours,
+            "sec2_hours": sec2_hours,
+            "total_hours": round(total_hours, 2),
+            "lp": round(packs / total_hours, 2) if total_hours > 0 and packs else None,
+            "lp_sec1": round((rec.get("n") or 0) / sec1_hours, 2) if sec1_hours > 0 and rec.get("n") else None,
+            "lp_sec2": round((rec.get("y") or 0) / sec2_hours, 2) if sec2_hours > 0 and rec.get("y") else None,
+        })
+
+    today_total = int(today_pack.get("number_of_packs") or 0)
+    today_progress_pct = (today_total / total_planned_all * 100.0) if total_planned_all > 0 else None
+
+    return {
+        "report_date": anchor_iso,
+        "previous_date": prev_iso,
+        "plan": {
+            "lines": plan_lines,
+            "total_planned": total_planned_all,
+        },
+        "today": {
+            "total_packs": today_total,
+            "n_total": int(today_pack.get("n_total") or 0) if today_pack.get("n_total") is not None else None,
+            "y_total": int(today_pack.get("y_total") or 0) if today_pack.get("y_total") is not None else None,
+            "progress_pct": round(today_progress_pct, 1) if today_progress_pct is not None else None,
+        },
+        "last_30_days": days_series,
+        "productivity": {
+            "combined_today": (productivity_today or {}).get("combined") or {},
+            "combined_prev": (productivity_prev or {}).get("combined") or {},
+            "sections": sections_perf,
+        },
+    }
+
+
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
@@ -2452,12 +3361,20 @@ async def health_check():
         with connection.cursor() as cursor:
             cursor.execute("SELECT COUNT(*) FROM upload_batches")
             batch_count = cursor.fetchone()[0]
+    _ag = _agent_status_summary()
     return {
         "status": "healthy",
         "version": "2.0",
         "storage": "postgresql",
         "database": "postgresql",
         "saved_batches": batch_count,
+        "agent": {
+            "online": _ag.get("online", False),
+            "paused": _ag.get("paused", False),
+            "deactivated": _ag.get("paused", False),
+            "last_seen": _ag.get("last_seen"),
+            "last_upload": (_ag.get("last_upload") or {}).get("ts"),
+        },
         "timestamp": datetime.now().isoformat()
     }
 
@@ -2486,20 +3403,18 @@ def _hhmm_to_hours(s: str | None) -> float | None:
 
 @app.get("/api/members/list")
 async def members_list(section: str = "all"):
-    """List employees by section. `section` = "all" | "1" | "2"."""
+    """List employees by section in sections.json order. `section` = "all" | "1" | "2"."""
     sec = section.strip().lower()
     items = []
-    for emp in EMPLOYEE_ROSTER:
-        code = emp.get("employee_code") or emp.get("code")
-        name = emp.get("name") or emp.get("full_name") or ""
-        if not code:
+    for code, sid, label in iter_codes_in_section_order():
+        if sec in ("1", "2") and str(sid) != sec:
             continue
-        sid = SECTION_OF_CODE.get(code)
-        if sec in ("1", "2") and str(sid or "") != sec:
-            continue
-        items.append({"code": code, "name": name, "section_id": sid,
-                      "section_label": SECTION_LABEL_BY_ID.get(sid)})
-    items.sort(key=lambda x: (x["section_id"] or 99, x["name"] or "", x["code"]))
+        items.append({
+            "code": code,
+            "name": name_for_code(code),
+            "section_id": sid,
+            "section_label": label,
+        })
     return {"section": sec, "count": len(items), "items": items}
 
 
@@ -3242,7 +4157,12 @@ async def v1_status_precheck(
       - "upload"          → POST the file to /api/v1/pdf/upload or /api/v1/xlsx/upload
       - "skip"            → do nothing
       - "confirm_replace" → ask the user; if confirmed, upload (server will overwrite)
+      - "paused"          → admin paused ingestion; wait and retry later
     """
+    if INGESTION_PAUSED:
+        return {"action": "paused", "deactivated": True,
+                "reason": "app deactivated by admin — agent should go idle",
+                "type": type, "date": date, "sha256": sha256}
     if type not in ("attendance", "production"):
         raise HTTPException(status_code=400, detail="type must be 'attendance' or 'production'")
     if not re.fullmatch(r"[0-9a-f]{64}", sha256):
@@ -3555,6 +4475,8 @@ async def v1_xlsx_upload(file: UploadFile = File(...), key_label: str = Depends(
     same folder whose filename encodes the same date is removed so only the
     latest copy lives in the watched folder.
     """
+    if INGESTION_PAUSED:
+        raise HTTPException(status_code=423, detail="Server ingestion is paused by admin.")
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="filename must end in .xlsx or .xlsm")
     target_dir = _resolve_packs_target_dir()
@@ -3616,6 +4538,8 @@ async def v1_pdf_upload(file: UploadFile = File(...), key_label: str = Depends(r
     with different naming) so the latest one is the only one parseable by
     the auto-extract endpoint.
     """
+    if INGESTION_PAUSED:
+        raise HTTPException(status_code=423, detail="Server ingestion is paused by admin.")
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="filename must end in .pdf")
     target_dir = _resolve_upload_target_dir()
@@ -3723,6 +4647,8 @@ async def v1_pdf_auto_upload(
     Returns a structured `file_not_available` 404 when the requested date has
     no PDF in the watched folder.
     """
+    if INGESTION_PAUSED:
+        raise HTTPException(status_code=423, detail="Server ingestion is paused by admin.")
     return await attendance_auto_upload(save=save, date=date)
 
 
@@ -3788,6 +4714,160 @@ def _require_admin_session(request: Request) -> None:
     token = request.cookies.get("admin_session")
     if not _admin_session_valid(token):
         raise HTTPException(status_code=401, detail="Admin login required.")
+
+
+# ============================================================================
+# GenbaLink user-facing auth endpoints (separate from /admin).
+# Login form posts here; the page render of /login is served below.
+# ============================================================================
+def _gbl_require_user(request: Request) -> dict:
+    user = _gbl_request_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required.")
+    return user
+
+
+def _gbl_require_admin(request: Request) -> dict:
+    user = _gbl_require_user(request)
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin only.")
+    return user
+
+
+@app.get("/login", response_class=HTMLResponse, include_in_schema=False)
+async def gbl_login_page(request: Request):
+    # Already logged in? Skip the form and bounce to next/.
+    if _gbl_request_user(request) is not None:
+        from fastapi.responses import RedirectResponse
+        nxt = request.query_params.get("next") or "/dashboard"
+        return RedirectResponse(url=nxt, status_code=302)
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.post("/api/auth/login")
+async def gbl_api_login(request: Request, payload: dict = Body(...)):
+    username = str(payload.get("username") or "").strip()
+    password = str(payload.get("password") or "")
+    nxt = str(payload.get("next") or "/dashboard").strip() or "/dashboard"
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password are required.")
+    user = _gbl_find_user(username)
+    if not user or not _gbl_verify_password(password, user.get("password_hash", "")):
+        # Same vague message for both cases — don't leak which usernames exist.
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+    token = _gbl_session_create(user["username"], bool(user.get("is_admin")))
+    # Only allow same-origin redirects to prevent open redirect.
+    if not nxt.startswith("/"):
+        nxt = "/dashboard"
+    resp = JSONResponse({"ok": True, "redirect": nxt, "username": user["username"], "is_admin": bool(user.get("is_admin"))})
+    resp.set_cookie(
+        "gbl_session", token,
+        httponly=True, samesite="lax", max_age=GBL_SESSION_TTL_SECONDS, path="/",
+        # secure=True is set by the proxy when HTTPS is fronted by Nginx; FastAPI
+        # has no easy way to know the fronting scheme reliably, so we leave it
+        # off here and rely on Nginx adding `Secure` on the way out (or the
+        # operator can flip this when HTTPS is live).
+    )
+    return resp
+
+
+@app.post("/api/auth/logout")
+async def gbl_api_logout(request: Request):
+    _gbl_session_revoke(request.cookies.get("gbl_session"))
+    resp = JSONResponse({"ok": True, "redirect": "/login"})
+    resp.delete_cookie("gbl_session", path="/")
+    return resp
+
+
+@app.get("/logout", include_in_schema=False)
+async def gbl_logout_page(request: Request):
+    _gbl_session_revoke(request.cookies.get("gbl_session"))
+    from fastapi.responses import RedirectResponse
+    resp = RedirectResponse(url="/login", status_code=302)
+    resp.delete_cookie("gbl_session", path="/")
+    return resp
+
+
+@app.get("/api/auth/whoami")
+async def gbl_api_whoami(request: Request):
+    user = _gbl_request_user(request)
+    if not user:
+        return {"authenticated": False}
+    return {
+        "authenticated": True,
+        "username": user["username"],
+        "is_admin": bool(user.get("is_admin")),
+        "expires_at": user["expires_at"],
+    }
+
+
+# ----- User management (admin only) -----
+@app.get("/api/auth/users")
+async def gbl_api_users_list(request: Request):
+    _gbl_require_admin(request)
+    return {"users": [
+        {
+            "username": u["username"],
+            "is_admin": bool(u.get("is_admin")),
+            "created_at": u.get("created_at"),
+        } for u in GBL_USERS
+    ]}
+
+
+@app.post("/api/auth/users")
+async def gbl_api_users_create(request: Request, payload: dict = Body(...)):
+    _gbl_require_admin(request)
+    username = str(payload.get("username") or "").strip()
+    password = str(payload.get("password") or "")
+    is_admin = bool(payload.get("is_admin"))
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password required.")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    if not re.match(r"^[A-Za-z0-9_.-]{2,32}$", username):
+        raise HTTPException(status_code=400, detail="Username must be 2–32 chars: letters, digits, _ . -")
+    if _gbl_find_user(username):
+        raise HTTPException(status_code=400, detail=f"User '{username}' already exists.")
+    GBL_USERS.append({
+        "username": username,
+        "password_hash": _gbl_hash_password(password),
+        "is_admin": is_admin,
+        "created_at": datetime.now().isoformat(),
+    })
+    _gbl_save_users(GBL_USERS)
+    return {"ok": True, "username": username}
+
+
+@app.delete("/api/auth/users/{username}")
+async def gbl_api_users_delete(request: Request, username: str):
+    actor = _gbl_require_admin(request)
+    target = _gbl_find_user(username)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if target["username"].lower() == actor["username"].lower():
+        raise HTTPException(status_code=400, detail="Cannot delete your own account.")
+    # Prevent removing the last admin.
+    remaining_admins = [u for u in GBL_USERS if u.get("is_admin") and u["username"].lower() != target["username"].lower()]
+    if target.get("is_admin") and not remaining_admins:
+        raise HTTPException(status_code=400, detail="Cannot remove the last admin.")
+    GBL_USERS[:] = [u for u in GBL_USERS if u["username"].lower() != target["username"].lower()]
+    _gbl_save_users(GBL_USERS)
+    return {"ok": True}
+
+
+@app.post("/api/auth/change-password")
+async def gbl_api_change_password(request: Request, payload: dict = Body(...)):
+    user = _gbl_require_user(request)
+    current = str(payload.get("current_password") or "")
+    new_pw = str(payload.get("new_password") or "")
+    if len(new_pw) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters.")
+    record = _gbl_find_user(user["username"])
+    if not record or not _gbl_verify_password(current, record.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    record["password_hash"] = _gbl_hash_password(new_pw)
+    _gbl_save_users(GBL_USERS)
+    return {"ok": True}
 
 async def _admin_root_impl(request: Request):
     token = request.cookies.get("admin_session")
@@ -3860,6 +4940,664 @@ async def admin_access_log(request: Request, limit: int = 100):
     with _access_lock:
         items = list(_recent_access[-limit:])
     return {"count": len(items), "items": list(reversed(items))}
+
+@app.get("/admin/api/debug-log")
+async def admin_debug_log_state(request: Request, limit: int = 50):
+    """Verbose API debug log: current toggle + last N entries from api_debug.jsonl."""
+    _require_admin_session(request)
+    limit = max(1, min(int(limit or 50), 500))
+    file_size = 0
+    entries: list[dict] = []
+    if API_DEBUG_LOG_PATH.exists():
+        try:
+            file_size = API_DEBUG_LOG_PATH.stat().st_size
+            with API_DEBUG_LOG_PATH.open("r", encoding="utf-8") as fh:
+                tail = fh.readlines()[-limit:]
+            for raw in tail:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    entries.append(json.loads(raw))
+                except Exception:
+                    continue
+        except Exception as exc:
+            return {
+                "enabled": DEBUG_API_LOG_ENABLED,
+                "path": str(API_DEBUG_LOG_PATH),
+                "error": str(exc),
+                "items": [],
+            }
+    return {
+        "enabled": DEBUG_API_LOG_ENABLED,
+        "path": str(API_DEBUG_LOG_PATH),
+        "file_size_bytes": file_size,
+        "count": len(entries),
+        "items": list(reversed(entries)),
+    }
+
+@app.post("/admin/api/debug-log")
+async def admin_debug_log_toggle(request: Request, payload: dict = Body(...)):
+    """Flip the verbose-debug toggle live (no restart). Persists in admin_config.json."""
+    _require_admin_session(request)
+    enabled = bool(payload.get("enabled"))
+    global DEBUG_API_LOG_ENABLED
+    DEBUG_API_LOG_ENABLED = enabled
+    ADMIN_CONFIG["debug_api_log"] = enabled
+    try:
+        _save_json(ADMIN_CONFIG_PATH, ADMIN_CONFIG)
+    except Exception as exc:
+        print(f"[API_DEBUG_LOG] persist failed: {exc}")
+    print(f"[API_DEBUG_LOG] toggled enabled={enabled} via /admin/api/debug-log")
+    return {"enabled": DEBUG_API_LOG_ENABLED}
+
+
+# ---- AutoDoc tab — doctor.py run history -----------------------------------
+# Reads logs/internal_health_logs.log (written every 5h by attendance-doctor.timer)
+# and returns the last N runs parsed into structured sections so the admin UI
+# can show "what doctor did" and highlight problems it auto-solved.
+
+_DOCTOR_LOG_PATH = BASE_DIR / "logs" / "internal_health_logs.log"
+_DOCTOR_CLONE_STATE = BASE_DIR / "logs" / "last_db_clone.json"
+
+def _classify_doctor_line(line: str) -> str:
+    """Bucket a doctor log line by severity."""
+    upper = line.upper()
+    if any(t in upper for t in ("ERROR", "FAILED", "FATAL", "INVALID", "MISSING", "WRONG_TYPE")):
+        return "err"
+    if "WARNING" in upper:
+        return "warn"
+    return "ok"
+
+def _parse_doctor_runs(text: str, limit: int) -> list[dict]:
+    """Split the log into runs and structure each into sections. Newest first."""
+    import re as _re
+    # Each run starts with `=== doctor run TIMESTAMP ===` and ends with `=== end TIMESTAMP ===`.
+    chunks = _re.split(r"^=== doctor run (\S+) ===\s*$", text, flags=_re.MULTILINE)
+    # split() yields [prefix, ts1, body1, ts2, body2, ...]
+    runs: list[dict] = []
+    for i in range(1, len(chunks) - 1, 2):
+        started = chunks[i]
+        body = chunks[i + 1]
+        # body ends with `=== end TIMESTAMP ===`
+        end_match = _re.search(r"^=== end (\S+) ===\s*$", body, flags=_re.MULTILINE)
+        ended = end_match.group(1) if end_match else None
+        if end_match:
+            body = body[: end_match.start()]
+        # Split body into sections by `[section_name]` lines
+        sections: list[dict] = []
+        current: dict | None = None
+        for raw in body.splitlines():
+            if not raw.strip():
+                continue
+            if raw.startswith("[") and raw.endswith("]"):
+                if current is not None:
+                    sections.append(current)
+                current = {"name": raw[1:-1], "lines": [], "status": "ok"}
+                continue
+            if current is None:
+                # lines before the first [section] header (e.g. FATAL traceback)
+                current = {"name": "preamble", "lines": [], "status": "ok"}
+            line = raw.strip()
+            current["lines"].append(line)
+            sev = _classify_doctor_line(line)
+            if sev == "err" or (sev == "warn" and current["status"] != "err"):
+                current["status"] = sev
+        if current is not None:
+            sections.append(current)
+        # Per-run rollup
+        sev_rank = {"ok": 0, "warn": 1, "err": 2}
+        overall = max((s["status"] for s in sections), key=lambda s: sev_rank.get(s, 0), default="ok")
+        # Duration in seconds (best-effort; both are ISO)
+        duration = None
+        try:
+            if ended:
+                duration = int((datetime.fromisoformat(ended) - datetime.fromisoformat(started)).total_seconds())
+        except Exception:
+            pass
+        runs.append({
+            "started_at": started,
+            "ended_at": ended,
+            "duration_seconds": duration,
+            "overall_status": overall,
+            "sections": sections,
+        })
+    runs.reverse()  # newest first
+    return runs[:limit]
+
+@app.get("/admin/api/doctor-runs")
+async def admin_doctor_runs(request: Request, limit: int = 20):
+    """Last N doctor.py runs from internal_health_logs.log, parsed into
+    sections + severity for the AutoDoc admin tab. Also returns the most
+    recent DB-clone state so the UI can show 'last clone' at a glance."""
+    _require_admin_session(request)
+    limit = max(1, min(int(limit or 20), 100))
+    text = ""
+    size = 0
+    if _DOCTOR_LOG_PATH.exists():
+        try:
+            size = _DOCTOR_LOG_PATH.stat().st_size
+            # Only read the tail — 256KB easily covers ~80 runs.
+            with _DOCTOR_LOG_PATH.open("rb") as fh:
+                fh.seek(max(0, size - 256 * 1024))
+                text = fh.read().decode("utf-8", "replace")
+        except Exception as exc:
+            return {"error": str(exc), "log_path": str(_DOCTOR_LOG_PATH), "runs": [], "count": 0}
+    runs = _parse_doctor_runs(text, limit)
+    last_clone = None
+    if _DOCTOR_CLONE_STATE.exists():
+        try:
+            last_clone = json.loads(_DOCTOR_CLONE_STATE.read_text(encoding="utf-8"))
+        except Exception:
+            last_clone = None
+    # Pull the systemd timer's next-run hint (best-effort).
+    next_run = None
+    try:
+        import subprocess as _sp
+        out = _sp.run(
+            ["systemctl", "list-timers", "attendance-doctor.timer", "--no-pager"],
+            capture_output=True, text=True, timeout=5,
+        )
+        for ln in out.stdout.splitlines():
+            if "attendance-doctor.timer" in ln:
+                # Format: NEXT LEFT LAST PASSED UNIT ACTIVATES
+                parts = ln.split()
+                if len(parts) >= 4:
+                    next_run = " ".join(parts[:4])
+                break
+    except Exception:
+        pass
+    return {
+        "log_path": str(_DOCTOR_LOG_PATH),
+        "file_size_bytes": size,
+        "count": len(runs),
+        "next_run": next_run,
+        "last_clone": last_clone,
+        "runs": runs,
+    }
+
+
+def _detect_lan_ip() -> str:
+    """Best-effort primary LAN IPv4 (no traffic sent)."""
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+        finally:
+            s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+    return "192.168.0.2"  # last-known fallback
+
+@app.get("/admin/api/agent-status")
+async def admin_agent_status(request: Request):
+    """Live Desktop Agent status (admin only)."""
+    _require_admin_session(request)
+    return _agent_status_summary()
+
+@app.get("/admin/api/agent-log")
+async def admin_agent_log(request: Request, limit: int = 100):
+    """Tail of the Desktop Agent request log + live status (admin only)."""
+    _require_admin_session(request)
+    limit = max(1, min(int(limit or 100), 1000))
+    file_size = 0
+    entries: list[dict] = []
+    if AGENT_LOG_PATH.exists():
+        try:
+            file_size = AGENT_LOG_PATH.stat().st_size
+            with AGENT_LOG_PATH.open("r", encoding="utf-8") as fh:
+                tail = fh.readlines()[-limit:]
+            for raw in tail:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    entries.append(json.loads(raw))
+                except Exception:
+                    continue
+        except Exception as exc:
+            return {"path": str(AGENT_LOG_PATH), "error": str(exc),
+                    "status": _agent_status_summary(), "items": []}
+    return {
+        "path": str(AGENT_LOG_PATH),
+        "file_size_bytes": file_size,
+        "count": len(entries),
+        "status": _agent_status_summary(),
+        "items": list(reversed(entries)),
+    }
+
+@app.post("/admin/api/ingestion-toggle")
+async def admin_ingestion_toggle(request: Request, payload: dict = Body(...)):
+    """Pause/resume Desktop Agent ingestion (admin). Persists in admin_config.json.
+    Paused → precheck returns {"action":"paused"} and uploads return HTTP 423."""
+    _require_admin_session(request)
+    paused = bool(payload.get("paused"))
+    global INGESTION_PAUSED
+    INGESTION_PAUSED = paused
+    ADMIN_CONFIG["ingestion_paused"] = paused
+    try:
+        _save_json(ADMIN_CONFIG_PATH, ADMIN_CONFIG)
+    except Exception as exc:
+        print(f"[AGENT] persist failed: {exc}")
+    print(f"[AGENT] ingestion_paused={paused} via /admin/api/ingestion-toggle")
+    return {"paused": INGESTION_PAUSED}
+
+# ---- Desktop-app update channel -------------------------------------------
+def _app_update_public() -> dict:
+    m = dict(APP_UPDATE_META)
+    has = bool(m.get("filename"))
+    return {
+        "available": has,
+        "version": m.get("version"),
+        "filename": m.get("filename"),
+        "sha256": m.get("sha256"),
+        "size": m.get("size"),
+        "notes": m.get("notes"),
+        "mandatory": bool(m.get("mandatory", False)),
+        "updated_at": m.get("updated_at"),
+        "download_url": "/api/v1/app-update/download" if has else None,
+    }
+
+@app.get("/api/v1/app-update")
+async def v1_app_update(key_label: str = Depends(require_api_key)):
+    """Desktop agent polls this to learn if a newer app build is published.
+    Compare `version` to the running version; if newer, GET download_url,
+    verify sha256, apply, restart, then report the new X-Agent-Version."""
+    return _app_update_public()
+
+@app.get("/api/v1/app-update/download")
+async def v1_app_update_download(key_label: str = Depends(require_api_key)):
+    """Stream the published desktop-app update file."""
+    fn = APP_UPDATE_META.get("filename")
+    if not fn:
+        raise HTTPException(status_code=404, detail="No app update published.")
+    fp = APP_UPDATE_DIR / fn
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail="Update file missing on server.")
+    return FileResponse(fp, filename=fn, media_type="application/octet-stream")
+
+@app.get("/admin/api/app-update")
+async def admin_app_update_get(request: Request):
+    """Current published update metadata (admin)."""
+    _require_admin_session(request)
+    return _app_update_public()
+
+@app.post("/admin/api/app-update")
+async def admin_app_update_set(
+    request: Request,
+    file: UploadFile | None = File(default=None),
+    version: str = Form(default=""),
+    notes: str = Form(default=""),
+    mandatory: str = Form(default=""),
+    clear: str = Form(default=""),
+    local_filename: str = Form(default=""),
+):
+    """Publish (or clear) the desktop-app update file (admin, multipart).
+
+    Three modes:
+      * clear=1            → unpublish
+      * local_filename=X   → FAST: register a file already in app_updates/
+                             (scp it onto the Pi over LAN — no HTTP upload)
+      * file=<multipart>   → upload (streamed to disk in chunks, hashed live)
+    """
+    _require_admin_session(request)
+    global APP_UPDATE_META
+    if clear.strip().lower() in ("1", "true", "yes", "on"):
+        old = APP_UPDATE_META.get("filename")
+        if old:
+            try: (APP_UPDATE_DIR / old).unlink(missing_ok=True)
+            except Exception as exc: print(f"[APP_UPDATE] unlink failed: {exc}")
+        APP_UPDATE_META = {}
+        _save_json(APP_UPDATE_CONFIG_PATH, APP_UPDATE_META)
+        return {"ok": True, "cleared": True, "update": _app_update_public()}
+    CAP = 300 * 1024 * 1024
+
+    def _finalize(name: str, sha: str, size: int, registered: bool):
+        global APP_UPDATE_META
+        prev = APP_UPDATE_META.get("filename")
+        if prev and prev != name:
+            try: (APP_UPDATE_DIR / prev).unlink(missing_ok=True)
+            except Exception: pass
+        APP_UPDATE_META = {
+            "filename": name,
+            "version": version.strip() or datetime.now().strftime("%Y.%m.%d-%H%M"),
+            "notes": notes.strip()[:1000],
+            "mandatory": mandatory.strip().lower() in ("1", "true", "yes", "on"),
+            "sha256": sha, "size": size,
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        _save_json(APP_UPDATE_CONFIG_PATH, APP_UPDATE_META)
+        print(f"[APP_UPDATE] {'registered' if registered else 'published'} "
+              f"{name} v{APP_UPDATE_META['version']} ({size} bytes)")
+        return {"ok": True, "registered": registered, "update": _app_update_public()}
+
+    # ---- FAST PATH: register a file already on the server ------------------
+    # Admin scp's the (big) installer into app_updates/ over LAN, then just
+    # registers it here — zero HTTP upload, no Cloudflare/nginx body limit.
+    if local_filename.strip():
+        name = Path(local_filename.strip()).name
+        fp = APP_UPDATE_DIR / name
+        if not fp.is_file():
+            raise HTTPException(status_code=404,
+                detail=f"'{name}' not found in app_updates/ — scp it onto the Pi first.")
+        h = hashlib.sha256(); size = 0
+        with fp.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                h.update(chunk); size += len(chunk)
+        return _finalize(name, h.hexdigest(), size, registered=True)
+
+    # ---- HTTP upload: stream to disk in chunks, hash live (no full RAM) ----
+    if file is None or not file.filename:
+        raise HTTPException(status_code=400, detail="No file or local_filename provided.")
+    safe_name = Path(file.filename).name
+    tmp = APP_UPDATE_DIR / (safe_name + ".part")
+    h = hashlib.sha256(); size = 0
+    try:
+        with tmp.open("wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > CAP:
+                    raise HTTPException(status_code=413, detail="file too large (>300 MB)")
+                h.update(chunk); out.write(chunk)
+    except HTTPException:
+        try: tmp.unlink(missing_ok=True)
+        except Exception: pass
+        raise
+    except Exception as exc:
+        try: tmp.unlink(missing_ok=True)
+        except Exception: pass
+        raise HTTPException(status_code=500, detail=f"upload write failed: {exc}")
+    if size == 0:
+        try: tmp.unlink(missing_ok=True)
+        except Exception: pass
+        raise HTTPException(status_code=400, detail="Empty file.")
+    tmp.replace(APP_UPDATE_DIR / safe_name)
+    return _finalize(safe_name, h.hexdigest(), size, registered=False)
+
+@app.get("/admin/api/app-update/local-files")
+async def admin_app_update_local_files(request: Request):
+    """List files currently sitting in app_updates/ (for the fast register path)."""
+    _require_admin_session(request)
+    out = []
+    try:
+        for p in sorted(APP_UPDATE_DIR.iterdir()):
+            if p.is_file() and not p.name.endswith(".part"):
+                st = p.stat()
+                out.append({"name": p.name, "size": st.st_size,
+                            "mtime": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")})
+    except Exception as exc:
+        return {"dir": str(APP_UPDATE_DIR), "error": str(exc), "files": []}
+    return {"dir": str(APP_UPDATE_DIR), "files": out}
+
+def _ip_is_lan(ip: str) -> bool:
+    """True only for RFC1918 / loopback — the LAN uploader must not be usable
+    through the public Cloudflare tunnel."""
+    if not ip:
+        return False
+    ip = ip.strip()
+    if ip in ("127.0.0.1", "::1", "localhost"):
+        return True
+    if ip.startswith(("192.168.", "10.")):
+        return True
+    if ip.startswith("172."):
+        try:
+            return 16 <= int(ip.split(".")[1]) <= 31
+        except Exception:
+            return False
+    return False
+
+_LAN_UPLOAD_HTML = """<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>LAN App Update Upload — GENBA FMS</title>
+<style>
+:root{--bg:#0f1720;--card:#16212e;--line:#27384a;--ink:#e7eef6;--mut:#8aa0b4;--acc:#0d9488}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);
+font:15px/1.5 "Noto Sans JP",system-ui,Segoe UI,sans-serif;display:grid;place-items:center;min-height:100vh;padding:1rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:1.4rem 1.5rem;width:min(560px,100%)}
+h1{font-size:1.15rem;margin:.1rem 0 .2rem} .sub{color:var(--mut);font-size:.83rem;margin-bottom:1.1rem}
+label{display:block;font-size:.78rem;color:var(--mut);margin:.7rem 0 .25rem}
+input[type=text],input[type=password]{width:100%;padding:.55rem .65rem;background:#0f1925;border:1px solid var(--line);
+color:inherit;border-radius:8px}
+#drop{margin-top:.3rem;border:2px dashed var(--line);border-radius:10px;padding:1.1rem;text-align:center;color:var(--mut);cursor:pointer}
+#drop.hot{border-color:var(--acc);color:var(--ink)}
+.row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:.8rem}
+button{font:inherit;font-weight:700;padding:.6rem 1.1rem;border:0;border-radius:9px;cursor:pointer;
+background:linear-gradient(135deg,#0d9488,#0b6f58);color:#fff}
+button.lang{padding:.3rem .65rem;font-size:.72rem;background:transparent;border:1px solid var(--line);color:var(--mut)}
+button.lang:hover{color:var(--ink);border-color:var(--acc)}
+button:disabled{opacity:.6;cursor:wait}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}
+.bar{height:10px;background:#0f1925;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-top:.9rem;display:none}
+.bar>i{display:block;height:100%;width:0;background:var(--acc);transition:width .15s}
+.msg{margin-top:.8rem;font-size:.85rem;white-space:pre-wrap;word-break:break-word}
+.ok{color:#34d399}.err{color:#f87171} code{background:#0f1925;padding:.05rem .35rem;border-radius:4px}
+</style>
+<link rel=preconnect href="https://fonts.googleapis.com">
+<link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel=stylesheet>
+</head><body><form class=card id=f onsubmit="return false">
+<div class=head>
+  <div>
+    <h1 data-i18n=title>⚡ LAN App-Update Upload</h1>
+    <div class=sub data-i18n=sub>Direct to the Pi over the local network — bypasses the Cloudflare 100&nbsp;MB limit. Big installers OK (≤300&nbsp;MB).</div>
+  </div>
+  <button type=button class=lang id=lang>日本語</button>
+</div>
+<label data-i18n=l_pw>Admin password</label><input type=password id=pw autocomplete=current-password>
+<label data-i18n=l_file>Update file</label>
+<div id=drop data-i18n=drop>Drop file here, or click to choose<input type=file id=file hidden></div>
+<div id=fname class=sub style="margin:.4rem 0 0"></div>
+<div class=row>
+<div style="flex:1;min-width:160px"><label data-i18n=l_ver>Version</label><input type=text id=ver placeholder="e.g. 2.4.14" data-i18n-ph=ph_ver></div>
+<div style="flex:2;min-width:180px"><label data-i18n=l_notes>Notes (optional)</label><input type=text id=notes></div>
+<label style="display:flex;align-items:center;gap:.35rem;margin-top:1.2rem"><input type=checkbox id=mand> <span data-i18n=l_mand>mandatory</span></label>
+</div>
+<div class=row><button id=go data-i18n=btn_go>Upload &amp; publish</button>
+<span class=sub id=hint data-i18n=hint>file is auto-published when upload completes</span></div>
+<div class=bar id=bar><i id=bari></i></div>
+<div class=msg id=msg></div>
+</form><script>
+var T={
+ en:{title:'⚡ LAN App-Update Upload',
+     sub:'Direct to the Pi over the local network — bypasses the Cloudflare 100\\u00a0MB limit. Big installers OK (≤300\\u00a0MB).',
+     l_pw:'Admin password', l_file:'Update file',
+     drop:'Drop file here, or click to choose',
+     l_ver:'Version', ph_ver:'e.g. 2.4.14',
+     l_notes:'Notes (optional)', l_mand:'mandatory',
+     btn_go:'Upload & publish',
+     hint:'file is auto-published when upload completes',
+     need_pw:'Enter the admin password.',
+     need_file:'Choose a file.',
+     auth:'Authenticating…',
+     login_fail:'Login failed (wrong password?).',
+     login_err:'Login error: ',
+     uploading:'Uploading…',
+     processing:' — processing on server…',
+     published:'✅ Published: ',
+     failed:'❌ Failed: HTTP ',
+     net_err:'❌ Network error during upload.',
+     lang_btn:'日本語'},
+ ja:{title:'⚡ LAN アプリ更新アップロード',
+     sub:'ローカルネットワーク経由でPiへ直接アップロード — Cloudflareの100\\u00a0MB制限を回避します。大きなインストーラー（最大300\\u00a0MB）にも対応。',
+     l_pw:'管理者パスワード', l_file:'更新ファイル',
+     drop:'ここにファイルをドロップ、またはクリックして選択',
+     l_ver:'バージョン', ph_ver:'例: 2.4.14',
+     l_notes:'メモ（任意）', l_mand:'強制更新',
+     btn_go:'アップロードして公開',
+     hint:'アップロード完了後、自動で公開されます',
+     need_pw:'管理者パスワードを入力してください。',
+     need_file:'ファイルを選択してください。',
+     auth:'認証中…',
+     login_fail:'ログインに失敗しました（パスワードが違いますか？）',
+     login_err:'ログインエラー: ',
+     uploading:'アップロード中…',
+     processing:' — サーバーで処理中…',
+     published:'✅ 公開しました: ',
+     failed:'❌ 失敗しました: HTTP ',
+     net_err:'❌ アップロード中にネットワークエラーが発生しました。',
+     lang_btn:'English'}
+};
+var LANG=(localStorage.getItem('lan_lang')||(navigator.language&&navigator.language.indexOf('ja')===0?'ja':'en'));
+function t(k){return (T[LANG]&&T[LANG][k])||T.en[k]||k}
+function applyLang(){
+ document.documentElement.lang=LANG;
+ document.querySelectorAll('[data-i18n]').forEach(function(el){
+   var k=el.getAttribute('data-i18n'); var v=t(k);
+   if(el.id==='drop'){ el.firstChild?(el.firstChild.nodeValue=v):(el.textContent=v); }
+   else{ el.textContent=v; }
+ });
+ document.querySelectorAll('[data-i18n-ph]').forEach(function(el){
+   el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+ });
+ document.getElementById('lang').textContent=t('lang_btn');
+}
+document.getElementById('lang').onclick=function(){LANG=(LANG==='en'?'ja':'en');localStorage.setItem('lan_lang',LANG);applyLang();};
+applyLang();
+
+var F=document.getElementById('file'),D=document.getElementById('drop'),M=document.getElementById('msg'),
+B=document.getElementById('bar'),BI=document.getElementById('bari'),G=document.getElementById('go'),
+FN=document.getElementById('fname');
+D.onclick=function(){F.click()};
+F.onchange=function(){FN.textContent=F.files[0]?(F.files[0].name+'  ('+(F.files[0].size/1048576).toFixed(1)+' MB)'):''};
+['dragover','dragenter'].forEach(function(e){D.addEventListener(e,function(ev){ev.preventDefault();D.classList.add('hot')})});
+['dragleave','drop'].forEach(function(e){D.addEventListener(e,function(ev){ev.preventDefault();D.classList.remove('hot')})});
+D.addEventListener('drop',function(ev){if(ev.dataTransfer.files[0]){F.files=ev.dataTransfer.files;F.onchange()}});
+function say(s,c){M.textContent=s;M.className='msg '+(c||'')}
+G.onclick=async function(){
+ var pw=document.getElementById('pw').value, f=F.files[0];
+ if(!pw){say(t('need_pw'),'err');return}
+ if(!f){say(t('need_file'),'err');return}
+ G.disabled=true; say(t('auth'));
+ try{
+  var lr=await fetch('/admin/login',{method:'POST',credentials:'same-origin',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'password='+encodeURIComponent(pw)});
+  if(!lr.ok){say(t('login_fail'),'err');G.disabled=false;return}
+ }catch(e){say(t('login_err')+e,'err');G.disabled=false;return}
+ var fd=new FormData();fd.append('file',f);fd.append('version',document.getElementById('ver').value.trim());
+ fd.append('notes',document.getElementById('notes').value.trim());
+ fd.append('mandatory',document.getElementById('mand').checked?'1':'0');
+ B.style.display='block';BI.style.width='0';say(t('uploading'));
+ var x=new XMLHttpRequest();x.open('POST','/admin/api/app-update',true);x.withCredentials=true;
+ x.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);
+   BI.style.width=p+'%';say(t('uploading')+' '+p+'%'+(p>=100?t('processing'):''))}};
+ x.onload=function(){G.disabled=false;
+   if(x.status>=200&&x.status<300){var j={};try{j=JSON.parse(x.responseText)}catch(_){}
+     var u=(j&&j.update)||{};BI.style.width='100%';
+     say(t('published')+(u.filename||'')+'  v'+(u.version||'')+'\\nsha256 '+(u.sha256||'').slice(0,16)+'…  '+
+       (((u.size||0)/1048576).toFixed(1))+' MB','ok')}
+   else{say(t('failed')+x.status+'\\n'+x.responseText.slice(0,300),'err')}};
+ x.onerror=function(){G.disabled=false;say(t('net_err'),'err')};
+ x.send(fd);
+};
+</script></body></html>"""
+
+@app.get("/lan-upload", response_class=HTMLResponse, include_in_schema=False)
+async def lan_upload_page(request: Request):
+    """LAN-only GUI to push a big app-update file straight to the Pi
+    (bypasses the Cloudflare body-size cap). RFC1918/loopback clients only."""
+    # Any Cloudflare signature ⇒ it arrived via the public tunnel ⇒ deny
+    # (cloudflared reaches nginx from 127.0.0.1, so an IP check alone can't
+    # distinguish tunnel traffic — these headers can).
+    if request.headers.get("cf-connecting-ip") or request.headers.get("cf-ray") \
+       or request.headers.get("cf-ipcountry"):
+        return HTMLResponse(
+            "<h2>LAN only</h2><p>This uploader is not available over the public "
+            "internet. Open it on the Pi's LAN address, e.g. "
+            "<code>http://192.168.0.2/lan-upload</code>.</p>",
+            status_code=403,
+        )
+    ip = (request.headers.get("x-real-ip")
+          or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+          or (request.client.host if request.client else ""))
+    if not _ip_is_lan(ip):
+        return HTMLResponse(
+            "<h2>LAN only</h2><p>This uploader is reachable only from the local "
+            "network (you came from <code>%s</code>). Use it on the Pi's LAN "
+            "address, e.g. <code>http://192.168.0.2/lan-upload</code>.</p>" % (ip or "?"),
+            status_code=403,
+        )
+    return HTMLResponse(_LAN_UPLOAD_HTML)
+
+@app.get("/admin/agent-spec")
+async def admin_agent_spec(request: Request):
+    """Serve the desktop-agent integration spec (Markdown) for admins."""
+    _require_admin_session(request)
+    if not DESKTOP_SPEC_PATH.exists():
+        raise HTTPException(status_code=404, detail="Spec file not found.")
+    return PlainTextResponse(
+        DESKTOP_SPEC_PATH.read_text(encoding="utf-8"),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+@app.get("/admin/partner-spec")
+async def admin_partner_spec(request: Request):
+    """Serve the partner-facing API doc (Markdown) for admins."""
+    _require_admin_session(request)
+    if not PARTNER_SPEC_PATH.exists():
+        raise HTTPException(status_code=404, detail="Spec file not found.")
+    return PlainTextResponse(
+        PARTNER_SPEC_PATH.read_text(encoding="utf-8"),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+@app.get("/admin/api/partner-status")
+async def admin_partner_status(request: Request):
+    _require_admin_session(request)
+    return _partner_status()
+
+@app.get("/admin/api/partner-log")
+async def admin_partner_log(request: Request, limit: int = 100):
+    _require_admin_session(request)
+    return _partner_log_tail(limit)
+
+@app.post("/admin/api/partner-enable")
+async def admin_partner_enable(request: Request, payload: dict = Body(...)):
+    _require_admin_session(request)
+    return _partner_set_enabled(bool(payload.get("enabled")))
+
+@app.post("/admin/api/partner-add")
+async def admin_partner_add(request: Request, payload: dict = Body(...)):
+    _require_admin_session(request)
+    name = (payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    ips = payload.get("ip_allowlist") or []
+    if isinstance(ips, str):
+        ips = [s for s in ips.replace(",", " ").split() if s]
+    return _partner_add(name, int(payload.get("rate_per_min") or 60), ips,
+                        int(payload.get("monthly_quota") or 0))
+
+@app.post("/admin/api/partner-update")
+async def admin_partner_update(request: Request, payload: dict = Body(...)):
+    _require_admin_session(request)
+    pid = (payload.get("id") or "").strip()
+    if not pid:
+        raise HTTPException(status_code=400, detail="id required")
+    ips = payload.get("ip_allowlist")
+    if isinstance(ips, str):
+        ips = [s for s in ips.replace(",", " ").split() if s]
+    return _partner_update(
+        pid,
+        disabled=payload.get("disabled"),
+        rate_per_min=payload.get("rate_per_min"),
+        ip_allowlist=ips,
+        monthly_quota=payload.get("monthly_quota"),
+    )
+
+@app.post("/admin/api/partner-revoke")
+async def admin_partner_revoke(request: Request, payload: dict = Body(...)):
+    _require_admin_session(request)
+    pid = (payload.get("id") or "").strip()
+    if not pid:
+        raise HTTPException(status_code=400, detail="id required")
+    return _partner_revoke(pid)
 
 @app.get("/admin/api/api-status")
 async def admin_api_status(request: Request, limit: int = 200):
@@ -5019,6 +6757,44 @@ async def upsert_daily_packs(payload: dict = Body(...)):
         "number_of_packs": saved[0],
         "updated_at": saved[1].isoformat() if saved[1] else None,
         "saved": True,
+    }
+
+
+@app.get("/api/daily-packs/{record_date}/history")
+async def daily_packs_history(record_date: str, limit: int = 50):
+    """Change history for one date's pack count. Powered by the
+    daily_packs_audit_trigger postgres trigger; one row per change.
+    Newest first.
+
+    Session-gated on GenbaLink hosts (path does not start with any
+    GBL_PUBLIC_PREFIXES entry — falls through to the cookie check)."""
+    try:
+        parsed_date = datetime.strptime(record_date, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="record_date must be YYYY-MM-DD") from exc
+    limit = max(1, min(int(limit or 50), 500))
+    with get_db_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT id, action, old_packs, new_packs, old_note, new_note,
+                       changed_at, changed_by, source_hint
+                FROM daily_packs_history
+                WHERE record_date = %s
+                ORDER BY changed_at DESC, id DESC
+                LIMIT %s
+                """,
+                (parsed_date, limit),
+            )
+            rows = cursor.fetchall()
+    # Normalise timestamps for JSON
+    for r in rows:
+        if r.get("changed_at") and hasattr(r["changed_at"], "isoformat"):
+            r["changed_at"] = r["changed_at"].isoformat(timespec="seconds")
+    return {
+        "record_date": record_date,
+        "count": len(rows),
+        "history": rows,
     }
 
 

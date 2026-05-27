@@ -1,11 +1,619 @@
 # Progress & Bug Status — Attendance App
 # 進捗・不具合対応状況 — 勤怠アプリ
 
-**Date / 日付:** 2026-05-06
+**Date / 日付:** 2026-05-27
 
-**Version / バージョン:** 4.0 (stable, tagged 2026-05-06)
+**Version / バージョン:** 4.1 (auth subsystem retained; brand text rolled back to V3 Attendance Console; public landing page added for genbafms.com)
 
-**Latest update / 最新更新 (2026-05-06 evening — Report URL now pairs attendance + packs correctly)**
+**Latest update / 最新更新 (2026-05-27 — パック数の変更履歴を残せるようにした／アップロード元の実 IP を記録するようにした / Pack-count change history is now recorded; the real client IP behind the Cloudflare Tunnel is now captured)**
+
+「今日のパック数が誰かに書き換わったのに、いつ誰が変えたのか分からない」
+状態を解消するため、**パック数の変更履歴を自動で残す仕組み** を追加しました。
+あわせて、PC からの自動アップロードが **全部 `::1`（ローカル）に見えていた**
+問題（クラウドフレア・トンネル経由のため、サーバーから見ると常に
+ローカルからのアクセスに見える）を直して、**本当のアップロード元 PC の
+IP アドレス** が記録されるようにしました。
+
+The "today's pack count changed but no record of who/when" gap has been
+closed: **every change to a date's pack count is now automatically
+logged**. Separately, **the real client IP** of Desktop-Agent uploads
+(which was previously always shown as `::1` because the Cloudflare
+Tunnel exits onto the Pi's loopback) is now captured correctly, so
+upload sources can be traced.
+
+**Issue / 問題:**
+
+- 今日のパック数が `12,049` に設定されていたが、誰がどの時点で
+  入れたのか、システムの中に履歴が残っていなかった。
+- Today's pack count was set to `12,049`, but there was no history
+  in the system showing when or by whom.
+- PC のデスクトップ・アプリ (`watch.js`) が自動アップロードしている
+  記録は残っているものの、IP がすべて `::1`（ローカル）と表示されて
+  いて、どの PC から来たのか分からなかった。
+- The Desktop Agent (`watch.js`) auto-upload entries all showed
+  IP `::1` (localhost), so the source PC could not be identified.
+
+**Resolution / 対応:**
+
+- データベースに **`daily_packs_history`（変更履歴テーブル）** を追加し、
+  パック数が書き込まれる **全ての経路** で履歴が自動的に残るように
+  トリガーを仕掛けました。既存の日付については「初期スナップショット」
+  として 1 行ずつ履歴を挿入してあります（139 件）。
+- A new **`daily_packs_history` table** was added with a Postgres
+  trigger that fires on **every** code path that writes to
+  `daily_packs`. For all existing dates, a single "BOOTSTRAP"
+  snapshot row was inserted as the baseline (139 rows total).
+- 履歴は **`GET /api/daily-packs/{日付}/history`** で取れます。
+  最新順に、旧値・新値・変更時刻・備考が並びます。社内ログイン必須。
+- The history is exposed at **`GET /api/daily-packs/{date}/history`**
+  — newest-first list with old value, new value, timestamp, note.
+  Requires internal login.
+- 動作確認: 今日のパック数を 12,049 → 12,549 → 12,049 と動かしたところ、
+  履歴に **3 行** (BOOTSTRAP + UPDATE + UPDATE) が正しく残ることを確認。
+- Verified: cycling today's pack count 12,049 → 12,549 → 12,049
+  produces **3 history rows** (BOOTSTRAP + UPDATE + UPDATE) with
+  correct old / new values and timestamps.
+- 「アップロード元 PC が分からない」問題は、Cloudflare の
+  `CF-Connecting-IP` ヘッダを読むようにして解決しました。次回以降の
+  デスクトップ・アプリのアップロードは、本当の PC の IP が
+  `agent_requests.jsonl` に残ります。
+- The IP-attribution gap was closed by reading the Cloudflare
+  `CF-Connecting-IP` header. From the next Desktop-Agent upload
+  onward, the real source PC IP is recorded in
+  `agent_requests.jsonl`. (Past upload entries cannot be retroactively
+  filled — Cloudflare's dashboard logs are the source of truth for
+  historical IPs.)
+
+---
+
+**Previous update / 前回更新 (2026-05-26 #3 — モバイル勤怠／サマリーで「データ読み込めない」がまだ残っていた問題を完全修正 / Fully fixed the leftover "data won't load" on mobile attendance + summary)**
+
+直前の修正で「データ取得 API」のアクセス制限は外したのに、それでも
+モバイルレポート (`/m/report`) と モバイルサマリー (`/m/summary`) の
+**データ部分が空のまま** という報告を受けて追加で調査しました。
+**ページ側の JavaScript** が API のアドレスを **間違って組み立てていた**
+ことが原因でした。修正後、両ページとも数字・グラフ・人員リストすべて
+表示されることを確認しています。
+
+The previous fix opened up the data API access controls, but the
+**data section was still blank** on `/m/report` and `/m/summary`.
+Root cause: the **page-side JavaScript** was **assembling the wrong API
+URLs**. After the fix, both pages display all numbers, charts, and
+member lists correctly.
+
+**Issue / 問題:**
+
+- 旧ドメイン (`rnd.asiakawaii.com/attendance/m/...`) では動いていた
+  ページが、新ドメイン (`link.genbafms.com/m/...`) では「データ読み込み
+  失敗」になっていた。
+- The pages used to work on the old domain
+  (`rnd.asiakawaii.com/attendance/m/...`) but on the new domain
+  (`link.genbafms.com/m/...`) they showed "failed to load data".
+
+**Resolution / 対応:**
+
+- ページ内のアドレス組み立てロジックが「**先頭に `/attendance/`
+  が必ず付く**」前提で書かれていたため、`/attendance/` のない新URLでは
+  おかしな URL を作って 404 を引いていました。先頭の必須を外して、
+  どちらの URL でも正しく動くように修正しました。
+- The page's URL-assembling logic assumed the path **must always start
+  with `/attendance/`**. On URLs without that prefix, it built broken
+  URLs that 404'd. The "must start with" requirement was removed so
+  both URL styles now work correctly.
+- 動作確認: 旧 URL (`rnd.asiakawaii.com/attendance/m/...`)、新 URL
+  (`link.genbafms.com/m/...`)、デスクトップ URL (`/summary`, `/gantt`)
+  の **4 通りすべて** で数字とグラフが揃って表示されることを確認。
+- Verified across all 4 URL shapes (legacy attendance, new bare,
+  desktop summary, desktop gantt) — every variant now renders numbers
+  and charts correctly.
+
+---
+
+**Previous update / 前回更新 (2026-05-26 — LINE リンクをモバイルビューアに戻し、サマリーが「データ読み込めない」問題を修正 / Reverted LINE link to the mobile viewer, fixed "data won't load" on the summary)**
+
+LINE で届く勤怠カードのボタンを、シンプルな **モバイルビューア (`/m/report`)** に
+戻しました。ログイン・パスワード・署名つき URL は一切なし — タップすれば
+そのまま開きます。あわせて、サマリーレポートで「ページは表示されるが
+データが入ってこない」問題を修正しました。
+
+The LINE attendance card button is back to the simple **mobile viewer
+(`/m/report`)** — no login, no password, no signed URL. One tap opens.
+At the same time, the summary report's "page shows but data won't load"
+problem has been fixed.
+
+**Issue / 問題:**
+
+- 数時間前に試した「署名つき PDF ページ」の方式が、現場で使うには
+  ちょっと回りくどかった。シンプルにモバイルビューアで見られれば十分。
+- The "signed PDF page" approach tried earlier today was unnecessarily
+  complex for daily use. The simple mobile viewer is enough.
+- サマリーレポート (`/m/summary`) を開くと **ページは出てくるが
+  数字が一切表示されない** という現象があった。同じ症状は勤怠
+  レポート (`/m/report`) でも一部に起きていた。
+- The summary report (`/m/summary`) was opening the page **but
+  showing no numbers at all**. The same issue affected parts of the
+  attendance report (`/m/report`) too.
+
+**Resolution / 対応:**
+
+- LINE カードのリンクを **`/m/report`（勤怠）／`/m/summary`（サマリー）**
+  に戻しました。両方とも今までどおり、ログイン不要で開きます。
+- The LINE card link is back to **`/m/report` (attendance) /
+  `/m/summary` (summary)**. Both open without login as before.
+- 「ページは出るがデータが入ってこない」の原因は、ページ本体は
+  公開設定だったのに、ページが裏で呼んでいる **データ取得 API** だけが
+  ログインの壁にひっかかっていたことでした。読み取り専用のデータ
+  API を 5 系統 (gantt / members / 日報アイテム / 生産性 /
+  m-summary) **公開許可リストに追加** して、モバイルページから
+  ちゃんと読めるようにしました。
+- The "page shows but data doesn't load" issue was caused by the page
+  itself being public, while the **data APIs** it calls in the
+  background were still hitting the login wall. Five read-only data
+  API families (gantt / members / daily-pack items / productivity /
+  m-summary) have been **added to the public allow-list** so the
+  mobile pages can fetch their data.
+- 書き込み系の API（データを変更する API）はこれまで通り **ログイン
+  必須** です。読み取り専用パスだけを開けています。
+- Write APIs (those that change data) still **require login** as
+  before. Only read-only paths have been opened.
+- 動作確認済み: モバイル勤怠／モバイルサマリー両ページで、表・グラフ・
+  人員・生産性数値がすべて入って表示されることを確認。書き込み系の
+  API はログインなしだと 401 で拒否されることも確認。
+- Verified: both the mobile attendance and mobile summary pages load
+  with their tables, charts, member lists, and productivity numbers
+  populated. Write APIs without a login session still return 401 as
+  expected.
+
+---
+
+**Previous update / 前回更新 (2026-05-26 — LINE の勤怠ボタンを「印刷用 PDF ページ」に切り替え / LINE attendance button now opens the print-ready PDF page)**
+
+LINE で届く勤怠カードの「View Report」ボタンの飛び先を、これまでの
+モバイル簡易ビューア (`/m/report`) から **印刷用 PDF ページ (`/pdf/gantt`)** に
+切り替えました。受け取った人がタップすると、そのまま **印刷** または
+**PDF ダウンロード** が一発でできます (B3 縦サイズの最終フォーマットです)。
+
+The "View Report" button in LINE attendance cards now opens the
+**print-ready PDF page (`/pdf/gantt`)** instead of the simple mobile
+viewer. Tapping the card gives recipients a one-tap **Print** or **PDF
+Download** in the final B3-portrait format.
+
+**Issue / 問題:**
+
+- LINE のカードボタンをタップすると、表示は出るが「そのまま印刷したい」
+  「PDF で残したい」場合に、もう一度メニューを辿る必要があった。
+- The LINE card opened the mobile viewer fine, but anyone wanting to
+  print it or save a PDF had to dig through menus afterwards.
+- 一方で、`/pdf/gantt` ページは社内ログインが必要なため、LINE 受信者が
+  そのまま開くと **401 認証エラー** になっていた。
+- The `/pdf/gantt` page itself requires the internal login, so LINE
+  recipients who tried to open it directly got a **401 auth error**.
+
+**Resolution / 対応:**
+
+- 勤怠カードのボタンのリンクを **「署名つきの一時 URL」** にしました。
+  リンクには日付・有効期限・署名が埋め込まれていて、サーバー側で正しさを
+  確認できた場合にだけ開けます。期限は **7 日間** です (LINE 受信者は
+  ほぼ当日読むので十分なバッファ)。
+- The attendance card button now sends a **signed, time-limited URL**
+  carrying date, expiry, and an HMAC signature. The server verifies it
+  on each open. TTL is **7 days** (LINE messages are usually read
+  same-day, so this is comfortable headroom).
+- 期限切れ・改ざん・違う日付のリンクをタップした場合は **401** が返り、
+  従来通り社内ログインを求められます。社外公開はされていません。
+- An expired / tampered / wrong-date link returns **401** and still
+  requires the internal login. The PDF page is not made world-readable.
+- 月次サマリーカードのリンクは **これまで通りモバイルビューア
+  (`/m/summary`)** のままです。サマリーはタップ即グラフを見たい使い方が
+  多いので、PDF よりモバイルのほうが使いやすいという判断です。
+- The **Monthly Summary** card link stays on the mobile viewer
+  (`/m/summary`) — the summary is read most often as a quick glance,
+  where the mobile view fits better than a PDF.
+- 動作確認済み: 正しい署名 → 200 / 改ざん → 401 / 期限切れ → 401 /
+  違う日付の署名 → 401 / 署名なし → 401。
+- Verified: correct signature → 200, tampered → 401, expired → 401,
+  wrong-date signature → 401, no token → 401.
+
+---
+
+**Previous update / 前回更新 (2026-05-26 — Doctor 自動診断に自己修復モードを追加、データベース自動バックアップ、管理画面 AutoDoc タブを公開 / Doctor self-healing enabled, automatic DB backups, AutoDoc admin tab added)**
+
+5 時間ごとに自動で走る点検プログラム (`Doctor`) を強化しました。これまでは
+「問題を検出する」までで止まっていましたが、今回から **検出した問題を
+自動で直す** ようになります。あわせて、管理画面に **AutoDoc** タブを追加し、
+Doctor が何をしたか・何を直したかを一覧で見られるようにしました。
+
+The 5-hour automatic health-check program (`Doctor`) has been upgraded.
+Until now it only **detected** problems; from now on it also
+**automatically fixes** what it can. A new **AutoDoc** tab has been added
+to the admin panel so you can see at a glance what Doctor checked, what
+it auto-fixed, and what failed.
+
+**Issue / 問題:**
+
+- 夜勤用の Excel ファイル (`夜勤用日報….xlsm`) を共有フォルダーに置いても、
+  たまにデータベースに保存されない日があった。Doctor は「未処理ファイルが
+  2 つあります」と報告しつつ、自分では直せずに放置していた。
+- The night-shift Excel files sometimes sat in the shared folder without
+  making it into the database. Doctor noticed "2 unprocessed files" but
+  could not act on them.
+- データベースのコピー (バックアップ) が SD カードや USB ペンドライブに
+  自動では取れておらず、手動操作に頼っていた。
+- Database copies to the SD card and USB pen drive were only happening
+  manually, with no automated safety net.
+- LINE で届くレポートのボタンをタップしても、404 エラーになって
+  開けない状態だった（古い `rnd.asiakawaii.com` リンクが切れていたため）。
+- LINE message buttons were 404-ing when tapped — the old
+  `rnd.asiakawaii.com` link had stopped working.
+
+**Resolution / 対応:**
+
+- Doctor に専用の "doctor キー" を発行し、5 時間ごとに未処理 Excel を
+  検出した瞬間に **「読み込み → 保存」までを自分で完走** させるように
+  しました。今朝の自動実行で、引っかかっていた 2 ファイル (5/24 と 5/26)
+  が無事データベースに入りました。
+- A dedicated "doctor key" is now issued, and Doctor runs the full
+  **extract → save** flow on stuck Excel files within 5 hours. This
+  morning's run already cleared the two stuck files (May 24 and May 26).
+- Doctor の新タスクとして、**データが増えたら自動的にデータベースを
+  SD カードと USB ペンドライブの両方にコピー** するようにしました。直近
+  7 世代を残し、古いものから自動で消えます。SD / USB のどちらかが
+  外れていても、もう片方は問題なく進みます。
+- A new Doctor task **automatically copies the database to both the SD
+  card and the USB pen drive whenever the row count changes**. The last
+  7 copies are kept; older ones are pruned automatically. If one drive
+  is unplugged, the other still proceeds.
+- 管理画面に **AutoDoc** タブを追加しました。Doctor の各回の点検結果と、
+  自分で直した内容、最後のバックアップ日時、次回実行予定がひと目で
+  分かります。問題はオレンジ、エラーは赤、自動修復済みは緑で表示します。
+- The **AutoDoc** tab in the admin panel now lists every Doctor run, what
+  it auto-fixed, the last backup time, and the next scheduled run.
+  Warnings appear orange, errors red, and auto-fixes green.
+- LINE のリンクを新しいドメイン (`link.genbafms.com`) に切り替えました。
+  タップで開く「勤怠記録」「月次サマリー」両方の動作確認済みです。
+- The LINE link base URL has been switched to the working domain
+  (`link.genbafms.com`). Both the **Attendance Report** and the
+  **Monthly Summary** tap-through buttons are confirmed working.
+
+---
+
+**Previous update / 前回更新 (2026-05-24 — デスクトップアプリが `link.genbafms.com` で 401 になる問題を修正 / Fixed desktop app getting 401 on `link.genbafms.com`)**
+
+デスクトップアプリ（PC 上で動く Auto-update ボタン）と、ダッシュボードの
+「データ揃ってる？」確認 API が `link.genbafms.com` 経由で **401 認証エラー** に
+なっていた問題を修正しました。原因は、ガイド (`API_APP_GUIDE.md`) では
+「キー不要、ブラウザ向け」と書かれている 3 つの API が、`link.genbafms.com` の
+ログイン壁の例外リストに入っていなかったことです。`/api/v1/...`（キーで守られて
+いる API）は今までも通っていましたが、`/api/data-status/...` と
+`/api/daily-packs/auto-extract*` が壁にひっかかって 401 を返していました。
+
+`main.py` の例外リスト (`GBL_PUBLIC_PREFIXES`) に 2 行追加するだけの修正で、
+動作確認も済んでいます:
+
+- ✅ `link.genbafms.com/api/data-status/2026-05-24` → 200（ダッシュボードの 15 秒
+  ごとの 401 連発も止まります）
+- ✅ `link.genbafms.com/api/daily-packs/auto-extract-excel` → 200（PC アプリの
+  Excel Auto-update ボタンが効くようになります）
+- ✅ `link.genbafms.com/api/daily-packs/auto-extract` → 200（PDF Auto-update も同じく）
+- ✅ ログイン壁は今まで通り効いていることを確認: `/console`、データ保存系
+  (`save-excel-batch`)、日付指定の単一取得 (`/api/daily-packs/{日付}`) はセッション
+  クッキーなしで開くと 401 のままです。
+
+セキュリティが弱くなる変更ではありません。今回開けた 3 つの API は、もともと
+`rnd.asiakawaii.com/attendance/...` 経由ではキーもセッションもなく公開されて
+いるので、`link.genbafms.com` 側の挙動を同じに揃えただけです。
+
+ついでに、`console.html` の中で「**実在しない**エンドポイント `/api/daily-packs/extract-excel-recompute` を呼んでいた死んだ fetch」も削除しました。
+これは Excel タブで開始時刻を変えるたびに 405 を吐いていたコードで、結果も
+読んでいない無意味な呼び出しでした。
+
+- 編集ファイル: `main.py` (例外リストに 2 行追加), `static/console.html`
+  (死んだ fetch を削除)
+- バックアップ: `main.py.bak.094604`, `static/console.html.bak.094604`
+
+---
+
+**Previous update / 前回の更新 (2026-05-15 — `genbafms.com/dashboard` の API 404 を修正 / Fixed dashboard API 404 on `genbafms.com/dashboard`)**
+
+`https://www.genbafms.com/dashboard` を開くと「読み込み中」のままウィジェットが
+表示されない不具合を修正しました。`dashboard.html` の BASE 検出ロジックが
+`/attendance/dashboard` 用に書かれていて、`/dashboard`（genbafms 経由）では
+`/dashboard` を BASE として使っており、その結果すべての API 呼び出しが
+`/dashboard/api/dashboard/snapshot` のような存在しないパスに 404 していました。
+`/attendance/` で始まるときだけ BASE をセットし、それ以外は空文字にする
+シンプルな判定に書き換えました。ブラウザ側で **ハードリフレッシュ** (Cmd+Shift+R / Ctrl+F5)
+すれば新しい HTML が読み込まれ、ダッシュボードが正常に動きます。
+
+---
+
+**Previous update / 前回の更新 (2026-05-15 — ランディングページを別サイトに分離 + `link.genbafms.com` でテスト可能に / Landing split into a standalone site, test host `link.genbafms.com` added)**
+
+ランディングページを **FastAPI アプリの外** に切り出して、独立した静的サイト
+として `/var/www/genbafms/` に置き直しました。`www.genbafms.com` は Cloudflare
+側で 301 されていてテストできないため、**`link.genbafms.com` という別の
+サブドメイン**を Pi 側で受け取れるようにしました（DNS / Cloudflare 側の作業は
+ユーザーで実施が必要）。
+
+- 新規フォルダ: `/var/www/genbafms/index.html` — ランディングページ本体。
+  ログインページと同じデザイン（紺色グラデーション、ティール／インディゴ）。
+  「Sign in →」ボタン 1 つだけ。JS なし、認証なし、フォームなし。
+- nginx vhost (`/etc/nginx/sites-available/genbafms`) を書き換えました:
+  - `server_name` に `link.genbafms.com` を追加
+  - `location = /` → 新フォルダから直接配信（FastAPI を経由しない）
+  - その他のパス（`/login` `/dashboard` `/api/*` 等）は従来通り 8002 に proxy
+- `main.py`: `GBL_AUTH_HOSTS` に `link.genbafms.com` を追加。前バージョンで
+  入れた root ハンドラ分岐と `/` allow は撤回（nginx が `/` を直接配信する
+  ので不要になったため）。
+- バックアップ: `main.py.bak.20260515`, `/etc/nginx/sites-available/genbafms.bak.20260515`。
+- 動作確認（Pi 内部・`Host` ヘッダ付き curl）:
+  - `link.genbafms.com /` → ランディング配信 ✓
+  - `link.genbafms.com /login` → 200 ✓
+  - `link.genbafms.com /dashboard` → 302 `/login` ✓（認証ゲート有効）
+  - `link.genbafms.com /api/health` → 200 healthy ✓
+  - `rnd.asiakawaii.com /attendance/console` → 200 ✓（影響なし）
+
+**Cloudflare 側の作業も完了 (2026-05-15) / Cloudflare side now also done:**
+
+- `genbafms.com` ゾーンの DNS を Squarespace (4× A records) → `rnd-pi` tunnel に
+  切替済み。`www.genbafms.com` の CNAME も Squarespace から tunnel に変更。
+- 新しい CNAME `link.genbafms.com` → tunnel を追加。
+- Pi 側の `~/.cloudflared/config.yml` に `link.genbafms.com` ingress を追記
+  （バックアップ: `config.yml.bak.20260515`）。`cloudflared-tunnel.service`
+  を再起動済み。
+- 公開確認 (HTTPS over Cloudflare):
+  - `https://genbafms.com/` → ランディング ✓
+  - `https://www.genbafms.com/` → ランディング ✓
+  - `https://link.genbafms.com/` → ランディング ✓（DNS 伝搬が完了次第
+    全リゾルバから解決可能。Cloudflare のエッジ経由では既に 200）。
+
+---
+
+**Previous update / 前回の更新 (2026-05-14 — ブランド名ロールバック / Brand-name rollback)**
+
+5月13日に行った「GenbaLink」ブランド表示への変更を **元の "V3 Attendance Console"
+に戻しました**。ログイン機能（multi-user 認証、`/api/auth/*`、ユーザー管理画面）
+は **そのまま稼働中** です — ブランド名のテキストだけを戻す軽い変更です。
+
+- 画面上の表示名は全ページで「**V3 Attendance Console**」に戻りました
+  （Status / Reports / Setup / Intake / Gantt / Summary / Sign-in）。
+- フォルダ名も `/var/www/genbalink/` → `/var/www/attendance_app/` に
+  リネームしました（symlink ではなく実フォルダ）。
+- 開発用コピー `/var/www/genbalink-next/` は削除しました。
+- ドメイン `genbafms.com` の Nginx / Cloudflare Tunnel 設定は **未変更** です。
+  ドメイン自体を停止したい場合は別途指示してください。
+- 認証は引き続き `genbafms.com` 経由のアクセスでのみ強制されます
+  （既存 `/attendance/*` の社内ブックマークは無認証のまま動作）。
+
+---
+
+The May-13 "GenbaLink" brand-text change has been **rolled back to "V3 Attendance
+Console"**. The multi-user auth subsystem (`/api/auth/*`, login page, user
+management) **remains live** — only the visible brand text was reverted.
+
+- All user-visible strings now show "**V3 Attendance Console**".
+- Folder `/var/www/genbalink/` renamed back to `/var/www/attendance_app/`
+  (real folder, no longer a symlink).
+- Dev copy `/var/www/genbalink-next/` deleted.
+- Nginx vhost and Cloudflare Tunnel config for `genbafms.com` were **left
+  untouched** — domain still routes to the app and the host-gated auth still
+  enforces login for requests via that hostname.
+
+**Latest update / 最新更新 (2026-05-13 深夜 — GenbaLink リブランド + 新ドメイン + ログイン)**
+
+新ドメイン **genbafms.com** が稼働しました。トップは **GenbaLink ログイン画面**
+で、ユーザー名・パスワードを入れると 4 タブ（📊 Status / 📋 Reports /
+⚙️ Setup / 📥 Intake）にアクセスできます。
+
+- 初期ログイン: ユーザー名 `admin` / パスワード `admin2026`
+- ログイン後、Setup ページ最下部の **「👥 GenbaLink Users」**
+  パネルからユーザー追加・削除・パスワード変更ができます。
+- パスワードは PBKDF2-SHA256（200,000 回反復）でハッシュ化。
+  `users.json` (mode 0600) に保存。
+- セッションは 12 時間で期限切れ。
+- **既存の `/attendance/...` URL は今まで通りログインなしで動きます**
+  （社内ブックマークは無効になりません）。ログインが必要なのは
+  `genbafms.com` 経由でアクセスした時だけです。
+- LINE モバイルリンク（`/m/report` 等）と LINE Webhook は
+  `genbafms.com` 経由でも認証なしで動きます。
+- Nginx の新ホストブロック: `/etc/nginx/sites-available/genbafms`
+- 表示名は全ページで「GenbaLink」に統一されました。
+
+**🔒 重要 ToDo（運用前に）:**
+1. ドメインの DNS 設定: A レコードを Pi のグローバル IP に向ける
+2. HTTPS: `sudo certbot --nginx -d genbafms.com -d www.genbafms.com`
+3. 初期パスワード `admin2026` を変更してください
+
+A new public domain **genbafms.com** is live. Visitors land on a GenbaLink
+login screen; after authenticating they get the 4-tab UI (Status / Reports /
+Setup / Intake). Initial credentials: `admin` / `admin2026` — change after
+first login. Multi-user accounts managed in Setup. The existing `/attendance/...`
+URLs continue to work **without** login so office bookmarks and LINE links
+are unaffected. Auth is host-gated: only requests via `genbafms.com` require
+a session. Public allow-list (LINE webhooks, mobile views, health) remains
+open everywhere. **Before going live: configure DNS and run certbot for HTTPS.**
+
+---
+
+**Previous update / 過去の更新 (2026-05-13 深夜 — Status ダッシュボードを本格的なグラフィカル UI に刷新)**
+
+Status ダッシュボードを **プロ仕様のビジュアル** に作り直しました：
+
+- **ヒーロー KPI バンド**：上段に大きな 4 タイル（本日のパック数 / 計画比 /
+  生産性 / 出勤数）。各タイルに **スパークライン**（30日トレンド）と
+  前日比の差分バッジ ▲▼ つき。
+- **天気ストリップ**：3日分の予報をコンパクトに表示。
+- **2 カラム**：左に製造計画（A/B ライン、商品別、進捗バー付き）、
+  右に **ドーナツチャート** で N/Y の比率 + 課別生産性カード。
+- **30日 折れ線エリアチャート**：日次パック数（グラデーション塗り、
+  グリッド線、ツールチップ、軸ラベル付き）。
+- **30日 複数線チャート**：生産性 (p/h) — 製造１課・製造２課・全体の
+  3系列を同時表示。
+- ダーク テーマ、ティール/インディゴのアクセントカラー、
+  Inter + JetBrains Mono フォント、ホバーアニメーション、
+  カード入場アニメーション、スケルトンローディング。
+- すべて **内蔵 SVG**。外部チャートライブラリ不使用。
+- バックエンド：`/api/dashboard/snapshot` を 7日 → **30日** に拡張、
+  日次の課別労働時間と計算済み生産性 (`lp` / `lp_sec1` / `lp_sec2`)
+  を含めるようになりました（単一 SQL クエリで集計）。
+
+ブラウザを更新するだけで反映されます。
+
+The Status dashboard is now a fully graphical, professional-grade UI: hero
+KPI band with sparklines and delta pills, donut chart for section split,
+30-day daily-pack area chart with gradient fill and grid lines, 30-day
+multi-line productivity chart with three series. Dark theme, teal/indigo
+accents, hover lift, fade-in animations, skeleton loaders. All inline SVG
+— no chart library. Backend now returns 30-day series with per-day per-section
+hours and computed productivity. Just refresh the browser.
+
+---
+
+**Previous update / 過去の更新 (2026-05-13 深夜 — 「📊 Status」ダッシュボードが本番稼働しました)**
+
+Status タブが従来のプレースホルダーから、**実データを表示する**
+本格的なライブダッシュボードになりました。上から順に：
+
+1. **🌤 今週の天気** — wttr.in から取得（山梨 / 環境変数で変更可）。
+   3日分の平均・最高・最低気温、天気概要、降水確率、湿度、風速。
+   サーバー側で30分キャッシュするので Web ページの表示は速いです。
+2. **📋 本日の製造計画** — `production_plan` テーブルから A/B/C ライン
+   ごとに表示。各ラインを展開すると商品名・計画数・PPH目標・タクト時間
+   が見られます。下部に合計計画 vs 当日実績（％）も表示。
+3. **📦 本日のパック数** — 全体・N（製造１課）・Y（製造２課）を
+   タイル表示。計画に対する進捗バーつき。
+4. **📈 直近7日のパック数** — 内蔵 SVG の棒グラフ（外部ライブラリ不使用）。
+   各バーにホバーで日付・数量。
+5. **⚡ 生産性 (packs / labor-hour)** — 全体と課ごとの p/h。前日比 ▲▼
+   の差分バッジつき。出勤数 / 在籍数 と総労働時間も表示。
+
+ページ上部の日付ピッカーで任意の日付に切り替えられます（既定は
+`daily_packs` の最新日付）。ブラウザを更新すれば表示されます。
+
+The Status tab is now a fully live dashboard powered by real data: weather
+(wttr.in, 30-min cached), today's production plan grouped by A/B/C line with
+expandable item details, today's pack count by section with progress bars,
+a 7-day daily-packs bar chart (inline SVG, no library), and per-section
+productivity with day-over-day delta. Anchor date selectable; defaults to
+latest `daily_packs.record_date`. Two new endpoints: `/api/dashboard/snapshot`
+and `/api/dashboard/weather`. Refresh the browser to see it.
+
+---
+
+**Previous update / 過去の更新 (2026-05-13 夜 — トップナビを 4 タブに整理しました)**
+
+トップナビが 6 個から **4 個に整理** されました。
+旧: `🌐 Dashboard · Console · Gantt · Summary · Reports · Management`
+新: `📊 Status · 📋 Reports · ⚙️ Setup · 📥 Intake`
+
+- Gantt と Summary のページは今までと同じ URL でアクセスできます
+  （ブックマークも有効）。表示時は「📋 Reports」タブが点灯します。
+  Reports ページの「Attendance Report」「Summarizing Report」カードから
+  ガント／サマリーを開けます。
+- 旧 `Console` → `📥 Intake`（PDF 手動アップロード）
+- 旧 `Management` → `⚙️ Setup`（社員・課・設定など）
+- 旧 `Dashboard` → `📊 Status`
+- ブラウザを更新するだけで反映されます（再起動不要）。
+
+The top navigation is now **4 tabs instead of 6**, with clearer names and emoji
+prefixes. Gantt and Summary pages keep their existing URLs (bookmarks safe);
+they now highlight the Reports tab when visited and are reached via the
+Attendance Report / Summarizing Report cards on the Reports page. Just refresh
+the browser — no service restart needed.
+
+---
+
+**Previous update / 過去の更新 (2026-05-13 夕 — 同じ社員を複数の課に置けるようになりました（ゴースト表示）)**
+
+`sections.json` で同じ社員コードを **複数の課に重複登録できる**
+ようになりました。`*` 付きの行は「Disabled（表示専用）」のゴースト
+として、`*` 無しの行は本来の所属（実データを取得する課）として
+扱われます。順番もユーザーが書いた通りに保持されます。
+
+例：
+- 製造１課: `"00007009*"` （位置17）
+- 製造２課: `"00007009"`  （位置65）
+
+→ ガントでは、製造１課の17番目に灰色の「Disabled」プレースホルダー
+として表示され、同時に製造２課の65番目に本物の出勤データ（IN/OUT/勤務時間）
+として表示されます。生産性計算（staff_total, 時間, p/h）からは
+ゴーストは常に除外されます。重複は競合ではなく、意図された配置として
+扱われます。
+
+A code can now appear in multiple sections in `sections.json`. The `*`
+placement becomes a Disabled ghost in that section, while a non-`*`
+placement (anywhere) is the employee's real active home with real data.
+Each section keeps its hand-edited order. Ghosts are always excluded
+from productivity totals. Duplicates are no longer a conflict — they
+are a deliberate cross-section visibility tool.
+
+---
+
+**Previous update / 過去の更新 (2026-05-13 — `*` マーカー社員は「🚨 Unauthorized」赤タグから除外)**
+
+`*` で表示専用にした社員は、ガント画面で「🚨 Unauthorized」の
+赤タグが**絶対に出ない**ようになりました。代わりに穏やかな
+グレーの「Disabled」ピルで表示されます。
+管理者が「未承認欠勤を強調」トグルを ON にしていても影響を受けません。
+休職中・契約停止中の社員を `*` でマークしておけば、毎日の欠勤が
+誤って「無断欠勤」として警告されることはなくなります。
+ブラウザを更新するだけで反映されます（再起動不要）。
+
+Employees marked with `*` in `sections.json` (display-only / disabled mode)
+are now **always excluded** from the "🚨 Unauthorized" red highlight on the
+Gantt, regardless of the operator's "Highlight unauthorized absence" toggle.
+They render as a calm gray "Disabled" pill instead. This prevents employees
+on long leave or paused contracts from being repeatedly flagged as
+unauthorized absentees. Browser refresh is enough — no service restart needed.
+
+---
+
+**Previous update / 過去の更新 (2026-05-12 夜 — `*` マーカーで社員を表示専用に)**
+
+`sections.json` の社員コードの末尾に `*` を付けると、その社員は
+画面には出るが「集計には入らない」表示専用になります。
+例: `"00007007*"` のように書くと—
+
+- ガント・レポート・Excel の所属欄に **ID と名前は出る**
+- IN / OUT / 勤務時間は **空欄 (`--:--`) で表示**
+- 生産性 (パック数 ÷ 労働時間) の **計算には入らない**
+- DB に勤怠が無い日でも、必ず行は表示される
+
+休職・無給停止・契約一時停止など、人を消したくないけど
+集計を汚したくない時に使ってください。`*` を外せば通常運用に戻ります。
+管理画面から保存しても `*` は消えないようになっています。
+編集後は `sudo systemctl restart attendance.service` で反映してください。
+
+Append `*` to any code in `sections.json` (e.g. `"00007007*"`) to mark
+that employee as **display-only**: ID and name still show in their section
+row, but IN/OUT/hours render blank and the row is excluded from every
+productivity calculation. The row is always injected even on days with
+no DB attendance record. Useful for long leave, suspensions, or paused
+contracts where you want the slot visible but no metrics polluted.
+Remove the `*` to restore normal behaviour. The management UI re-applies
+existing `*` markers on save so they aren't silently lost.
+
+---
+
+**Previous update / 過去の更新 (2026-05-12 — sections.json は配置と表示順の単一情報源になりました)**
+
+社員の所属（製造１課／製造２課）と表示順の両方を、これからは
+`sections.json` だけで管理できるようになりました。`employee_roster.json`
+は氏名の台帳としてそのまま残ります。`sections.json` の `codes` 配列の
+順番が、ガント表示・Excel 出力・モバイル一覧・管理画面など、すべての
+出力の表示順になります。並び替えたいときは `sections.json` を編集して
+`sudo systemctl restart attendance.service` を実行してください。管理画面の
+ドラッグ並べ替えで保存しても、`sections.json` 側だけが並び替わり、
+`employee_roster.json` の順番は変わりません。
+
+The arrangement (section assignment) and the display order of every employee
+are now controlled by a single file: `sections.json`. `employee_roster.json`
+becomes a read-only name dictionary. To re-order or move employees between
+sections, edit `sections.json` and restart the service. Names can still be
+edited from the management board; the roster file is never reordered by the UI.
+
+---
+
+**Previous update / 過去の更新 (2026-05-06 evening — Report URL now pairs attendance + packs correctly)**
 
 The Attendance Report page now correctly combines the labor data and the
 pack data on a single date. Until today, when the attendance PDF was for

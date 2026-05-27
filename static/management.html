@@ -3,36 +3,36 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>V3 Attendance Console · User Management</title>
+<title>現場 FMS · User Management</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg: #eef3f5;
-    --ink: #132026;
+    --bg: #f6f8fa;
+    --ink: #1f2933;
     --muted: #5a6b73;
     --surface: #ffffff;
-    --surface-soft: #f7fbfc;
-    --brand: #0d8f71;
+    --surface-soft: #f1f4f7;
+    --brand: #0d9488;
     --brand-strong: #0b6f58;
-    --accent: #125e91;
-    --warn: #b86912;
+    --accent: #4f46e5;
+    --warn: #9b640f;
     --danger: #b42318;
-    --line: #d4e2e8;
-    --shadow: 0 10px 32px rgba(11, 35, 46, 0.08);
+    --line: #e3e8ee;
+    --shadow: 0 1px 2px rgba(16,32,40,.04), 0 8px 24px rgba(16,32,40,.06);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     min-height: 100vh;
-    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    font-family: "Inter","Noto Sans JP","Segoe UI",sans-serif;
     color: var(--ink);
     background:
-      radial-gradient(circle at 12% 15%, rgba(18, 94, 145, 0.09), transparent 34%),
-      radial-gradient(circle at 88% 18%, rgba(13, 143, 113, 0.11), transparent 38%),
+      radial-gradient(circle at 12% 15%, rgba(79, 70, 229, 0.05), transparent 34%),
+      radial-gradient(circle at 88% 18%, rgba(13, 148, 136, 0.06), transparent 38%),
       var(--bg);
-    line-height: 1.5;
+    line-height: 1.55;
   }
 
   .topbar {
@@ -336,7 +336,7 @@
     color: #fff;
     border-color: transparent;
   }
-  .section-chip[data-section="1"].active { background: #0d8f71; }
+  .section-chip[data-section="1"].active { background: #0d9488; }
   .section-chip[data-section="2"].active { background: #125e91; }
   .board-tools {
     display: flex;
@@ -400,7 +400,7 @@
     height: 4px;
     background: var(--dept-accent, var(--brand));
   }
-  .dept[data-section="1"] { --dept-accent: #0d8f71; }
+  .dept[data-section="1"] { --dept-accent: #0d9488; }
   .dept[data-section="2"] { --dept-accent: #125e91; }
   .dept.drag-over {
     border-color: var(--brand);
@@ -434,7 +434,7 @@
     font-weight: 700;
     flex-shrink: 0;
   }
-  .dept[data-section="1"] .dept-number { background: #0d8f71; }
+  .dept[data-section="1"] .dept-number { background: #0d9488; }
   .dept[data-section="2"] .dept-number { background: #125e91; }
   .count {
     font-family: "IBM Plex Mono", monospace;
@@ -690,7 +690,7 @@
     font-weight: 700;
     flex-shrink: 0;
   }
-  .import-column[data-section="1"] .import-column-number { background: #0d8f71; }
+  .import-column[data-section="1"] .import-column-number { background: #0d9488; }
   .import-column[data-section="2"] .import-column-number { background: #125e91; }
   .import-column[data-section="unassigned"] .import-column-number,
   .import-column[data-section="manual"] .import-column-number { background: var(--warn); }
@@ -798,7 +798,7 @@
   table.dayoff-grid td.day-cell.off:hover { filter: brightness(1.05); }
   table.dayoff-grid td.day-cell.weekend:not(.off) { background:#fef3f3; }
   table.dayoff-grid tbody tr.section-row td {
-    background:#eef3f5; font-weight:700; color:var(--brand-strong); padding:.4rem .55rem;
+    background:#f1f4f7; font-weight:700; color:var(--brand-strong); padding:.4rem .55rem;
     text-align:left; font-size:.76rem; letter-spacing:.04em; text-transform:uppercase;
   }
   /* Day-off section sub-tabs (above the toolbar) */
@@ -827,7 +827,7 @@
     background:#f5f9fa; color:var(--muted); font-variant-numeric:tabular-nums;
   }
   table.dayoff-grid tbody tr.summary-row td.emp-col {
-    text-align:right; padding-right:.5rem; font-weight:600; color:var(--ink); background:#eef3f5;
+    text-align:right; padding-right:.5rem; font-weight:600; color:var(--ink); background:#f1f4f7;
     font-size:.7rem; text-transform:none; letter-spacing:0;
   }
   table.dayoff-grid tbody tr.summary-rate td.day-cell.warn { background:#fff5e8; color:#9b640f; font-weight:700; }
@@ -835,7 +835,7 @@
 
   /* Import-mapping table */
   #doImportMapTable table { width:100%; border-collapse:collapse; font-size:.8rem; }
-  #doImportMapTable th { position:sticky; top:0; background:#eef3f5; padding:.4rem .5rem; text-align:left; border-bottom:1px solid var(--line); font-weight:700; }
+  #doImportMapTable th { position:sticky; top:0; background:#f1f4f7; padding:.4rem .5rem; text-align:left; border-bottom:1px solid var(--line); font-weight:700; }
   #doImportMapTable td { padding:.3rem .5rem; border-bottom:1px solid #e8edf0; vertical-align:middle; }
   #doImportMapTable tr.has-suggestion { background: #f0f7f4; }
   #doImportMapTable .nick { font-family:'IBM Plex Mono',monospace; font-weight:600; color:var(--ink); }
@@ -869,7 +869,7 @@
   .line-card .status.ok { color: var(--brand-strong); }
   .line-card .status.err { color: var(--danger); }
 </style>
-<script src="./static/site_header.js?v=2026050104" defer></script>
+<script src="./static/site_header.js?v=20260513-genbalink" defer></script>
 </head>
 <body>
 <div id="siteHeader"></div>
@@ -897,63 +897,6 @@
         <button class="button primary" type="submit">Unlock</button>
       </form>
       <div id="lockMessage" class="prompt">Demo password is <strong>admin2026</strong>.</div>
-    </div>
-    <div class="lock-notes">
-      <div class="lock-notes__head">
-        <h3 data-i18n-en="What you can do here" data-i18n-ja="この画面でできること"></h3>
-        <div class="lang-toggle" role="group" aria-label="Language">
-          <button type="button" class="lang-btn active" data-lang="en">EN</button>
-          <button type="button" class="lang-btn" data-lang="ja">日本語</button>
-        </div>
-      </div>
-      <p class="lock-intro"
-         data-i18n-en="A simple board to manage who belongs to which manufacturing section. Changes here flow through to the attendance report and the PDF export."
-         data-i18n-ja="各製造課に誰が所属しているかを管理するシンプルな画面です。ここでの変更は勤怠レポートと PDF 出力にそのまま反映されます。"></p>
-      <ul class="feature-list">
-        <li>
-          <strong data-i18n-en="Drag &amp; drop to move people" data-i18n-ja="ドラッグ＆ドロップで人を移動"></strong>
-          <span data-i18n-en="Drag an employee card between 製造１課 and 製造２課 to change section — no forms, no menus."
-                data-i18n-ja="社員カードを製造１課と製造２課の間でドラッグするだけで所属を変更できます。フォーム入力は不要です。"></span>
-        </li>
-        <li>
-          <strong data-i18n-en="Reorder within a section" data-i18n-ja="課内での並び替え"></strong>
-          <span data-i18n-en="Drag a card up or down inside a section to change display order. This same order is used in the daily Gantt PDF report."
-                data-i18n-ja="同じ課内でカードを上下にドラッグすると表示順を変えられます。この順番はそのまま日次ガントPDFレポートにも反映されます。"></span>
-        </li>
-        <li>
-          <strong data-i18n-en="Multi-select &amp; drag many at once" data-i18n-ja="複数選択してまとめて移動"></strong>
-          <span data-i18n-en="Ctrl/⌘-click to toggle individual cards, Shift-click for a range. Then drag any selected card and the whole group moves together — keeping their relative order."
-                data-i18n-ja="Ctrl／⌘＋クリックで個別選択、Shift＋クリックで範囲選択ができます。選択したカードのいずれかをドラッグすれば、選択したメンバー全員を相対順序を保ったまままとめて移動できます。"></span>
-        </li>
-        <li>
-          <strong data-i18n-en="Bulk upload from attendance PDF" data-i18n-ja="勤怠PDFから一括取り込み"></strong>
-          <span data-i18n-en="Drop an attendance PDF and the app reads every name + 8-digit code, auto-detects each person's section, and hides anyone already on the board. Pick only the new ones and add them in one click."
-                data-i18n-ja="勤怠PDFをアップロードすると、氏名と8桁の社員コードを自動読み取りし、課も自動判定します。既に登録済みの人は自動で非表示。新しい人だけを選んでワンクリックで追加できます。"></span>
-        </li>
-        <li>
-          <strong data-i18n-en="Safe save with undo" data-i18n-ja="安全な保存とやり直し"></strong>
-          <span data-i18n-en="Edits stay in draft until you press Save. Unsaved cards are tinted red with a 'not saved' tag. Press Reset any time to throw away the draft and start over."
-                data-i18n-ja="変更は「保存」を押すまで下書き状態のまま保持されます。未保存のカードは赤く強調され「not saved」タグが付きます。「Reset」でいつでも下書きを破棄できます。"></span>
-        </li>
-        <li>
-          <strong data-i18n-en="Add one employee manually" data-i18n-ja="1名ずつの手動追加"></strong>
-          <span data-i18n-en="Type an 8-digit code and Japanese name, pick a section, press Add. Useful for new hires before they appear on a PDF."
-                data-i18n-ja="8桁の社員コードと氏名を入力し、課を選んで「Add」を押します。PDFに登場する前の新規入社の方を先に登録できます。"></span>
-        </li>
-        <li>
-          <strong data-i18n-en="Search across everyone" data-i18n-ja="全員を横断検索"></strong>
-          <span data-i18n-en="Type any part of a code, name or section into the search box to filter the board in real time."
-                data-i18n-ja="検索ボックスにコード・氏名・課名の一部を入れると、リアルタイムで絞り込めます。"></span>
-        </li>
-        <li>
-          <strong data-i18n-en="Order applies to the PDF report" data-i18n-ja="並び順はPDFレポートにも反映"></strong>
-          <span data-i18n-en="The order you set here is the order used in the daily Gantt PDF and in the Excel export. One place to manage everything."
-                data-i18n-ja="ここで決めた並び順は、日次ガントPDFとExcel出力でそのまま使われます。1箇所で全てを管理できます。"></span>
-        </li>
-      </ul>
-      <p class="lock-footnote"
-         data-i18n-en="Test-period password: admin2026. During the test window, edits save to the server but are reviewed before going into production."
-         data-i18n-ja="テスト期間中のパスワードは admin2026 です。テスト期間中の変更はサーバーに保存されますが、本運用に反映する前に確認を行います。"></p>
     </div>
   </section>
 
@@ -1307,6 +1250,77 @@
     </div><!-- /panel:feedback -->
 
   </section><!-- /#management -->
+
+  <!-- ===== GenbaLink Users panel (only renders when accessed via genbafms.com) ===== -->
+  <section id="gblUsersCard" class="card" style="display:none;margin:1.4rem 0 0;padding:1.1rem 1.2rem;border:1px solid var(--line);border-radius:14px;background:var(--surface);">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:.7rem;">👥 Users <small style="color:var(--muted);font-weight:400;font-size:.78rem;">(visible only on authenticated hosts)</small></h2>
+    <div id="gblUsersList" style="margin-bottom:1rem;font-size:.86rem;"></div>
+    <details style="margin-bottom:.9rem;">
+      <summary style="cursor:pointer;font-weight:600;color:var(--brand-strong);font-size:.85rem;">+ Add new user</summary>
+      <div style="display:grid;gap:.5rem;grid-template-columns:1fr 1fr auto auto;margin-top:.6rem;align-items:end;">
+        <div><label style="font-size:.7rem;color:var(--muted);">Username</label><input id="gblNewUser" type="text" style="width:100%;padding:.45rem;border:1px solid var(--line);border-radius:6px;"/></div>
+        <div><label style="font-size:.7rem;color:var(--muted);">Password</label><input id="gblNewPass" type="password" style="width:100%;padding:.45rem;border:1px solid var(--line);border-radius:6px;"/></div>
+        <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;"><input id="gblNewAdmin" type="checkbox"/> Admin</label>
+        <button type="button" id="gblAddBtn" class="button primary" style="padding:.45rem 1rem;">Create</button>
+      </div>
+    </details>
+    <details>
+      <summary style="cursor:pointer;font-weight:600;color:var(--brand-strong);font-size:.85rem;">🔑 Change my password</summary>
+      <div style="display:grid;gap:.5rem;grid-template-columns:1fr 1fr auto;margin-top:.6rem;align-items:end;">
+        <div><label style="font-size:.7rem;color:var(--muted);">Current password</label><input id="gblCurPw" type="password" style="width:100%;padding:.45rem;border:1px solid var(--line);border-radius:6px;"/></div>
+        <div><label style="font-size:.7rem;color:var(--muted);">New password (≥6)</label><input id="gblNewPw" type="password" style="width:100%;padding:.45rem;border:1px solid var(--line);border-radius:6px;"/></div>
+        <button type="button" id="gblChangePwBtn" class="button" style="padding:.45rem 1rem;">Update</button>
+      </div>
+    </details>
+    <div id="gblMsg" style="margin-top:.6rem;font-size:.82rem;"></div>
+  </section>
+
+  <script>
+  (function() {
+    // Only render when host is genbafms.com (auth-enabled). Otherwise hidden.
+    const host = location.host.toLowerCase().split(":")[0];
+    if (!(host === "genbafms.com" || host === "www.genbafms.com")) return;
+    document.getElementById("gblUsersCard").style.display = "";
+    const $ = id => document.getElementById(id);
+    const msg = (t, ok) => { const m=$("gblMsg"); m.textContent=t; m.style.color = ok ? "var(--brand-strong)" : "var(--danger)"; };
+    function refresh() {
+      fetch("/api/auth/users").then(r=>r.ok?r.json():null).then(j=>{
+        if (!j) { $("gblUsersList").innerHTML = '<i style="color:var(--muted);">Admin login required to manage users.</i>'; return; }
+        $("gblUsersList").innerHTML = (j.users||[]).map(u=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem .65rem;border:1px solid var(--line);border-radius:8px;margin-bottom:.35rem;background:var(--surface-soft);">
+            <div><b>${u.username}</b>${u.is_admin?' <span style="background:#ecfaf4;color:var(--brand-strong);border:1px solid #b8e4d8;padding:1px 6px;border-radius:6px;font-size:.7rem;">admin</span>':''}<small style="color:var(--muted);margin-left:.5rem;">${u.created_at||""}</small></div>
+            <button type="button" data-u="${u.username}" class="button soft-danger" style="padding:.25rem .65rem;font-size:.75rem;">Delete</button>
+          </div>`).join("");
+        $("gblUsersList").querySelectorAll("button[data-u]").forEach(b => {
+          b.onclick = () => {
+            if (!confirm(`Delete user "${b.dataset.u}"?`)) return;
+            fetch(`/api/auth/users/${encodeURIComponent(b.dataset.u)}`, {method:"DELETE"}).then(r=>r.json()).then(j=>{ if (j.ok) { msg("Deleted.", true); refresh(); } else { msg(j.detail || "Delete failed.", false); }});
+          };
+        });
+      });
+    }
+    $("gblAddBtn").onclick = () => {
+      const username = $("gblNewUser").value.trim();
+      const password = $("gblNewPass").value;
+      const is_admin = $("gblNewAdmin").checked;
+      fetch("/api/auth/users", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password,is_admin})})
+        .then(r=>r.json()).then(j=>{
+          if (j.ok) { $("gblNewUser").value=""; $("gblNewPass").value=""; $("gblNewAdmin").checked=false; msg(`Created ${j.username}.`, true); refresh(); }
+          else { msg(j.detail || "Create failed.", false); }
+        });
+    };
+    $("gblChangePwBtn").onclick = () => {
+      const current_password = $("gblCurPw").value;
+      const new_password = $("gblNewPw").value;
+      fetch("/api/auth/change-password", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({current_password,new_password})})
+        .then(r=>r.json()).then(j=>{
+          if (j.ok) { $("gblCurPw").value=""; $("gblNewPw").value=""; msg("Password changed.", true); }
+          else { msg(j.detail || "Change failed.", false); }
+        });
+    };
+    refresh();
+  })();
+  </script>
 </main>
 
 <script>
@@ -2110,22 +2124,6 @@
     const files = e.dataTransfer && e.dataTransfer.files;
     if (files && files.length) processPdfFiles(files);
   });
-
-  const lockNotes = document.querySelector(".lock-notes");
-  function applyLang(lang) {
-    const key = lang === "ja" ? "data-i18n-ja" : "data-i18n-en";
-    lockNotes.setAttribute("data-lang", lang);
-    lockNotes.querySelectorAll("[data-i18n-en]").forEach((el) => {
-      el.textContent = el.getAttribute(key) || el.getAttribute("data-i18n-en") || "";
-    });
-    lockNotes.querySelectorAll(".lang-btn").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.lang === lang);
-    });
-  }
-  lockNotes.querySelectorAll(".lang-btn").forEach((btn) => {
-    btn.addEventListener("click", () => applyLang(btn.dataset.lang));
-  });
-  applyLang("en");
 
   loadData();
 

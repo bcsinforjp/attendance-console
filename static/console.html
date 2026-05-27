@@ -3,37 +3,37 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>V3 Attendance Console · Operations Workflow</title>
+<title>現場 FMS · Operations Workflow</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   /* ===== Theme tokens — match index.html ===== */
   :root {
-    --bg: #eef3f5;
-    --ink: #132026;
+    --bg: #f6f8fa;
+    --ink: #1f2933;
     --muted: #5a6b73;
     --surface: #ffffff;
-    --surface-soft: #f7fbfc;
-    --brand: #0d8f71;
+    --surface-soft: #f1f4f7;
+    --brand: #0d9488;
     --brand-strong: #0b6f58;
-    --accent: #125e91;
+    --accent: #4f46e5;
     --warn: #9b640f;
     --danger: #b42318;
-    --line: #d4e2e8;
-    --shadow: 0 10px 32px rgba(11, 35, 46, 0.08);
+    --line: #e3e8ee;
+    --shadow: 0 1px 2px rgba(16,32,40,.04), 0 8px 24px rgba(16,32,40,.06);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
   body {
-    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    font-family: "Inter","Noto Sans JP","Segoe UI",sans-serif;
     color: var(--ink);
     background:
-      radial-gradient(circle at 10% 15%, rgba(18, 94, 145, 0.09), transparent 35%),
-      radial-gradient(circle at 90% 20%, rgba(13, 143, 113, 0.11), transparent 40%),
+      radial-gradient(circle at 10% 15%, rgba(79, 70, 229, 0.05), transparent 35%),
+      radial-gradient(circle at 90% 20%, rgba(13, 148, 136, 0.06), transparent 40%),
       var(--bg);
     min-height: 100vh;
-    line-height: 1.5;
+    line-height: 1.55;
   }
 
   /* ===== Topbar (identical pattern to index.html) ===== */
@@ -586,7 +586,7 @@
     font-size: 0.88rem;
   }
 </style>
-<script src="./static/site_header.js?v=2026050104" defer></script>
+<script src="./static/site_header.js?v=20260513-genbalink" defer></script>
 </head>
 <body>
 
@@ -1712,9 +1712,6 @@ function renderXlsxExtras(parsed) {
 async function recomputePrediction() {
   const p = xlsxState.parsed; if (!p) return;
   const start = $xlsxStart.value || "17:00";
-  const res = await fetch(api("/api/daily-packs/extract-excel-recompute"), { method: "POST" })
-              .catch(() => null);
-  /* No re-fetch endpoint — recompute client-side using cached rates from /api/production-rates */
   const rates = xlsxState.rates || (xlsxState.rates = await (await fetch(api("/api/production-rates"))).json());
   const products = p.products || [];
   let totalQty = 0, totalSec = 0;

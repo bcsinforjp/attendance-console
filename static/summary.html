@@ -234,7 +234,7 @@ body.mobile #chartLegend .leg .lbl-short{display:inline;}
   @page{size:B3 landscape;margin:10mm;}
 }
 </style>
-<script src="static/site_header.js?v=2026050104" defer></script>
+<script src="static/site_header.js?v=20260513-genbalink" defer></script>
 </head>
 <body>
 
@@ -249,7 +249,7 @@ body.mobile #chartLegend .leg .lbl-short{display:inline;}
       <small>Productivity Summary · <span id="brandDate">—</span></small>
     </div>
     <div class="topbar-links no-print" style="margin-left:auto;">
-      <button class="btn primary" id="btnPrint" type="button">🖨 Print</button>
+      <button class="btn primary" id="btnPrint" type="button">PDF View</button>
       <button class="btn" id="btnLineSend" type="button" title="Send a snapshot of this summary view to LINE">💬 Send to LINE</button>
       <span id="lineSendStatus" style="font-size:11px;color:var(--muted);"></span>
     </div>
@@ -408,9 +408,13 @@ const WEEKDAYS_JA = ["日","月","火","水","木","金","土"];
    ================================================================== */
 const BASE = (() => {
   const p = location.pathname;
-  // Mobile path /attendance/m/summary → BASE should be /attendance, not /attendance/m
-  const mMobile = p.match(/^(\/.*?)\/m\/summary\/?$/);
-  if (mMobile) return mMobile[1];
+  // Mobile path: /[optional-prefix]/m/summary — BASE = everything before /m/summary.
+  // Bare /m/summary (served on genbafms.com / link.genbafms.com) → BASE = "".
+  // /attendance/m/summary (legacy default vhost) → BASE = "/attendance".
+  const mMobile = p.match(/^(.*?)\/m\/summary\/?$/);
+  if (mMobile) return mMobile[1] || "";
+  // Desktop paths: /summary or /attendance/summary
+  if (p === "/summary" || p === "/summary/") return "";
   const i = p.lastIndexOf("/summary");
   return i >= 0 ? p.slice(0, i) : "";
 })();
@@ -955,7 +959,11 @@ $("endDate").addEventListener("change", () => { state.end = $("endDate").value |
 $("chkPrev").addEventListener("change", () => { state.comparePrev = $("chkPrev").checked; renderChart(); renderComparisons(); });
 $("chkTargets").addEventListener("change", () => { state.showTargets = $("chkTargets").checked; renderChart(); });
 $("btnReload").addEventListener("click", loadData);
-$("btnPrint").addEventListener("click", () => window.print());
+$("btnPrint").addEventListener("click", () => {
+  const d = ($("endDate") && $("endDate").value) || state.end || new Date().toISOString().slice(0,10);
+  const rep = new URLSearchParams(location.search).get("report") || "1";
+  window.open("/pdf/summary?date=" + encodeURIComponent(d) + "&report=" + encodeURIComponent(rep), "_blank");
+});
 
 /* Send-to-LINE — captures a 2x2 KPI snapshot from the live summary page and
    pushes a Buttons-Template card to all registered LINE recipients. */

@@ -7,13 +7,26 @@ logs/internal_health_logs.log. Optionally triggers ingestion for files sitting
 in a watched folder that never made it to done/.
 
 Exit code is always 0 — this is a watcher, not a gate.
+
+Tasks (in order):
+  [db_health]            row counts per tracked table
+  [registry_consistency] uploaded_file_registry orphans
+  [sidecar_configs]      JSON config existence + parse + type
+  [unprocessed_files]    files in watched folders still outside done/
+  [ingest_trigger]       auto-ingest stuck files (PDF + xlsm two-step save)
+  [db_clone]             pg_dump → gzip → SD + USB when row count changed
+  [routine_events]       done/ archive counts
 """
 from __future__ import annotations
 
+import gzip
 import json
 import os
+import re
+import subprocess
 import sys
 import traceback
+import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -55,6 +68,15 @@ EXPECTED_CONFIGS = {
     "api_keys.json":           dict,
     "admin_config.json":       dict,
 }
+
+# DB clone targets (removable media). Doctor skips a target whose folder is
+# missing (e.g. SD card pulled, USB unmounted) — never blocks on it.
+CLONE_TARGETS = [
+    Path("/media/pi/sd-root/db_clones"),
+    Path("/media/pi/MyData/db_clones"),
+]
+CLONE_RETAIN = 7  # keep this many .sql.gz files per target; older ones get pruned
+LAST_CLONE_STATE = LOG_DIR / "last_db_clone.json"
 
 
 # ---------------------------------------------------------------------------
@@ -147,38 +169,234 @@ def check_unprocessed_files(report: list[str]) -> list[tuple[str, Path]]:
     return pending
 
 
+# ---- ingest trigger helpers ------------------------------------------------
+
+def _extract_date_from_xlsx_name(name: str) -> str | None:
+    """Pull YYYY-MM-DD out of a daily-pack xlsm filename.
+    Handles both full-width ('夜勤用日報２６．０５．２６.xlsm') and ASCII forms.
+    Returns None if no date pattern found."""
+    z2h = str.maketrans("０１２３４５６７８９", "0123456789")
+    m = re.search(r"([０-９]{2})．([０-９]{2})．([０-９]{2})", name)
+    if m:
+        yy, mm, dd = (g.translate(z2h) for g in m.groups())
+        return f"20{yy}-{mm}-{dd}"
+    m = re.search(r"(\d{4})[.\-_](\d{2})[.\-_](\d{2})", name)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    m = re.search(r"(\d{2})[.\-_](\d{2})[.\-_](\d{2})", name)
+    if m:
+        yy, mm, dd = m.groups()
+        return f"20{yy}-{mm}-{dd}"
+    return None
+
+
+def _post(path: str, body: bytes | None = None, headers_extra: dict | None = None,
+          timeout: int = 120) -> tuple[int, bytes]:
+    """Loopback POST helper. Returns (status, body_bytes). Raises only on transport errors."""
+    headers = {"X-API-Key": API_KEY, "Accept": "application/json"}
+    if headers_extra:
+        headers.update(headers_extra)
+    req = urllib.request.Request(API_BASE + path, method="POST",
+                                 headers=headers, data=body or b"")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as e:
+        try:
+            payload = e.read()
+        except Exception:
+            payload = b""
+        return e.code, payload
+
+
+def _trigger_excel_chain(xlsx_path: Path, report: list[str]) -> None:
+    """auto-extract-excel returns a preview only (does NOT save to DB).
+    Chain it into save-excel-batch so xlsm files actually land in daily_pack_items.
+    Targets the file's encoded date so a multi-file folder picks the right one."""
+    date_str = _extract_date_from_xlsx_name(xlsx_path.name)
+    extract_path = "/api/daily-packs/auto-extract-excel"
+    if date_str:
+        extract_path += f"?date={date_str}"
+
+    status, body = _post(extract_path)
+    if status != 200:
+        report.append(f"  excel-chain extract {xlsx_path.name} FAILED: HTTP {status} {body[:160].decode('utf-8','replace')}")
+        return
+    try:
+        preview = json.loads(body.decode("utf-8"))
+    except Exception as e:
+        report.append(f"  excel-chain extract {xlsx_path.name} FAILED: bad JSON ({e})")
+        return
+
+    meta = preview.get("meta") or {}
+    products = preview.get("products") or []
+    start = (preview.get("start") or {}).get("start_time") or "17:00"
+    pdate = meta.get("production_date")
+    if not products or not pdate:
+        report.append(f"  excel-chain {xlsx_path.name}: extract OK but no products/date — skipped save")
+        return
+
+    save_payload = {
+        "production_date": pdate,
+        "products": products,
+        "start_time": start,
+        "source_filename": preview.get("source_filename") or xlsx_path.name,
+        "input_by": "attendance-doctor",
+    }
+    save_body = json.dumps(save_payload).encode("utf-8")
+    status, body = _post(
+        "/api/daily-packs/save-excel-batch",
+        body=save_body,
+        headers_extra={"Content-Type": "application/json"},
+    )
+    if status == 200:
+        report.append(f"  excel-chain {xlsx_path.name}: extract+save OK (production_date={pdate}, products={len(products)})")
+    else:
+        report.append(f"  excel-chain save {xlsx_path.name} FAILED: HTTP {status} {body[:160].decode('utf-8','replace')}")
+
+
+def _trigger_simple(label: str, path: str, report: list[str]) -> None:
+    """POST to a single endpoint and log the result. 404 'no matching file'
+    is treated as informational, not an error — folder may just have no
+    files of this kind right now."""
+    status, body = _post(path)
+    if status == 200:
+        report.append(f"  triggered {label}: HTTP 200")
+    elif status == 404:
+        report.append(f"  triggered {label}: no matching file (404)")
+    else:
+        report.append(f"  trigger {label} FAILED: HTTP {status} {body[:160].decode('utf-8','replace')}")
+
+
 def trigger_ingest(pending: list[tuple[str, Path]], report: list[str]) -> None:
-    """Hit the existing auto-extract endpoints over loopback so the same
-    code path runs as a normal upload. Idempotent — re-runs are safe.
-    Skipped silently if AUTO_PROCESS is off or no API key is configured."""
+    """Re-drive stuck watched files through the normal upload endpoints over
+    loopback. Idempotent — re-runs are safe."""
     if not AUTO_PROCESS or not API_KEY:
         report.append("  auto_process: disabled (set ATTENDANCE_DOCTOR_AUTO_PROCESS=1 + ATTENDANCE_DOCTOR_KEY)")
         return
     if not pending:
         return
-    kinds = {k for k, _ in pending}
-    endpoints: list[tuple[str, str]] = []
-    if "attendance" in kinds:
-        endpoints.append(("attendance", "/api/attendance/auto-upload?save=true"))
-    if "daily_packs" in kinds:
-        endpoints.append(("daily_packs", "/api/daily-packs/auto-extract"))
-        endpoints.append(("daily_packs_excel", "/api/daily-packs/auto-extract-excel"))
-    for label, path in endpoints:
+
+    has_attendance = any(k == "attendance" for k, _ in pending)
+    daily_pack_pdfs = [p for k, p in pending if k == "daily_packs" and p.suffix.lower() == ".pdf"]
+    daily_pack_xlsx = [p for k, p in pending if k == "daily_packs" and p.suffix.lower() in (".xlsx", ".xlsm")]
+
+    if has_attendance:
+        # auto-upload?save=true is a single-call extract+save — sufficient on its own.
+        _trigger_simple("attendance", "/api/attendance/auto-upload?save=true", report)
+
+    if daily_pack_pdfs:
+        # auto-extract returns preview only; full save requires operator confirm in the UI.
+        # We surface that the file was previewed; operator still needs to confirm.
+        _trigger_simple("daily_packs_pdf", "/api/daily-packs/auto-extract", report)
+
+    for xlsx_path in daily_pack_xlsx:
+        _trigger_excel_chain(xlsx_path, report)
+
+
+# ---- DB clone task ---------------------------------------------------------
+
+def _load_clone_state() -> dict:
+    if not LAST_CLONE_STATE.exists():
+        return {}
+    try:
+        return json.loads(LAST_CLONE_STATE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_clone_state(state: dict) -> None:
+    LAST_CLONE_STATE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def check_db_clone(report: list[str]) -> None:
+    """Clone the Postgres DB to SD card + USB whenever the combined row count
+    across tracked tables differs from the last successful clone. Per-target
+    failure (missing mount, read-only FS) is non-fatal — other target still
+    runs, and the next tick retries the failed one."""
+    try:
+        with psycopg2.connect(**DATABASE) as conn, conn.cursor() as cur:
+            total = 0
+            for tbl in EXPECTED_TABLES:
+                cur.execute(f"SELECT COUNT(*) FROM {tbl}")
+                total += cur.fetchone()[0]
+    except Exception as e:
+        report.append(f"  db_clone ERROR row-count: {e}")
+        return
+
+    state = _load_clone_state()
+    last_total = state.get("total_rows")
+    if last_total == total and state.get("targets_ok"):
+        report.append(f"  db_clone: skipped (total_rows={total} unchanged since {state.get('cloned_at','?')})")
+        return
+
+    # pg_dump → gzip in memory (~200KB-1MB for this DB, fine).
+    env = os.environ.copy()
+    env["PGPASSWORD"] = DATABASE["password"]
+    cmd = [
+        "pg_dump",
+        "-h", DATABASE["host"],
+        "-p", str(DATABASE["port"]),
+        "-U", DATABASE["user"],
+        "-d", DATABASE["dbname"],
+        "--no-owner", "--no-privileges",
+    ]
+    try:
+        proc = subprocess.run(cmd, env=env, capture_output=True, timeout=300)
+    except Exception as e:
+        report.append(f"  db_clone ERROR pg_dump: {e}")
+        return
+    if proc.returncode != 0:
+        err = proc.stderr.decode("utf-8", "replace")[:200].strip()
+        report.append(f"  db_clone ERROR pg_dump rc={proc.returncode}: {err}")
+        return
+    gz_bytes = gzip.compress(proc.stdout)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"attendance_db_{stamp}.sql.gz"
+
+    targets_ok: list[str] = []
+    targets_err: list[str] = []
+    for tgt in CLONE_TARGETS:
+        if not tgt.exists():
+            targets_err.append(f"{tgt}: not mounted")
+            continue
         try:
-            req = urllib.request.Request(
-                API_BASE + path, method="POST",
-                headers={"X-API-Key": API_KEY, "Accept": "application/json"},
-                data=b"",
-            )
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                report.append(f"  triggered {label}: HTTP {resp.status}")
-        except Exception as e:
-            report.append(f"  trigger {label} FAILED: {e}")
+            (tgt / filename).write_bytes(gz_bytes)
+            # retention: prune oldest beyond CLONE_RETAIN
+            clones = sorted(tgt.glob("attendance_db_*.sql.gz"))
+            for old in clones[:-CLONE_RETAIN]:
+                try:
+                    old.unlink()
+                except Exception:
+                    pass
+            targets_ok.append(str(tgt))
+        except Exception as exc:
+            targets_err.append(f"{tgt}: {exc}")
+
+    if not targets_ok:
+        report.append(f"  db_clone FAILED: all targets failed — {'; '.join(targets_err)}")
+        # Don't update state — next tick will retry.
+        return
+
+    delta = total - (last_total or 0)
+    msg = (f"  db_clone OK: {filename} ({len(gz_bytes):,}B) → "
+           f"{len(targets_ok)} target(s) [delta_rows={delta:+d}, total={total}]")
+    if targets_err:
+        msg += f" (skipped: {'; '.join(targets_err)})"
+    report.append(msg)
+
+    _save_clone_state({
+        "total_rows": total,
+        "cloned_at": datetime.now().isoformat(timespec="seconds"),
+        "filename": filename,
+        "size_bytes": len(gz_bytes),
+        "targets_ok": targets_ok,
+        "targets_err": targets_err,
+    })
 
 
 def check_routine_events(report: list[str]) -> None:
     """Catch-all hook for additional checks. Add new checks below as the system grows."""
-    # Disk usage on watched folders
     for kind, folder in WATCHED.items():
         if folder.exists():
             done = folder / "done"
@@ -205,6 +423,8 @@ def main() -> int:
         pending = check_unprocessed_files(report)
         report.append("[ingest_trigger]")
         trigger_ingest(pending, report)
+        report.append("[db_clone]")
+        check_db_clone(report)
         report.append("[routine_events]")
         check_routine_events(report)
     except Exception:

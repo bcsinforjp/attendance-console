@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PDF View · 現場 FMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=Noto+Sans+JP:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --accent:#0d9488; --accent-strong:#0b6f58; --ink:#1f2933; --line:#e3e8ee; --bg:#eef2f5; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{background:var(--bg);color:var(--ink);
+    font-family:"Inter","Noto Sans JP","Segoe UI",sans-serif;}
+
+  .toolbar{
+    position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:.7rem;
+    padding:.7rem 1.1rem;background:#fff;border-bottom:1px solid var(--line);
+    box-shadow:0 2px 10px rgba(16,32,40,.06);
+  }
+  .toolbar .ttl{font-weight:800;font-size:.98rem;letter-spacing:.01em;}
+  .toolbar .ttl .mark{color:var(--accent);}
+  .toolbar .meta{font-size:.78rem;color:#5a6b73;font-weight:600;}
+  .toolbar .spacer{flex:1;}
+  .toolbar button{
+    font:inherit;font-size:.86rem;font-weight:700;cursor:pointer;
+    padding:.55rem 1.15rem;border-radius:9px;border:1px solid var(--line);
+    background:#f5f9fa;color:var(--ink);transition:transform .12s,box-shadow .12s,background .12s;
+  }
+  .toolbar button:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(16,32,40,.10);}
+  .toolbar button.primary{background:linear-gradient(135deg,var(--accent),var(--accent-strong));
+    color:#fff;border-color:transparent;}
+  .toolbar button:disabled{opacity:.55;cursor:wait;transform:none;box-shadow:none;}
+
+  .stage{padding:1.4rem 1rem 3rem;display:flex;justify-content:center;}
+  .paper{
+    background:#fff;box-shadow:0 1px 2px rgba(16,32,40,.06),0 18px 50px rgba(16,32,40,.16);
+    border-radius:4px;overflow:hidden;
+  }
+  /* portrait sheets @96dpi: A3 ≈1123 wide, B3 ≈1335 wide */
+  body[data-orient="portrait"]  .paper{width:1123px;}   /* A3 portrait (summary) */
+  body[data-format="b3"]        .paper{width:1335px;}   /* B3 portrait (gantt)   */
+  body[data-orient="landscape"] .paper{width:1540px;}
+  .paper iframe{display:block;width:100%;height:1280px;border:0;background:#fff;}
+  body[data-orient="landscape"] .paper iframe{height:920px;}
+
+  .hint{max-width:60ch;margin:.2rem auto 0;text-align:center;font-size:.74rem;color:#7a8893;}
+
+  @media print{
+    .toolbar,.hint{display:none!important;}
+    .stage{padding:0;}
+    .paper{box-shadow:none;border-radius:0;width:auto!important;}
+    .paper iframe{height:100vh;}
+  }
+  @page{ size:A4 portrait; margin:0; }
+  body[data-orient="landscape"]{ }
+</style>
+</head>
+<body>
+  <div class="toolbar no-print">
+    <span class="ttl">現<span class="mark">場</span> FMS · <span id="kindLbl">PDF</span> View</span>
+    <span class="meta" id="metaLbl">—</span>
+    <span class="spacer"></span>
+    <button type="button" id="btnPrint" class="primary">Print</button>
+    <button type="button" id="btnDownload">Download PDF</button>
+  </div>
+
+  <div class="stage">
+    <div class="paper"><iframe id="frame" title="report"></iframe></div>
+  </div>
+  <p class="hint" id="hint">Loading report…</p>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+(function(){
+  var KIND = /\/summary\b/.test(location.pathname) ? "summary" : "gantt";
+  var sp   = new URLSearchParams(location.search);
+  var date = sp.get("date") || "";
+  var rep  = sp.get("report") || "";
+  // Both fill page WIDTH (looks like the preview, readable) then paginate.
+  // Summary -> A3 portrait (~1 page); Gantt -> A3 landscape (~1-2 pages).
+  var ORIENT = "portrait";
+  var FORMAT = (KIND === "summary") ? "a3" : "b3";   // Gantt -> B3 portrait
+  document.body.setAttribute("data-orient", ORIENT);
+  document.body.setAttribute("data-format", FORMAT);
+
+  var pageStyle = document.createElement("style");
+  var cssSize = (["a3","a4","a5","b4","b5"].indexOf(FORMAT) >= 0) ? FORMAT.toUpperCase() + " " : "";
+  pageStyle.textContent = "@page{size:" + cssSize + ORIENT + ";margin:0;}";
+  document.head.appendChild(pageStyle);
+
+  var KIND_LBL = (KIND === "summary") ? "Summary" : "Attendance Report";
+  document.getElementById("kindLbl").textContent = KIND_LBL;
+  document.getElementById("metaLbl").textContent =
+    (date ? date : "(latest)") + (KIND === "summary" && rep ? "  ·  report " + rep : "");
+  document.title = KIND_LBL + (date ? " " + date : "") + " · 現場 FMS";
+
+  // Embed the existing page in chrome-less mode (report=1 strips the site nav).
+  var base = (KIND === "summary" ? "/summary" : "/gantt");
+  var src  = base + "?report=1" + (date ? "&date=" + encodeURIComponent(date) : "");
+  var frame = document.getElementById("frame");
+  var hint  = document.getElementById("hint");
+  frame.src = src;
+
+  var ready = false;
+  frame.addEventListener("load", function(){
+    try{
+      var doc = frame.contentDocument;
+      // Hide in-report toolbars / nav so the captured page is print-clean.
+      var s = doc.createElement("style");
+      s.textContent =
+        ".no-print,#toolbar,.toolbar,.topbar-links,#siteHeader{display:none!important;}" +
+        ".tabs,#memTab,#memWrap{display:none!important;}" +   /* hide tab chrome + member-hours */
+        ".sec-wrap{display:block!important;}" +                /* show BOTH depts (製造１課 + 製造２課) */
+        "body{background:#fff!important;}";
+      doc.head.appendChild(s);
+      ready = true;
+      hint.textContent = "Use Print to save via the browser, or Download PDF for a one-click file.";
+    }catch(e){
+      hint.textContent = "Report loaded. (Preview sandboxed — Print still works.)";
+      ready = true;
+    }
+  });
+
+  // Shared builder — Print and Download produce the *identical* PDF
+  // (same B3/A3 portrait, margins, and clean row-boundary pagination).
+  async function buildReportPdf(){
+    var doc = frame.contentDocument;
+    // Expand the iframe so the FULL report (both depts, every row) is laid
+    // out in the DOM before capture — otherwise only the on-screen part
+    // (active tab / first dept) would be rasterised.
+    try{ frame.style.height = (doc.documentElement.scrollHeight + 60) + "px"; }catch(_){}
+    await new Promise(function(r){ setTimeout(r, 400); });
+    var node  = doc.documentElement;
+    var fullW = Math.max(doc.body.scrollWidth,  node.scrollWidth);
+    var fullH = Math.max(doc.body.scrollHeight, node.scrollHeight);
+    var canvas = await html2canvas(node, {
+      backgroundColor:"#ffffff", scale:2, useCORS:true, logging:false,
+      width: fullW, height: fullH, windowWidth: fullW, windowHeight: fullH,
+      scrollX:0, scrollY:0
+    });
+    var jsPDF = window.jspdf.jsPDF;
+    var pdf = new jsPDF({ orientation: ORIENT, unit:"pt", format: FORMAT });
+    var pw = pdf.internal.pageSize.getWidth();
+    var ph = pdf.internal.pageSize.getHeight();
+    // Fit to page WIDTH (fills the sheet like the preview, readable), then
+    // paginate — but break ONLY between whole rows so a worker row / table
+    // row is never sliced in half across two pages.
+    var MX = 22, MTOP = 30, MBOT = 22;            // page margins (pt) — incl. top
+    var usableW = pw - 2 * MX;
+    var usableH = ph - MTOP - MBOT;
+    var ptPerPx   = usableW / canvas.width;        // image scaled to usable width
+    var pageCapPx = Math.floor(usableH / ptPerPx); // canvas px that fit usable height
+    var cssToCanvas = canvas.width / fullW;        // html2canvas scale (~2)
+    var rootTop = node.getBoundingClientRect().top;
+    var bounds = [];
+    try {
+      doc.querySelectorAll(".emp-block, .sec-lbl, tr").forEach(function(el){
+        var r = el.getBoundingClientRect();
+        if (r.height <= 0) return;
+        var yb = Math.round((r.bottom - rootTop) * cssToCanvas);
+        if (yb > 0 && yb < canvas.height) bounds.push(yb);
+      });
+    } catch(_){}
+    bounds.push(canvas.height);
+    bounds.sort(function(a,b){ return a - b; });
+    function nextBreak(top){
+      var best = -1;
+      for (var i = 0; i < bounds.length; i++){
+        var b = bounds[i];
+        if (b > top && (b - top) <= pageCapPx) best = b;
+        else if (b - top > pageCapPx) break;
+      }
+      if (best < 0) best = Math.min(canvas.height, top + pageCapPx); // oversized block
+      return best;
+    }
+    var top = 0, firstPage = true;
+    while (top < canvas.height - 1){
+      var bottom  = nextBreak(top);
+      var sliceH  = bottom - top;
+      var tmp = document.createElement("canvas");
+      tmp.width = canvas.width; tmp.height = sliceH;
+      var tctx = tmp.getContext("2d");
+      tctx.fillStyle = "#ffffff"; tctx.fillRect(0, 0, tmp.width, tmp.height);
+      tctx.drawImage(canvas, 0, top, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      if (!firstPage) pdf.addPage();
+      pdf.addImage(tmp.toDataURL("image/jpeg", 0.92), "JPEG", MX, MTOP, usableW, sliceH * ptPerPx);
+      firstPage = false;
+      top = bottom;
+    }
+    var stem  = (KIND === "summary") ? "summary" : "attendance_report";
+    var fname = stem + (date ? "_" + date : "") +
+                (KIND === "summary" && rep ? "_r" + rep : "") + ".pdf";
+    return { pdf: pdf, fname: fname };
+  }
+
+  document.getElementById("btnDownload").addEventListener("click", async function(){
+    var btn = this;
+    if(!ready){ return; }
+    btn.disabled = true; var old = btn.textContent; btn.textContent = "Rendering…";
+    try{
+      var out = await buildReportPdf();
+      out.pdf.save(out.fname);
+      btn.textContent = old;
+    }catch(e){
+      alert("Download failed: " + (e && e.message || e) + "\nTip: try again, or use Print.");
+      btn.textContent = old;
+    }finally{
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("btnPrint").addEventListener("click", async function(){
+    var btn = this;
+    if(!ready){ return; }
+    btn.disabled = true; var old = btn.textContent; btn.textContent = "Preparing…";
+    try{
+      var out = await buildReportPdf();
+      out.pdf.autoPrint();                       // open print dialog on view
+      var url = out.pdf.output("bloburl");
+      var w = window.open(url, "_blank");
+      if (!w) {
+        // Popup blocked — print via a hidden iframe instead.
+        var ifr = document.createElement("iframe");
+        ifr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+        ifr.src = url;
+        ifr.onload = function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(_){ } };
+        document.body.appendChild(ifr);
+      }
+      btn.textContent = old;
+    }catch(e){
+      // Last-resort fallback: native print of the embedded page.
+      try{ frame.contentWindow.focus(); frame.contentWindow.print(); }
+      catch(_){ window.print(); }
+      btn.textContent = old;
+    }finally{
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

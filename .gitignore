@@ -31,3 +31,18 @@ static/line_images/
 *.bak[0-9]
 *.bak[0-9][0-9]
 *.bak_*
+
+# Additional secrets (added 2026-05-27)
+partner_api.json
+users.json
+
+# Timestamped backup files (.bak.YYYYMMDD_HHMMSS or .bak.<digits>)
+*.bak.*
+
+# Mutable agent / app-update state
+app_update.json
+app_updates/
+
+# Local-only ad-hoc backup dirs
+_backup/
+partner_usage.json
