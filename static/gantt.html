@@ -15,9 +15,7 @@ body.mobile .toolbar nav,
 body.mobile #refreshBtn,
 body.mobile #printBtn,
 body.mobile #lineBtn,
-body.mobile #lineStatus,
-body.mobile #memTab,
-body.mobile #memWrap{display:none !important;}
+body.mobile #lineStatus{display:none !important;}
 body.mobile .toolbar{justify-content:center;padding:6px;gap:6px;max-width:100%;}
 body.mobile .toolbar label{font-size:13px;}
 body.mobile .toolbar input[type=date]{padding:6px 8px;font-size:14px;}
@@ -157,59 +155,6 @@ body.mobile{background:#f4f7f9;}
 .prod-wrap{display:none;}
 .prod-wrap.active{display:block;}
 
-/* ===== Member Hours tab ===== */
-.mem-controls{display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-bottom:0.6rem;}
-.mem-pills{display:flex;gap:2px;background:#f0f3f5;border-radius:4px;padding:2px;}
-.mem-pill{padding:4px 10px;border:none;background:transparent;cursor:pointer;font:600 10px/1 inherit;color:#5a6b73;border-radius:3px;}
-.mem-pill.active{background:#125e91;color:#fff;}
-.mem-search{position:relative;flex:1 1 220px;max-width:340px;}
-.mem-search input{width:100%;padding:6px 10px;border:1px solid #d5e2ea;border-radius:6px;font:inherit;font-size:11px;}
-.mem-dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d5e2ea;border-radius:6px;box-shadow:0 6px 18px rgba(16,39,50,.12);max-height:280px;overflow:auto;list-style:none;padding:0;margin:2px 0 0;z-index:50;font-size:11px;}
-.mem-dropdown li{display:flex;justify-content:space-between;gap:0.6rem;padding:5px 10px;cursor:pointer;}
-.mem-dropdown li:hover{background:#f5fbfd;}
-.mem-dates{display:flex;gap:0.45rem;align-items:center;font-size:11px;color:#5f7078;}
-.mem-dates input{margin-left:4px;padding:4px 6px;border:1px solid #d5e2ea;border-radius:5px;font:inherit;font-size:11px;}
-.mem-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:0.6rem;min-height:24px;}
-.mem-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 6px 3px 8px;border-radius:999px;font-size:10.5px;color:#fff;background:var(--c, #125e91);}
-.mem-chip-code{opacity:0.78;font-size:9px;}
-.mem-chip-x{background:rgba(255,255,255,0.25);border:0;color:#fff;border-radius:50%;width:15px;height:15px;line-height:1;cursor:pointer;font-size:11px;}
-.mem-chip-x:hover{background:rgba(255,255,255,0.45);}
-.mem-empty-chip{color:#8a9ba3;font-size:11px;font-style:italic;}
-.mem-empty{color:#8a9ba3;font-size:12px;text-align:center;padding:1.4rem 0;}
-.mem-card{background:#fff;border:1px solid #d5e2ea;border-radius:8px;padding:0.7rem 0.9rem;margin-bottom:0.6rem;}
-.mem-card h3{font-size:11px;color:#5f7078;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem;}
-.mem-card h3 small{font-weight:400;text-transform:none;letter-spacing:0;color:#8a9ba3;margin-left:0.4rem;}
-#memChart{width:100%;height:auto;display:block;}
-.mem-legend{display:flex;flex-wrap:wrap;gap:0.7rem;font-size:10.5px;color:#39474f;margin-top:0.4rem;}
-.mem-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle;}
-/* Per-member daily-strip block — mimics the section/employee gantt layout
-   so each selected member reads like its own mini section. */
-.mem-mblock{margin-bottom:14px;}
-.mem-mhead{font-size:10px;font-weight:700;letter-spacing:.04em;color:#fff;background:var(--c,#125e91);padding:4px 8px;border-radius:3px;margin:6px 0 4px;display:flex;align-items:center;gap:8px;}
-.mem-mhead .mh-sec{font-weight:500;opacity:.85;font-size:9px;}
-.mem-mhead .mh-tot{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:10px;opacity:.95;}
-.mem-axis{display:flex;padding-left:108px;padding-right:90px;margin-bottom:2px;}
-.mem-axis .axis-tick{flex:1;font-size:7px;color:#8a9ba3;white-space:nowrap;text-align:left;border-left:.5px dotted #e5edf0;padding-left:1px;}
-.mem-axis .axis-tick:first-child{border-left:none;}
-.mem-axis .axis-tick.mn{color:#b42318;font-weight:700;}
-.mem-drow{display:flex;align-items:center;margin-bottom:1px;font-size:10px;}
-.mem-dcell{width:108px;flex-shrink:0;padding-right:4px;color:#39474f;}
-.mem-dcell .d-day{font-family:"IBM Plex Mono",monospace;}
-.mem-dcell .d-dow{font-size:8.5px;color:#8a9ba3;margin-left:3px;}
-.mem-dtrack{flex:1;position:relative;}
-.mem-dtrack .track{width:100%;height:14px;background:#f0f3f5;border-radius:2px;position:relative;overflow:hidden;}
-.mem-dtrack .seg{position:absolute;top:0;height:14px;border-radius:2px;display:flex;align-items:center;justify-content:space-between;padding:0 4px;color:#fff;font-size:7.5px;font-weight:700;white-space:nowrap;}
-.mem-dtrack .seg.narrow{justify-content:flex-start;padding-left:3px;}
-.mem-dtrack .seg .seg-l,.mem-dtrack .seg .seg-r{font-size:7px;letter-spacing:.01em;}
-.mem-dright{width:90px;flex-shrink:0;text-align:right;font-family:"IBM Plex Mono",monospace;font-size:10px;color:#132026;padding-left:6px;}
-.mem-dright .pph{color:#0d8f71;margin-left:6px;font-size:9px;}
-.mem-dright .pph.none{color:#bcc8cd;}
-.mem-drow.off .mem-dright{color:#bcc8cd;}
-.mem-mempty{font-size:10px;color:#8a9ba3;padding:6px 0 0 108px;font-style:italic;}
-.mem-totals{width:100%;font-size:11px;border-collapse:collapse;}
-.mem-totals th,.mem-totals td{padding:5px 8px;border-bottom:1px solid #eef3f5;text-align:left;}
-.mem-totals th{color:#5f7078;font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;background:#f5fbfd;}
-.mem-totals td.num,.mem-totals th.num{text-align:right;font-family:"IBM Plex Mono",monospace;}
 .hidden{display:none;}
 .prod-controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
 .prod-pills{display:flex;gap:2px;background:#f0f3f5;border-radius:4px;padding:2px;}
@@ -299,7 +244,7 @@ body.mobile{background:#f4f7f9;}
   @page{size:A4 portrait;margin:4mm;}
 }
 </style>
-<script src="static/site_header.js?v=20260513-genbalink" defer></script>
+<script src="static/site_header.js?v=20260610-back" defer></script>
 </head>
 <body>
 
@@ -329,49 +274,6 @@ body.mobile{background:#f4f7f9;}
   </div>
   <nav class="tabs no-print" id="tabs"></nav>
   <div id="sections"></div>
-  <!-- Member Hours: section toggle + member picker + range + chart + day-strips + totals.
-       Replaces the previous Productivity tab (CSV/PDF/range pills/etc.). -->
-  <div class="prod-wrap" id="memWrap">
-    <div class="mem-controls no-print">
-      <div class="mem-pills" id="memSection">
-        <button class="mem-pill active" data-section="all" type="button">Both sections</button>
-        <button class="mem-pill" data-section="1" type="button">製造１課</button>
-        <button class="mem-pill" data-section="2" type="button">製造２課</button>
-      </div>
-      <div class="mem-search">
-        <input type="text" id="memSearch" placeholder="Type name or code…" autocomplete="off"/>
-        <ul id="memDropdown" class="mem-dropdown hidden"></ul>
-      </div>
-      <div class="mem-dates">
-        <label>From <input type="date" id="memFrom"/></label>
-        <label>To <input type="date" id="memTo"/></label>
-      </div>
-      <button class="prod-btn primary" id="memRunBtn" type="button">Compare →</button>
-    </div>
-    <div class="mem-chips" id="memChips"></div>
-    <div class="mem-result" id="memResult">
-      <p class="mem-empty" id="memEmpty">Pick at least one member, choose a date range, then click <b>Compare →</b>.</p>
-      <div id="memChartWrap" class="hidden">
-        <div class="mem-card">
-          <h3>Daily strip <small>(IN → OUT per day · range capped at 3 months)</small></h3>
-          <div id="memStrips"></div>
-        </div>
-        <div class="mem-card">
-          <h3>Totals <small>(per-member summary across selected range)</small></h3>
-          <table id="memTotals" class="mem-totals">
-            <thead><tr>
-              <th>Member</th><th>Section</th>
-              <th class="num">Days worked</th><th class="num">Total hrs</th>
-              <th>Earliest IN</th><th>Latest IN</th>
-              <th>Earliest OUT</th><th>Latest OUT</th>
-              <th class="num">Longest day</th><th class="num">Max p/h</th>
-            </tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 <div class="chart-tip" id="chartTip"></div>
 
@@ -721,7 +623,6 @@ function render(data){
   const showSection=idx=>{
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
     document.querySelectorAll('.sec-wrap').forEach(w=>w.classList.remove('active'));
-    $('memWrap').classList.remove('active');
     const t=document.querySelector(`.tab[data-idx="${idx}"]`);
     if(t)t.classList.add('active');
     const w=document.querySelector(`.sec-wrap[data-idx="${idx}"]`);
@@ -758,20 +659,6 @@ function render(data){
     }
     secBox.appendChild(w);
   });
-
-  // Member Hours tab (replaces the old Productivity tab) — skipped in mobile mode
-  if(MOBILE_MODE) return;
-  const ptab=document.createElement('button');
-  ptab.type='button';ptab.className='tab';ptab.id='memTab';
-  ptab.innerHTML='👥 Member Hours';
-  ptab.onclick=()=>{
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    document.querySelectorAll('.sec-wrap').forEach(w=>w.classList.remove('active'));
-    ptab.classList.add('active');
-    $('memWrap').classList.add('active');
-    MemberHours.ensureLoaded();
-  };
-  tabs.appendChild(ptab);
 }
 
 /* Pack production lines: read daily_pack_items for the same date and stash
@@ -833,218 +720,6 @@ async function load(date){
 }
 
 
-/* ================================================================
-   Member Hours — section-filtered roster + multi-member day comparison.
-   Replaces the old Productivity IIFE. Backend: /api/members/{list,compare}.
-   ================================================================ */
-const MemberHours = (() => {
-  const COLORS = ["#125e91","#c7701b","#0d8f71","#6b3fa0","#b42318","#9b640f","#3f72af","#0a6a3c","#5b3a8e","#a83248"];
-  const state = { loaded:false, section:"all", roster:[], rosterIdx:[], selected:[], from:null, to:null, data:null };
-
-  function defaultRange(){
-    const today = new Date();
-    const to = today.toISOString().slice(0,10);
-    const start = new Date(today.getTime() - 6*86400000);
-    return { from: start.toISOString().slice(0,10), to };
-  }
-  async function loadRoster(){
-    const r = await fetch(`api/members/list?section=${state.section}`);
-    const j = await r.json();
-    state.roster = j.items || [];
-    state.rosterIdx = state.roster.map(m => `${m.code} ${m.name}`.toLowerCase());
-  }
-  function renderChips(){
-    const host = document.getElementById("memChips");
-    if (!state.selected.length){ host.innerHTML = `<span class="mem-empty-chip">No members selected.</span>`; return; }
-    host.innerHTML = state.selected.map(m => `
-      <span class="mem-chip" data-code="${m.code}" style="--c:${m.color}">
-        ${m.name || m.code}<span class="mem-chip-code mono">${m.code}</span>
-        <button type="button" class="mem-chip-x" data-rm="${m.code}">×</button>
-      </span>`).join("");
-    host.querySelectorAll("[data-rm]").forEach(b =>
-      b.addEventListener("click", () => removeMember(b.dataset.rm)));
-  }
-  function addMember(code){
-    if (state.selected.some(s => s.code === code)) return;
-    if (state.selected.length >= 12) return;
-    const m = state.roster.find(x => x.code === code); if (!m) return;
-    const color = COLORS[state.selected.length % COLORS.length];
-    state.selected.push({ code: m.code, name: m.name, section_id: m.section_id, color });
-    renderChips();
-  }
-  function removeMember(code){
-    state.selected = state.selected.filter(m => m.code !== code);
-    state.selected.forEach((m, i) => { m.color = COLORS[i % COLORS.length]; });
-    renderChips();
-    if (state.data) renderResult();
-  }
-
-  function bindControls(){
-    document.querySelectorAll("#memSection .mem-pill").forEach(b =>
-      b.addEventListener("click", async () => {
-        document.querySelectorAll("#memSection .mem-pill").forEach(x => x.classList.remove("active"));
-        b.classList.add("active");
-        state.section = b.dataset.section;
-        await loadRoster();
-        state.selected = state.selected.filter(m =>
-          state.section === "all" || String(m.section_id) === state.section);
-        renderChips();
-      }));
-
-    const $s  = document.getElementById("memSearch");
-    const $dd = document.getElementById("memDropdown");
-    function refreshDropdown(){
-      const q = ($s.value || "").trim().toLowerCase();
-      if (!q){ $dd.classList.add("hidden"); $dd.innerHTML = ""; return; }
-      const matches = [];
-      for (let i = 0; i < state.roster.length && matches.length < 12; i++){
-        if (state.rosterIdx[i].includes(q)) matches.push(state.roster[i]);
-      }
-      if (!matches.length){ $dd.classList.add("hidden"); return; }
-      $dd.innerHTML = matches.map(m => `<li data-code="${m.code}">
-        <span>${m.name || "(no name)"}</span>
-        <span class="mono" style="color:#5f7078;">${m.code} · ${m.section_label || ""}</span>
-      </li>`).join("");
-      $dd.classList.remove("hidden");
-      $dd.querySelectorAll("li").forEach(li => li.addEventListener("click", () => {
-        addMember(li.dataset.code); $s.value = ""; $dd.classList.add("hidden"); $s.focus();
-      }));
-    }
-    $s.addEventListener("input", refreshDropdown);
-    $s.addEventListener("focus", refreshDropdown);
-    $s.addEventListener("blur",  () => setTimeout(() => $dd.classList.add("hidden"), 120));
-
-    const def = defaultRange();
-    document.getElementById("memFrom").value = def.from;
-    document.getElementById("memTo").value   = def.to;
-    document.getElementById("memRunBtn").addEventListener("click", runCompare);
-  }
-
-  async function runCompare(){
-    if (!state.selected.length){ alert("Pick at least one member first."); return; }
-    state.from = document.getElementById("memFrom").value;
-    state.to   = document.getElementById("memTo").value;
-    if (!state.from || !state.to){ alert("Pick a date range."); return; }
-    // Hard 3-month cap (matches backend) — let users know up front.
-    const days = Math.round((new Date(state.to) - new Date(state.from)) / 86400000) + 1;
-    if (days > 92){ alert("Range capped at 3 months (92 days). Please narrow the dates."); return; }
-    const codes = state.selected.map(m => m.code).join(",");
-    const r = await fetch(`api/members/compare?from=${state.from}&to=${state.to}&codes=${encodeURIComponent(codes)}`);
-    const j = await r.json();
-    if (!r.ok){ alert(j.detail || "compare failed"); return; }
-    state.data = j;
-    document.getElementById("memEmpty").classList.add("hidden");
-    document.getElementById("memChartWrap").classList.remove("hidden");
-    renderResult();
-  }
-  function renderResult(){ if (state.data){ renderStrips(); renderTotals(); } }
-
-  function _axisRowHTML(){
-    let out = '<div class="mem-axis">';
-    for (let i = 0; i <= WIN_HOURS; i += 2){
-      const rh = (WIN_START + i) % 24;
-      out += `<div class="axis-tick${rh===0?' mn':''}">${String(rh).padStart(2,'0')}:00</div>`;
-    }
-    return out + '</div>';
-  }
-  function _dowLabel(dateStr){
-    const d = new Date(dateStr + "T00:00:00");
-    return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
-  }
-
-  function renderStrips(){
-    const host = document.getElementById("memStrips");
-    const colorOf = code => (state.selected.find(m=>m.code===code) || {}).color || "#125e91";
-
-    host.innerHTML = state.data.members.map(m => {
-      const color = colorOf(m.code);
-      const s = m.summary || {};
-      const totHdr = `${(s.total_hours ?? 0).toFixed(2)}h · ${s.days_worked ?? 0} days`
-                   + (s.max_pph != null ? ` · max p/h ${s.max_pph.toFixed(2)}` : "");
-      const head = `<div class="mem-mhead" style="--c:${color}">
-          <span>${m.name || "(no name)"}</span>
-          <span class="mono" style="opacity:.8;">${m.code}</span>
-          <span class="mh-sec">${m.section_label || "—"}</span>
-          <span class="mh-tot">${totHdr}</span>
-        </div>`;
-
-      // One row per day in the requested range — top-to-bottom comparison.
-      const rows = m.days.map(d => {
-        const dateMD = d.date.slice(5);
-        const dow    = _dowLabel(d.date);
-        const pphTxt = d.pph != null ? `<span class="pph">p/h ${d.pph.toFixed(2)}</span>`
-                                     : `<span class="pph none">p/h —</span>`;
-
-        if (!d.in || !d.out){
-          return `<div class="mem-drow off">
-            <div class="mem-dcell"><span class="d-day">${dateMD}</span><span class="d-dow">${dow}</span></div>
-            <div class="mem-dtrack"><div class="track"></div></div>
-            <div class="mem-dright">— ${pphTxt}</div>
-          </div>`;
-        }
-
-        const inH  = parseH(d.in);
-        const outH = parseH(d.out);
-        const wh   = d.work_hours || 0;
-        // Replicate the gantt-row math: project IN/OUT onto the 10:00→08:30 axis.
-        let axIn  = inH  != null ? toAxis(inH)  : 0;
-        let axOut = outH != null ? toAxis(outH) : axIn + wh;
-        // OUT before IN on the wall clock means it crossed midnight — bump it forward.
-        if (outH != null && inH != null && outH <= inH) axOut = toAxis(outH + 24);
-        axIn  = Math.max(0, Math.min(WIN_HOURS, axIn));
-        axOut = Math.max(0, Math.min(WIN_HOURS, axOut));
-        const left  = toPct(axIn);
-        const width = Math.max(0.6, toPct(axOut) - left);
-        const narrow = width < 14;
-        const whTxt  = fmtHHMM(wh);
-        const segInner = narrow
-          ? `<span class="seg-l">${whTxt}</span>`
-          : `<span class="seg-l">${d.in}</span><span class="seg-r">${whTxt} · ${d.out}</span>`;
-
-        return `<div class="mem-drow" title="${d.date}: ${d.in} → ${d.out} · ${whTxt}${d.pph!=null?' · p/h '+d.pph.toFixed(2):''}">
-          <div class="mem-dcell"><span class="d-day">${dateMD}</span><span class="d-dow">${dow}</span></div>
-          <div class="mem-dtrack"><div class="track">
-            <div class="seg${narrow?' narrow':''}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${color};">${segInner}</div>
-          </div></div>
-          <div class="mem-dright">${whTxt} ${pphTxt}</div>
-        </div>`;
-      }).join("");
-
-      return `<div class="mem-mblock">${head}${_axisRowHTML()}${rows || '<div class="mem-mempty">No days in range.</div>'}</div>`;
-    }).join("");
-  }
-
-  function renderTotals(){
-    const tbody = document.querySelector("#memTotals tbody");
-    const fmt = v => v == null ? "—" : v;
-    const fmtN = v => (v == null || isNaN(v)) ? "—" : v.toFixed(2);
-    tbody.innerHTML = state.data.members.map(m => {
-      const s = m.summary || {};
-      return `<tr>
-        <td>${m.name || "(no name)"} <span class="mono" style="color:#5f7078;">${m.code}</span></td>
-        <td>${m.section_label || "—"}</td>
-        <td class="num">${s.days_worked ?? "—"}</td>
-        <td class="num">${fmtN(s.total_hours)}</td>
-        <td class="mono">${fmt(s.earliest_in)}</td>
-        <td class="mono">${fmt(s.latest_in)}</td>
-        <td class="mono">${fmt(s.earliest_out)}</td>
-        <td class="mono">${fmt(s.latest_out)}</td>
-        <td class="num">${fmtN(s.longest_day)}</td>
-        <td class="num">${fmtN(s.max_pph)}</td>
-      </tr>`;
-    }).join("");
-  }
-
-  return {
-    async ensureLoaded(){
-      if (state.loaded) return;
-      state.loaded = true;
-      await loadRoster();
-      bindControls();
-      renderChips();
-    },
-  };
-})();
 
 async function init(){
   let date=params.get('date');

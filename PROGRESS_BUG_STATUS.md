@@ -1,11 +1,185 @@
 # Progress & Bug Status — Attendance App
 # 進捗・不具合対応状況 — 勤怠アプリ
 
-**Date / 日付:** 2026-05-27
+**Date / 日付:** 2026-06-09
 
 **Version / バージョン:** 4.1 (auth subsystem retained; brand text rolled back to V3 Attendance Console; public landing page added for genbafms.com)
 
-**Latest update / 最新更新 (2026-05-27 — パック数の変更履歴を残せるようにした／アップロード元の実 IP を記録するようにした / Pack-count change history is now recorded; the real client IP behind the Cloudflare Tunnel is now captured)**
+**Latest update / 最新更新 (2026-06-10 — デスクトップアプリのダウンロードを修正、各ページに「接続・連携」を追加 / Fixed the desktop-app download and added a "Connect & Integrate" panel to more pages)**
+
+デスクトップアプリのダウンロードリンクが「ダウンロードできません」と表示される不具合を
+修正しました。最新版（2.4.35）が正しくダウンロードできるようになりました。あわせて、
+ホーム画面と管理画面（`/management`）の上部に「接続・連携」パネルを追加し、デスクトップ
+アプリのダウンロード・AI連携ガイド・アプリ使い方ガイドへすぐ移動できるようにしました。
+
+※ ダウンロード時にブラウザや Windows が「発行元不明／安全でない可能性」と警告する場合が
+ありますが、これはアプリに**コード署名証明書が付いていない**ためで、ファイル自体は安全です。
+警告を完全に消すには、有料のコード署名証明書が必要です。
+
+Fixed the bug where the desktop-app download link showed "no build available" — the
+latest version (2.4.35) now downloads correctly. Also added a "Connect & Integrate"
+panel to the top of the home page and the management page (`/management`) with quick
+links to download the desktop app and open the AI-integration / app-usage guides.
+
+Note: browsers or Windows may warn "unknown publisher / possibly unsafe" when
+downloading — this is because the app is **not code-signed yet**, not because the file
+is harmful. Removing the warning entirely requires a paid code-signing certificate.
+
+工場の 2 ライン（製造１課・製造２課）を 1 画面で見られる、ウォール表示向けの
+監視画面 `/hmi` を追加しました。**本物のデータ**（パック数・目標／実績・時間レート・
+在席人数・作業者氏名）は勤怠・生産データから自動表示されます。温度・重量・金属検出・
+OEE・排出数などの**工程センサー値は、まだ機器がつながっていないため「デモ表示」**
+（ランダムな見本値、画面に「demo」と明示）です。6 秒ごとに自動更新します。
+
+これは AI エージェント（Claude）から届いた「変更リクエスト #3（SCADA/HMI 画面）」の
+**フェーズ1**として実装したものです。今後、実際のセンサー（温度・重量・金属検出など）が
+つながれば、デモ部分を本物の値に置き換えられます。
+
+A wall-display monitoring screen `/hmi` now shows both factory lines (製造１課 /
+製造２課) on one page. **Real data** — pack counts, target vs actual, rate/h,
+headcount, and worker names — is pulled live from attendance/production. The
+**process-sensor values (temperature, weight, metal detection, OEE, reject
+counts) are "demo" placeholders** (random sample values, marked "demo" on screen)
+because that sensor hardware isn't connected yet. Auto-refreshes every 6 seconds.
+
+This was built as **Phase 1** of change-request #3 (the SCADA/HMI screen) that the
+AI agent (Claude) submitted — demonstrating the full request→approve→build loop.
+
+View: `https://link.genbafms.com/hmi`
+
+**Previous update / 前回の更新 (2026-06-09 — Claude / ChatGPT に「ワンクリック接続」できるようになりました / One-click sign-in connector for Claude / ChatGPT)**
+
+AI アプリ（Claude や ChatGPT）から、トークンを手で貼り付けることなく、
+**URL を入れて「接続」→ 管理者パスワードで承認** するだけでサーバーにつなげる
+ようにしました（業界標準の OAuth サインインを追加）。承認するとそのつながりは
+管理画面の「Agent API」に 1 件のエージェントとして表示され、いつでも停止できます。
+
+You can now connect AI apps (Claude, ChatGPT) with **one click** — paste the
+server URL, click Connect, and approve with the **admin password** — no more
+copy-pasting tokens (this adds standard OAuth sign-in). Each approved connection
+shows up as an agent in the admin **Agent API** tab and can be revoked anytime.
+
+接続用 URL / Connector URL: `https://link.genbafms.com/mcp`
+
+**Previous update / 前回の更新 (2026-06-09 — AI エージェント連携 + 変更リクエスト管理を追加しました / Added AI-agent integration + a change-request workflow)**
+
+外部の AI エージェント（社外のシステムや AI ツール）が、**1 つの専用キー**で
+サーバーに安全につながり、生産数や勤怠などのデータを**見る／一部書き込む**
+ことができる仕組みを追加しました。書き込みは**生産パック数と派遣スタッフだけ**に
+限定し、削除や名簿・休み予定の書き換え、ファイルのアップロードはできません。
+
+あわせて「**変更リクエスト管理**」も追加しました。エージェントが「こんな機能が
+欲しい」と申請 → 管理者が実現可能性・リスク・期間を評価して承認／却下 → 人が
+実装 → エージェントが結果を報告、という一連の流れを、管理画面の 1 か所で
+すべて確認できます（会話と約束事の一覧）。
+
+各キーは個別に**停止・通信制限・IP 制限・読み取り専用**にでき、初期状態では
+**すべて無効（安全側）**です。管理者は `/admin` の「**Agent API**」と
+「**Change Requests**」タブから管理します。
+
+A new system lets external AI agents (outside systems or AI tools) connect to
+the server securely with **one dedicated key** to **read** — and selectively
+**write** — data such as production counts and attendance. Writes are limited to
+**production pack counts and temp staff only**; agents cannot delete, edit the
+roster/day-off schedule, or upload files.
+
+We also added a **change-request workflow**: an agent requests a new feature →
+the admin evaluates feasibility, risk, and timeline and approves/rejects → a
+person implements it → the agent reports the result. The whole conversation and
+all commitments are visible in one place in the admin console.
+
+Every key can be individually **revoked, rate-limited, IP-restricted, or made
+read-only**, and the whole feature ships **disabled by default (safe side)**.
+Admins manage it from the **Agent API** and **Change Requests** tabs in `/admin`.
+
+**Previous update / 前回の更新 (2026-06-09 — 印刷・PDF ボタンでログイン画面が出なくなりました / Print and PDF buttons no longer ask you to log in)**
+
+PC のデスクトップ・アプリで「印刷」や「PDF を表示」を押すと、ブラウザが開いて
+日報（ガントチャートや集計）の印刷ページが表示されます。これまでは、ブラウザ側に
+ログイン情報がないため、**最初の一回はログイン画面が出て、ユーザー名とパスワードを
+入力する必要** がありました。ブラウザを変えたり、しばらく経つと、また入力が必要に
+なっていました。
+
+今回の更新で、アプリの「印刷」「PDF を表示」ボタンを押すと、**ログイン画面を経由せず
+そのまま印刷ページが開く** ようになりました。非技術者の現場オペレーターでも、ボタンを
+押すだけで印刷・PDF 保存ができます。安全面にも配慮し、アプリ専用の鍵がブラウザの
+履歴やアドレスバーに残らない方式を採用しています。
+
+When you press "Print" or "View PDF" in the PC desktop app, your browser
+opens the print-ready daily-report page (Gantt chart or summary). Until now,
+because the browser had no login information, **the first time you had to log
+in with a username and password** — and you had to do it again after a while
+or on a different browser.
+
+With this update, pressing the app's "Print" / "View PDF" buttons now **opens
+the print page directly, with no login screen**. Non-technical floor operators
+can print or save a PDF with a single click. It was built the secure way, so
+the app's private key never appears in the browser history or address bar.
+
+> Server work is complete and live; the desktop app still needs a small update
+> on its side to start using this. / サーバー側は完了・稼働中です。デスクトップ・
+> アプリ側で利用を開始するための小さな更新が別途必要です。
+
+**Previous update / 前回の更新 (2026-05-28 — エクセルの自動アップロードが「すぐ」反映されるようになりました / Excel auto-uploads now show up immediately instead of waiting up to 5 hours)**
+
+PC のデスクトップ・アプリ (`watch.js`) が日報のエクセルを自動で送ったとき、
+ファイル自体はすぐサーバーに届いていたものの、**画面の日報数字に反映されるのは
+最大 5 時間後** という状態が起きていました。原因は社内認証の設定漏れで、
+3 ステップある送信処理の最後の 1 ステップだけが弾かれ、最後の「保存」だけが
+5 時間ごとの自動巡回 (`attendance-doctor`) を待たないと走らない、というものでした。
+今回これを修正し、エクセルが届いた直後に画面の数字も更新されるようにしました。
+
+The Desktop Agent (`watch.js`) was sending daily-report Excel files
+automatically, and the files themselves reached the server right away —
+but **the numbers visible in the console were only being updated up to
+5 hours later**. The cause was an internal auth setting that blocked the
+final "save" step of the three-step upload chain, so the actual database
+write had to wait for the 5-hourly auto-doctor sweep. With this fix, the
+console numbers update immediately after each Excel upload.
+
+**Issue / 問題:**
+
+- PC からのエクセル自動アップロードは届いていたが、日報の数字 (`daily_packs`)
+  にすぐ反映されず、**最大 5 時間遅れ** で表示されていた。
+- Excel auto-uploads from the PC were arriving on the server, but the
+  numbers in the daily-pack report were **delayed by up to 5 hours**
+  before becoming visible in the console.
+- PDF の自動アップロードでは同じ問題は起きておらず、エクセル経路だけが
+  遅れていた。
+- The PDF auto-upload path did not have this problem — only the Excel
+  path was affected.
+
+**Resolution / 対応:**
+
+- 内部のアップロード経路 3 ステップのうち、最後の「データベース保存」の
+  ステップが、社内ログインがない PC アプリからの呼び出しを拒否してしまう
+  設定になっていたため、**PC アプリ専用キー (`X-API-Key`) でも通れる** ように
+  修正しました。社内ログイン経由 (ブラウザの操作画面) はこれまでどおり動作。
+- The last of the three upload steps was rejecting calls that did not
+  carry an internal login session. It now accepts either an internal
+  login session (browser console) **or the Desktop Agent's
+  `X-API-Key`** — so the PC app can complete the full chain on its own.
+  Browser-side behavior is unchanged.
+- 動作確認 (本番ホスト `link.genbafms.com`):
+  - 認証なし → **401**（これまでどおり拒否）
+  - PC アプリ用キーあり → **保存処理に到達**（修正効果あり）
+  - 不正なキー → **401**（厳格に拒否）
+  - PDF 経路は **200**（影響なし）
+- Verified against the live `link.genbafms.com` host:
+  - No auth → **401** (still rejected, as before).
+  - Valid Desktop-Agent key → **reaches the save handler** (the fix).
+  - Bogus key → **401** (strict rejection preserved).
+  - PDF auto-extract path → **200** (no regression).
+- これにより、本番工場の PC で `watch.js` がエクセルを保存した直後に、
+  コンソール画面の「✓ daily_packs report ready for YYYY-MM-DD」が
+  即時表示されるようになります（従来は最大 5 時間後）。
+- The console's "✓ daily_packs report ready for YYYY-MM-DD" indicator
+  will now show up immediately after the agent saves an Excel file,
+  instead of up to 5 hours later.
+
+---
+
+**Previous update / 前回の更新 (2026-05-27 — パック数の変更履歴を残せるようにした／アップロード元の実 IP を記録するようにした / Pack-count change history is now recorded; the real client IP behind the Cloudflare Tunnel is now captured)**
 
 「今日のパック数が誰かに書き換わったのに、いつ誰が変えたのか分からない」
 状態を解消するため、**パック数の変更履歴を自動で残す仕組み** を追加しました。

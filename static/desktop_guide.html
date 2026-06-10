@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GENBA FMS — Desktop App Guide</title>
+<style>
+  :root{--bg:#f6f8fa;--card:#fff;--ink:#1f2933;--muted:#5a6b73;--line:#e3e8ee;--teal:#0d9488;--teal-d:#0b6f58}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter','Noto Sans JP','Hiragino Sans','Yu Gothic',system-ui,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.6}
+  .wrap{max-width:860px;margin:0 auto;padding:24px 18px 80px}
+  #md{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 30px;box-shadow:0 6px 24px rgba(20,40,60,.06)}
+  #md h1{color:var(--teal-d);font-size:1.7rem;margin:.2rem 0 1rem;border-bottom:2px solid var(--line);padding-bottom:.5rem}
+  #md h2{color:var(--teal-d);font-size:1.25rem;margin:1.8rem 0 .6rem;border-top:1px solid var(--line);padding-top:1rem}
+  #md h3{color:var(--ink);font-size:1.05rem;margin:1.2rem 0 .4rem}
+  #md a{color:var(--teal);text-decoration:none}#md a:hover{text-decoration:underline}
+  #md code{background:#eef2f5;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-family:'JetBrains Mono','IBM Plex Mono',monospace;font-size:.88em}
+  #md pre{background:#0e1a2b;color:#e6ecf5;border-radius:10px;padding:14px 16px;overflow:auto}
+  #md pre code{background:none;border:0;color:inherit;padding:0}
+  #md table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.92rem}
+  #md th,#md td{border:1px solid var(--line);padding:.45rem .6rem;text-align:left;vertical-align:top}
+  #md th{background:#eef6f4;color:var(--teal-d)}
+  #md blockquote{border-left:4px solid var(--teal);background:#f0f7f5;margin:.8rem 0;padding:.5rem .9rem;color:var(--muted);border-radius:0 8px 8px 0}
+  #md img{max-width:240px;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff}
+  #md ul,#md ol{padding-left:1.4rem}
+  .topbar{display:flex;align-items:center;gap:.6rem;margin-bottom:16px}
+  .topbar .dot{width:12px;height:12px;border-radius:3px;background:var(--teal);box-shadow:0 0 10px rgba(13,148,136,.6)}
+  .topbar b{color:var(--teal-d);font-size:1.05rem}
+  .topbar a{margin-left:auto;font-size:.85rem;color:var(--teal);text-decoration:none;border:1px solid var(--line);background:#fff;border-radius:8px;padding:.35rem .7rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><span class="dot"></span><b>GENBA FMS</b>
+    <a href="/desktop-guide.md" target="_blank">View raw (.md)</a></div>
+  <div id="md">Loading…</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+  fetch("/desktop-guide.md").then(r=>r.text()).then(t=>{
+    try{ document.getElementById("md").innerHTML = marked.parse(t); }
+    catch(e){ document.getElementById("md").innerHTML = "<pre>"+t.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+"</pre>"; }
+  }).catch(e=>{ document.getElementById("md").textContent = "Failed to load guide: "+e; });
+</script>
+<style>body.lang-jp e{display:none}body.lang-en j{display:none}
+.langsw{display:inline-flex;border:1px solid #e3e8ee;border-radius:8px;overflow:hidden;margin-left:8px}
+.langsw button{background:#fff;color:#5a6b73;border:0;padding:.3rem .6rem;font-weight:800;font-size:.78rem;cursor:pointer}
+.langsw button.on{background:#0d9488;color:#fff}</style>
+<script>(function(){
+  var sw=document.createElement('span');sw.className='langsw';sw.id='langsw';
+  sw.innerHTML='<button data-l="jp">日本語</button><button data-l="en">EN</button>';
+  (document.querySelector('.topbar')||document.body).appendChild(sw);
+  function setLang(l){document.body.classList.remove('lang-jp','lang-en');document.body.classList.add('lang-'+l);
+    sw.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.l===l)});try{localStorage.setItem('guideLang',l)}catch(e){}}
+  sw.querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){setLang(b.dataset.l)})});
+  var l='jp';try{l=localStorage.getItem('guideLang')||'jp'}catch(e){}setLang(l);
+})();</script>
+</body>
+</html>

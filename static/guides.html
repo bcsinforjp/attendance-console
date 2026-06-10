@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GENBA FMS — ガイド / Guides</title>
+<style>
+  :root{--bg:#f6f8fa;--card:#fff;--ink:#1f2933;--muted:#5a6b73;--line:#e3e8ee;--teal:#0d9488;--teal-d:#0b6f58;--indigo:#6366f1}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter','Noto Sans JP','Hiragino Sans','Yu Gothic',system-ui,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding:22px 18px 80px}
+  .head{display:flex;align-items:center;gap:.6rem;margin-bottom:16px}
+  .head .dot{width:13px;height:13px;border-radius:3px;background:var(--teal);box-shadow:0 0 10px rgba(13,148,136,.6)}
+  .head b{color:var(--teal-d);font-size:1.1rem}
+  /* switch cards */
+  .switch{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+  @media(max-width:620px){.switch{grid-template-columns:1fr}}
+  .gcard{display:flex;align-items:center;gap:.9rem;text-align:left;cursor:pointer;
+    background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:16px 18px;
+    box-shadow:0 4px 16px rgba(20,40,60,.05);transition:transform .12s ease,border-color .12s,box-shadow .12s;font:inherit;color:inherit}
+  .gcard:hover{transform:translateY(-2px);box-shadow:0 8px 26px rgba(20,40,60,.1)}
+  .gcard.active{border-color:var(--teal);box-shadow:0 8px 26px rgba(13,148,136,.18)}
+  .gcard .ic{width:54px;height:54px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .gcard.ai .ic{background:linear-gradient(150deg,#0d9488,#34d399)}
+  .gcard.desktop .ic{background:linear-gradient(150deg,#6366f1,#8b8ef5)}
+  .gcard .ic svg{width:30px;height:30px}
+  .gcard .tx b{display:block;font-size:1.02rem;color:var(--ink)}
+  .gcard .tx span{font-size:.8rem;color:var(--muted)}
+  .gcard.active .tx b{color:var(--teal-d)}
+  .gcard .go{margin-left:auto;color:var(--teal);font-weight:800;font-size:1.2rem;opacity:.5}
+  .gcard.active .go{opacity:1}
+  /* rendered markdown */
+  #md{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px 30px;box-shadow:0 6px 24px rgba(20,40,60,.06)}
+  #md h1{color:var(--teal-d);font-size:1.6rem;margin:.2rem 0 1rem;border-bottom:2px solid var(--line);padding-bottom:.5rem}
+  #md h2{color:var(--teal-d);font-size:1.22rem;margin:1.7rem 0 .6rem;border-top:1px solid var(--line);padding-top:1rem}
+  #md h3{font-size:1.05rem;margin:1.1rem 0 .4rem}
+  #md a{color:var(--teal);text-decoration:none}#md a:hover{text-decoration:underline}
+  #md code{background:#eef2f5;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-family:'JetBrains Mono','IBM Plex Mono',monospace;font-size:.88em}
+  #md pre{background:#0e1a2b;color:#e6ecf5;border-radius:10px;padding:14px 16px;overflow:auto}
+  #md pre code{background:none;border:0;color:inherit;padding:0}
+  #md table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.92rem}
+  #md th,#md td{border:1px solid var(--line);padding:.45rem .6rem;text-align:left;vertical-align:top}
+  #md th{background:#eef6f4;color:var(--teal-d)}
+  #md blockquote{border-left:4px solid var(--teal);background:#f0f7f5;margin:.8rem 0;padding:.5rem .9rem;color:var(--muted);border-radius:0 8px 8px 0}
+  #md img{max-width:220px;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff}
+  #md ul,#md ol{padding-left:1.4rem}
+  /* language toggle (JP/EN) — j/e are language tags inside the markdown */
+  body.lang-jp e{display:none} body.lang-en j{display:none}
+  .langsw{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:auto;background:#fff}
+  .langsw button{background:transparent;color:var(--muted);border:0;padding:.38rem .8rem;font-size:.8rem;font-weight:800;cursor:pointer}
+  .langsw button.on{background:var(--teal);color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head"><span class="dot"></span><b>GENBA FMS — <j>ガイド</j><e>Guides</e></b>
+    <div class="langsw" id="langsw"><button data-l="jp">日本語</button><button data-l="en">EN</button></div>
+  </div>
+
+  <div class="switch">
+    <button class="gcard ai active" data-guide="ai">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 7V4"/><circle cx="12" cy="3" r="1.3" fill="#fff"/><circle cx="9" cy="13" r="1.4" fill="#fff" stroke="none"/><circle cx="15" cy="13" r="1.4" fill="#fff" stroke="none"/><path d="M9 16.5h6"/></svg></div>
+      <div class="tx"><b>🤖 AI / ChatGPT 連携</b><span>データ・レポート・依頼を AI で / Data, reports &amp; requests by AI</span></div>
+      <div class="go">›</div>
+    </button>
+    <button class="gcard desktop" data-guide="desktop">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>
+      <div class="tx"><b>💻 デスクトップアプリ</b><span>自動アップロード・印刷・LINE / Auto-upload, print, LINE</span></div>
+      <div class="go">›</div>
+    </button>
+  </div>
+
+  <div id="md">Loading…</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+  const SRC = { ai: "/ai-guide.md", desktop: "/desktop-guide.md" };
+  const mdEl = document.getElementById("md");
+  function render(t){ try{ mdEl.innerHTML = marked.parse(t); }catch(e){ mdEl.textContent = t; } window.scrollTo({top:0,behavior:"smooth"}); }
+  function load(which){
+    document.querySelectorAll(".gcard").forEach(c => c.classList.toggle("active", c.dataset.guide === which));
+    mdEl.textContent = "Loading…";
+    fetch(SRC[which] || SRC.ai).then(r=>r.text()).then(render)
+      .catch(e=>{ mdEl.textContent = "Failed to load: " + e; });
+    try{ localStorage.setItem("guideTab", which); }catch(e){}
+    if (location.hash.slice(1) !== which) history.replaceState(null,"","#"+which);
+  }
+  document.querySelectorAll(".gcard").forEach(c => c.addEventListener("click", () => load(c.dataset.guide)));
+  // language toggle (default Japanese)
+  function setLang(l){
+    document.body.classList.remove("lang-jp","lang-en");
+    document.body.classList.add("lang-"+l);
+    document.querySelectorAll("#langsw button").forEach(b=>b.classList.toggle("on", b.dataset.l===l));
+    try{ localStorage.setItem("guideLang", l); }catch(e){}
+  }
+  document.querySelectorAll("#langsw button").forEach(b=>b.addEventListener("click",()=>setLang(b.dataset.l)));
+  let lang="jp"; try{ lang=localStorage.getItem("guideLang")||"jp"; }catch(e){}
+  setLang(lang);
+  let init = (location.hash.slice(1)) || (()=>{try{return localStorage.getItem("guideTab")}catch(e){return ""}})() || "ai";
+  if (!SRC[init]) init = "ai";
+  load(init);
+</script>
+</body>
+</html>

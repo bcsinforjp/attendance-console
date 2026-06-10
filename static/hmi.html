@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GENBA FMS — Line Overview (HMI)</title>
+<style>
+  :root{
+    --bg:#f6f8fa; --panel:#ffffff; --panel2:#f1f4f7; --edge:#e3e8ee; --edge2:#eef2f5;
+    --teal:#0d9488; --teal-d:#0b6f58; --textp:#1f2933; --texts:#5a6b73;
+    --green:#15a06b; --amber:#c77f0a; --red:#dc2626;
+    --z-teal:#0d9488; --z-purple:#6366f1; --z-coral:#d2602e; --z-amber:#c77f0a; --z-blue:#2563eb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--textp);
+    background:
+      radial-gradient(1200px 520px at 18% -14%, #e8f4f1 0%, transparent 60%),
+      radial-gradient(1000px 520px at 96% -14%, #e9ecfb 0%, transparent 55%),
+      var(--bg);
+    font-family:'Inter','Noto Sans JP','Hiragino Sans','Yu Gothic','Meiryo',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1980px;margin:0 auto;padding:14px 18px 28px}
+  body.lang-jp .en{display:none}
+  body.lang-en .jp{display:none}
+  /* header */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+    background:#fff;border:1px solid var(--edge);border-radius:12px;padding:.7rem 1.1rem;margin-bottom:14px;position:relative;
+    box-shadow:0 2px 12px rgba(20,40,60,.06)}
+  .brand{display:flex;align-items:center;gap:.7rem}
+  .brand b{font-size:1.15rem;letter-spacing:.4px;color:var(--teal-d)}
+  .brand .sub{color:var(--texts);font-size:.78rem}
+  .kpis{display:flex;gap:1.1rem;align-items:center;flex-wrap:wrap}
+  .kpi{text-align:right}
+  .kpi .v{font-size:1.3rem;font-weight:800;color:var(--teal-d);font-variant-numeric:tabular-nums}
+  .kpi .v.green{color:var(--green)}
+  .kpi .l{font-size:.7rem;color:var(--texts)}
+  .clock{font-variant-numeric:tabular-nums;font-size:1.3rem;font-weight:800;color:var(--textp)}
+  .demo-badge{background:#fff8ea;border:1px solid #f0dbb8;color:#9b640f;
+    font-size:.65rem;font-weight:700;letter-spacing:.5px;padding:.2rem .5rem;border-radius:5px;cursor:help}
+  .ctl{display:flex;align-items:center;gap:.5rem}
+  .seg{display:flex;border:1px solid var(--edge);border-radius:8px;overflow:hidden}
+  .seg button{background:#fff;color:var(--texts);border:0;padding:.38rem .7rem;font-size:.78rem;cursor:pointer;font-weight:700}
+  .seg button.on{background:var(--teal);color:#fff}
+  .iconbtn{background:var(--panel2);border:1px solid var(--edge);color:var(--textp);border-radius:8px;padding:.4rem .6rem;font-size:1rem;cursor:pointer;line-height:1}
+  .iconbtn:hover{border-color:var(--teal)}
+  /* top tabs */
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:#fff;border:1px solid var(--edge);border-radius:12px;padding:7px 9px;margin-bottom:14px;box-shadow:0 2px 12px rgba(20,40,60,.05)}
+  .tabs a{display:flex;align-items:center;gap:.4rem;padding:.46rem .8rem;border-radius:8px;color:var(--texts);text-decoration:none;font-size:.9rem;font-weight:700;white-space:nowrap;border:1px solid transparent}
+  .tabs a:hover{background:var(--panel2);color:var(--textp);border-color:var(--edge)}
+  .tabs a.cur{background:var(--teal);color:#fff}
+  .tabs a .ic{font-size:1rem}
+  /* line panel */
+  .line{background:#fff;border:1px solid var(--edge);border-radius:14px;padding:0 0 14px;margin-bottom:16px;overflow:hidden;box-shadow:0 4px 18px rgba(20,40,60,.07)}
+  .band{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:.8rem 1rem;border-bottom:1px solid var(--edge);position:relative}
+  .band .accent{position:absolute;left:0;top:0;bottom:0;width:6px}
+  .lbadge{color:#fff;font-weight:800;padding:.4rem .7rem;border-radius:8px;font-size:1.05rem}
+  .band .sec{font-weight:800;font-size:1.05rem}
+  .band .prod{color:var(--texts);font-size:.85rem}
+  .band .lot{color:var(--texts);font-size:.74rem}
+  .band .grow{flex:1;min-width:200px}
+  .prog .bar{height:13px;border-radius:7px;background:var(--edge2);border:1px solid var(--edge);overflow:hidden;margin-top:4px;position:relative}
+  .prog .bar i{display:block;height:100%;background:linear-gradient(90deg,#0d9488,#15a06b);border-radius:7px;transition:width .7s}
+  .prog .lbl{display:flex;justify-content:space-between;font-size:.7rem;color:var(--texts)}
+  .stat{text-align:center;min-width:72px}
+  .stat .v{font-size:1.35rem;font-weight:800;color:var(--teal-d);font-variant-numeric:tabular-nums}
+  .stat .v small{font-size:.7rem;color:var(--texts);font-weight:400}
+  .stat .l{font-size:.66rem;color:var(--texts)}
+  .gauge{display:flex;flex-direction:column;align-items:center;gap:1px}
+  .gauge .gl{font-size:.62rem;color:var(--texts)}
+  .state{display:flex;align-items:center;gap:.45rem;border:1.5px solid;border-radius:16px;padding:.32rem .8rem;font-weight:800;font-size:.85rem;background:#fff}
+  .state .led{width:10px;height:10px;border-radius:50%;animation:ledblink 1.4s ease-in-out infinite}
+  @keyframes ledblink{50%{opacity:.4}}
+  /* conveyor */
+  .conveyor{height:18px;margin:12px 1rem 6px;border-radius:8px;border:1px solid var(--edge);overflow:hidden;position:relative;background:var(--edge2)}
+  .conveyor i{position:absolute;inset:0;background:var(--belt,#0d9488);
+    -webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='18'><g fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><path d='M3 4 L9 9 L3 14'/><path d='M12 4 L18 9 L12 14'/></g></svg>") repeat;
+    mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='18'><g fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><path d='M3 4 L9 9 L3 14'/><path d='M12 4 L18 9 L12 14'/></g></svg>") repeat;
+    -webkit-mask-size:22px 100%;mask-size:22px 100%;animation:belt .9s linear infinite}
+  .conveyor.stop i{animation-play-state:paused;opacity:.5}
+  .conveyor::after{content:attr(data-st);position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:.58rem;font-weight:800;letter-spacing:.4px;color:var(--belt,#0d9488);background:#fff;padding:1px 5px;border-radius:4px;border:1px solid var(--edge)}
+  @keyframes belt{to{-webkit-mask-position:22px 0;mask-position:22px 0}}
+  /* process flow */
+  .flow{display:grid;grid-template-columns:repeat(12,1fr);gap:8px;padding:6px 1rem 6px}
+  .st{background:var(--panel2);border:1px solid var(--edge);border-radius:10px;padding:8px 8px 9px 14px;position:relative;min-height:118px;overflow:hidden}
+  .st .zbar{position:absolute;left:0;top:0;bottom:0;width:5px;border-radius:0;margin:0}
+  .st .sic{font-size:.95rem;position:absolute;left:13px;bottom:8px;opacity:.85}
+  .st .code{font-weight:800;font-size:.82rem}
+  .st .jp{font-size:.74rem;margin-top:2px;line-height:1.25;display:block}
+  .st .en{font-size:.62rem;color:var(--texts);display:block}
+  .st .lamp{position:absolute;top:9px;right:9px;width:13px;height:13px;border-radius:50%;box-shadow:0 0 7px 1px rgba(0,0,0,.12);animation:lampblink 1.6s ease-in-out infinite}
+  .st .lamp::after{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(255,255,255,.7)}
+  @keyframes lampblink{50%{opacity:.5}}
+  .st .read{margin-top:7px;background:#fff;border:1px solid var(--edge);border-radius:6px;text-align:center;color:var(--teal-d);font-weight:800;font-size:.92rem;padding:3px 0;font-variant-numeric:tabular-nums;animation:flash 1s ease-out}
+  @keyframes flash{0%{background:#d7f0ec;color:#0b6f58}100%{background:#fff}}
+  /* sections + workers */
+  .secs{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:6px 1rem 2px}
+  .secbox{background:var(--panel2);border:1px solid var(--edge);border-radius:10px;padding:9px 10px 9px 15px;position:relative;overflow:hidden}
+  .secbox .saccent{position:absolute;left:0;top:0;bottom:0;width:5px}
+  .secbox .sic{font-size:.98rem;margin-right:.2rem;vertical-align:-1px}
+  .secbox .hd2{display:flex;align-items:center;justify-content:space-between;gap:.4rem;margin-bottom:6px}
+  .secbox .zname{font-weight:800;font-size:.8rem}
+  .secbox .badge{font-size:.6rem;font-weight:800;padding:.12rem .4rem;border-radius:10px;border:1px solid;background:#fff}
+  .secbox .meta{display:flex;justify-content:space-between;color:var(--texts);font-size:.68rem;margin-bottom:6px}
+  .secbox .meta b{color:var(--teal-d);font-size:.9rem}
+  .wk{display:flex;flex-wrap:wrap;gap:4px}
+  .wk .p{background:#fff;border:1px solid var(--edge);border-radius:5px;padding:2px 6px;font-size:.7rem;display:flex;gap:4px;align-items:baseline}
+  .wk .p .tag{color:var(--texts);font-size:.58rem}
+  .wk .p.demo{opacity:.55}
+  .wk .p.demo .tag{color:var(--amber)}
+  .err{padding:2rem;text-align:center;color:var(--amber)}
+  .foot{color:var(--texts);font-size:.72rem;text-align:center;margin-top:6px;line-height:1.5}
+  @media(max-width:1100px){.flow{grid-template-columns:repeat(6,1fr)}.secs{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body class="lang-jp">
+<div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><rect x="2" y="9" width="4" height="12" rx="1" fill="#0d9488"/><rect x="9" y="4" width="4" height="17" rx="1" fill="#15a06b"/><rect x="16" y="12" width="4" height="9" rx="1" fill="#6366f1"/></svg>
+      <div><b>GENBA FMS</b> <span class="sub"><span class="jp">全ライン監視</span><span class="en">Line Overview</span></span></div>
+      <span class="demo-badge" title="Sensor/process values are simulated; KPIs, headcount and worker names are live.">DEMO SENSORS · LIVE KPI</span>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="v" id="kTotal">—</div><div class="l"><span class="jp">本日総パック</span><span class="en">Packs today</span></div></div>
+      <div class="kpi"><div class="v green" id="kLines">—</div><div class="l"><span class="jp">稼働ライン</span><span class="en">Lines running</span></div></div>
+      <div class="kpi"><div class="v" id="kDate">—</div><div class="l"><span class="jp">レポート日</span><span class="en">Date</span></div></div>
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="ctl">
+        <div class="seg" id="langSeg"><button data-l="jp">日本語</button><button data-l="en">EN</button></div>
+        <button class="iconbtn" id="fsBtn" title="Fullscreen / 全画面">⛶</button>
+      </div>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs"></nav>
+  <div id="lines"><div class="err"><span class="jp">読み込み中…</span><span class="en">Loading line data…</span></div></div>
+  <div class="foot" id="foot"></div>
+</div>
+
+<script>
+const SELF="";
+const MENU=[
+  ["/dashboard","📺","監視 概要","Line overview (this)"],
+  ["/gantt","📊","ガントチャート","Gantt chart"],
+  ["/summary","📈","集計","Summary"],
+  ["/lens","🔍","メンバー時間","Member hours (Lens)"],
+  ["/reports","📄","レポート","Reports"],
+  ["/console","🖥️","コンソール","Console"],
+  ["/management","👥","名簿管理","Roster management"],
+];
+function buildTabs(){
+  const here=location.pathname;
+  document.getElementById("tabs").innerHTML=MENU.map(m=>{
+    const cur=(m[0]===here)?"cur":"";
+    return `<a class="tab ${cur}" href="${m[0]}"><span class="ic">${m[1]}</span><span><span class="jp">${m[2]}</span><span class="en">${m[3]}</span></span></a>`;
+  }).join("");
+}
+function setLang(l){
+  document.body.className="lang-"+l;
+  document.querySelectorAll("#langSeg button").forEach(b=>b.classList.toggle("on",b.dataset.l===l));
+  try{localStorage.setItem("hmiLang",l);}catch(e){}
+}
+function toggleFs(){
+  if(!document.fullscreenElement){ (document.documentElement.requestFullscreen||function(){}).call(document.documentElement); }
+  else { (document.exitFullscreen||function(){}).call(document); }
+}
+const bi=(jp,en)=>`<span class="jp">${jp}</span><span class="en">${en}</span>`;
+const STATIONS=[["A1","製麺・茹で","Boiling","teal","🍜"],["A2","カップ充填","Cup fill","teal","🥡"],["A3","スープ投入","Soup dose","teal","🥣"],
+  ["B1","具材投入","Topping","purple","🍥"],["B2","蓋シール","Lid seal","purple","🟣"],["C1","フィルム包装","Overwrap","coral","🎞️"],["C2","シュリンク加熱","Shrink","coral","🔥"],
+  ["D1","金属検出","Metal det.","amber","🧲"],["D2","重量検査","Checkweigh","amber","⚖️"],["E1","ラベル貼付","Label","blue","🏷️"],["E2","最終検査","Final insp.","blue","🔍"],["E3","集積","Collect","blue","📦"]];
+const ZONES=[["teal","SEC-A","調理・充填","Cooking/Fill","🍜"],["purple","SEC-B","盛付・封入","Topping/Seal","🍥"],["coral","SEC-C","包装","Packaging","📦"],["amber","SEC-D","検査","Inspection","🔍"],["blue","SEC-E","仕上げ・集積","Finishing","🏷️"]];
+const ZCOL={teal:"var(--z-teal)",purple:"var(--z-purple)",coral:"var(--z-coral)",amber:"var(--z-amber)",blue:"var(--z-blue)"};
+const STATES={
+  RUNNING:{jp:"稼働中",  en:"RUNNING", color:"var(--green)", flow:true},
+  IDLE:   {jp:"待機",    en:"IDLE",    color:"var(--amber)", flow:false},
+  STOPPED:{jp:"停止",    en:"STOPPED", color:"#6b7280",      flow:false},
+  MAINT:  {jp:"整備中",  en:"MAINT.",  color:"var(--z-blue)",flow:false},
+  FAULT:  {jp:"ライン異常",en:"FAULT",  color:"var(--red)",   flow:false},
+};
+const PRODUCTS=["醤油ラーメン カップ 95g","味噌ラーメン カップ 100g","豚骨ラーメン カップ 102g","塩ラーメン カップ 93g"];
+const DEMO_NAMES=["山本 健","Nguyen T.","佐藤 美和","Perera S.","小林 直樹","鈴木 翔","Silva R.","中村 彩","渡辺 拓","Fernando","高橋 由美","Kumar A.","加藤 美咲","Wickrama","清水 健","Rajapaksa","森 大地","Hoang V.","池田 萌","Cooray"];
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const rnd=(a,b)=>a+Math.random()*(b-a),ri=(a,b)=>Math.floor(rnd(a,b+1)),pick=a=>a[ri(0,a.length-1)];
+const cur={};
+function lampColor(k){return k==="red"?"var(--red)":k==="amber"?"var(--amber)":"var(--green)";}
+function gauge(pct,color){
+  const r=21,c=2*Math.PI*r,off=c*(1-Math.min(100,Math.max(0,pct))/100);
+  return `<svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="${r}" fill="none" stroke="#e3e8ee" stroke-width="6"/>
+    <circle cx="28" cy="28" r="${r}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 28 28)" style="transition:stroke-dashoffset .6s"/>
+    <text x="28" y="32" text-anchor="middle" fill="${color}" font-size="14" font-weight="800">${pct}</text></svg>`;
+}
+function buildLine(idx,sec,snapProd,ganttRows){
+  const key=sec.id;
+  if(!cur[key]) cur[key]={product:PRODUCTS[idx%PRODUCTS.length],lot:"2026"+("0"+(idx+6)).slice(-2)+"09-"+String.fromCharCode(65+idx)+ri(1,3)};
+  const present=sec.staff_present||0,rate=sec.lp||0;
+  const actual=idx===0?(snapProd.n_total||0):(snapProd.y_total||0);
+  const target=Math.max(actual,Math.round((snapProd.total_planned||actual||1)*(idx===0?0.55:0.45)))||(actual+ri(800,2000));
+  const prog=target?Math.min(125,Math.round(actual/target*100)):0;
+  const running=present>0;
+  const stateKey = running ? (Math.random()<0.18?"FAULT":"RUNNING") : pick(["IDLE","STOPPED","MAINT"]);
+  const fault = stateKey==="FAULT";
+  const lamps={},reads={};
+  if(fault){lamps["C2"]="red";lamps["C1"]="amber";}
+  STATIONS.forEach(([c])=>{if(!lamps[c]) lamps[c]= stateKey==="RUNNING" ? (Math.random()<0.08?"amber":"green") : (stateKey==="STOPPED"?"red":"amber");});
+  reads["A1"]=rnd(95,99).toFixed(0)+" °C"; reads["C2"]=(fault?rnd(168,176):rnd(150,166)).toFixed(0)+" °C";
+  reads["D2"]=rnd(100.4,103.1).toFixed(1)+" g"; reads["E3"]=actual.toLocaleString();
+  const oee=Math.round(stateKey==="RUNNING"?rnd(82,93):rnd(35,60)); const reject=stateKey==="RUNNING"?ri(8,45):0;
+  const liveRate=Math.round(rate*(stateKey==="RUNNING"?rnd(.94,1.06):0));
+  const st=STATES[stateKey];
+  const state={key:stateKey,jp:st.jp,en:st.en,color:st.color,flow:st.flow};
+  const real=ganttRows.map(r=>({name:r.name,code:r.code,demo:false}));
+  return {idx,sec,product:cur[key].product,lot:cur[key].lot,present,rate:liveRate,actual,target,prog,lamps,reads,oee,reject,state,real};
+}
+function renderLine(L){
+  const accent=L.idx===0?"var(--teal)":"#6366f1";
+  let h=`<div class="line"><div class="band"><div class="accent" style="background:${accent}"></div>
+    <div class="lbadge" style="background:${accent}">LINE ${String.fromCharCode(65+L.idx)}</div>
+    <div><div class="sec">${esc(L.sec.label)}</div><div class="prod">${esc(L.product)} <span class="lot">LOT ${esc(L.lot)}</span></div></div>
+    <div class="grow prog"><div class="lbl"><span>${bi("進捗","Progress")} ${L.prog}%</span><span>${bi("実績","Actual")} ${L.actual.toLocaleString()} / ${bi("目標","Target")} ${L.target.toLocaleString()}</span></div>
+      <div class="bar"><i style="width:${Math.min(100,L.prog)}%"></i></div></div>
+    <div class="stat"><div class="v">${L.rate.toLocaleString()}<small> ${bi("個/h","/h")}</small></div><div class="l">${bi("時間レート","Rate")}</div></div>
+    <div class="stat"><div class="v">${L.present}<small> ${bi("名","ppl")}</small></div><div class="l">${bi("在席","Present")}</div></div>
+    <div class="gauge">${gauge(L.oee, L.oee>85?"var(--green)":L.oee>70?"var(--amber)":"var(--red)")}<div class="gl">OEE % <span style="color:var(--amber)">·demo</span></div></div>
+    <div class="stat"><div class="v" style="color:${L.reject>30?'var(--red)':'var(--amber)'}">${L.reject}</div><div class="l">${bi("排出","Reject")} <span style="color:var(--amber)">·demo</span></div></div>
+    <div class="state" style="border-color:${L.state.color};color:${L.state.color}"><span class="led" style="background:${L.state.color}"></span>${bi(L.state.jp,L.state.en)}</div>
+  </div>`;
+  h+=`<div class="conveyor ${L.state.flow?'':'stop'}" data-st="${L.state.flow?'▶':'■'} ${L.state.en}" style="--belt:${L.state.color}"><i></i></div>`;
+  h+=`<div class="flow">`+STATIONS.map(([c,jp,en,z,icon])=>{
+    const r=L.reads[c];
+    return `<div class="st"><div class="zbar" style="background:${ZCOL[z]}"></div>
+      <span class="lamp" style="background:${lampColor(L.lamps[c])}"></span>
+      <div class="code" style="color:${ZCOL[z]}">${c}</div><span class="jp">${jp}</span><span class="en">${en}</span>
+      ${r?`<div class="read">${r}</div>`:`<span class="sic">${icon}</span>`}</div>`;
+  }).join("")+`</div>`;
+  h+=`<div class="secs">`; let wi=0;
+  h+=ZONES.map(([z,zid,jp,en,icon])=>{
+    const slice=[]; const per=Math.ceil(Math.max(L.real.length,0)/5);
+    for(let k=0;k<per&&wi<L.real.length;k++) slice.push(L.real[wi++]);
+    const padTo=L.present>0?Math.max(2,per):ri(2,4);
+    while(slice.length<padTo) slice.push({name:pick(DEMO_NAMES),code:"D-"+ri(100,260),demo:true});
+    let ss;
+    if(L.state.key==="RUNNING") ss=["RUNNING","var(--green)"];
+    else if(L.state.key==="FAULT") ss=(z==="coral")?["ERROR","var(--red)"]:["RUNNING","var(--green)"];
+    else ss=[L.state.en,L.state.color];
+    const rate=ss[0]==="RUNNING"?Math.round(L.rate/5).toLocaleString():"0";
+    const head=slice.filter(w=>!w.demo).length;
+    return `<div class="secbox"><div class="saccent" style="background:${ZCOL[z]}"></div><div class="hd2"><span class="zname" style="color:${ZCOL[z]}"><span class="sic">${icon}</span>${zid} ${bi(jp,en)}</span>
+        <span class="badge" style="border-color:${ss[1]};color:${ss[1]}">${ss[0]}</span></div>
+      <div class="meta"><span>${bi("レート","Rate")} <b>${rate}</b> ${bi("個/h","/h")}</span><span>${bi("在席","Present")} <b>${head}</b> ${bi("名","")}</span></div>
+      <div class="wk">${slice.map(w=>`<span class="p ${w.demo?'demo':''}">${esc(w.name)}<span class="tag">${w.demo?'demo':esc(w.code)}</span></span>`).join("")}</div></div>`;
+  }).join("")+`</div></div>`;
+  return h;
+}
+let LAST=null;
+function render(){
+  if(!LAST) return;
+  const {snapProd,psec,gsec}=LAST; const out=[];
+  [1,2].forEach((sid,idx)=>{
+    const ps=psec.find(s=>s.id===sid)||{id:sid,label:sid===1?"製造１課":"製造２課",lp:0,staff_present:0};
+    out.push(renderLine(buildLine(idx,ps,snapProd,gsec[sid]||[])));
+  });
+  document.getElementById("lines").innerHTML=out.join("");
+}
+async function fetchReal(){
+  try{
+    const snap=await fetch(SELF+"/api/dashboard/snapshot").then(r=>r.json());
+    const ld  =await fetch(SELF+"/api/gantt/latest-date").then(r=>r.json());
+    const g   =await fetch(SELF+"/api/gantt/"+ld.date).then(r=>r.json());
+    const today=snap.today||{}; const gsec={}; (g.sections||[]).forEach(s=>gsec[s.id]=s.rows||[]);
+    LAST={snapProd:{n_total:today.n_total,y_total:today.y_total,total_planned:(snap.plan||{}).total_planned},
+          psec:(snap.productivity||{}).sections||[], gsec};
+    document.getElementById("kTotal").textContent=(today.total_packs||0).toLocaleString();
+    document.getElementById("kLines").textContent=LAST.psec.filter(s=>(s.staff_present||0)>0).length+" / 2";
+    document.getElementById("kDate").textContent=snap.report_date||ld.date||"—";
+    document.getElementById("foot").innerHTML=
+      bi("実データ: パック数・時間レート・在席・作業者氏名（勤怠より）","Live: packs, rate, headcount, worker names")+"　·　"+
+      bi("工程センサー値（温度・重量・金属検出・OEE・排出・ランプ）はデモ表示","Process-sensor values are simulated (demo)")+"　·　"+
+      bi("更新 10秒ごと","Refresh every 10s");
+    render();
+  }catch(e){ document.getElementById("lines").innerHTML=`<div class="err">${bi("データ取得エラー","Failed to load")}: ${esc(e)}</div>`; }
+}
+function tick(){ document.getElementById("clock").textContent=new Date().toTimeString().slice(0,8); }
+buildTabs();
+document.getElementById("fsBtn").addEventListener("click",toggleFs);
+document.querySelectorAll("#langSeg button").forEach(b=>b.addEventListener("click",()=>setLang(b.dataset.l)));
+let initLang="jp"; try{initLang=localStorage.getItem("hmiLang")||"jp";}catch(e){}
+if(initLang==="both") initLang="jp";
+setLang(initLang);
+tick(); setInterval(tick,1000);
+fetchReal(); setInterval(fetchReal,10000);   // real data + demo values, every 10s
+</script>
+</body>
+</html>

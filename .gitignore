@@ -46,3 +46,9 @@ app_updates/
 # Local-only ad-hoc backup dirs
 _backup/
 partner_usage.json
+
+# Agent API + MCP OAuth secrets/state (added 2026-06-10)
+agent_api.json
+mcp_oauth.json
+agent_usage.json
+CREDENTIALS.md

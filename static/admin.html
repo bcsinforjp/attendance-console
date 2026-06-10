@@ -163,8 +163,10 @@
   <button class="tab active" data-tab="overview">Overview</button>
   <button class="tab" data-tab="access">Access Log</button>
   <button class="tab" data-tab="debug">Debug Log</button>
-  <button class="tab" data-tab="agent">Agent</button>
+  <button class="tab" data-tab="agent">Desktop Agent</button>
   <button class="tab" data-tab="partner">Partner API</button>
+  <button class="tab" data-tab="agentapi">AI Agents</button>
+  <button class="tab" data-tab="changereq">Change Requests <span id="crBadge" class="pill bad" style="display:none;margin-left:.3rem;"></span></button>
   <button class="tab" data-tab="apistatus">API Status</button>
   <button class="tab" data-tab="visitors">Visitors</button>
   <button class="tab" data-tab="alerts">Alerts</button>
@@ -432,6 +434,147 @@
   </div>
 </section>
 
+<!-- ============================ AGENT API ============================ -->
+<section id="panel-agentapi" class="panel">
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:1rem;padding:0.7rem 1rem;">
+    <div>
+      <strong style="color:var(--brand);">Unified AI-Agent API</strong>
+      <span class="mono" style="color:var(--muted);font-size:0.78rem;margin-left:0.5rem;">
+        REST <span class="mono">/api/agent/v1</span> · MCP <span class="mono">/mcp</span> · log <span id="agapiPath">—</span> · size <span id="agapiSize">—</span>
+      </span>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <span class="pill" id="agapiState">—</span>
+      <a class="button" href="/admin/agentapi-spec" target="_blank" rel="noopener">View API doc (MD)</a>
+      <button class="button" id="btnAgToggle">Enable API</button>
+      <button class="button" id="btnAgRefresh">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <strong style="color:var(--brand);">MCP Connector — ChatGPT / Claude</strong>
+    <p style="color:var(--muted);font-size:0.82rem;margin:0.3rem 0 0.6rem;">
+      In ChatGPT/Claude, add a connector with URL <span class="mono" id="connUrl">—</span> and <strong>OAuth</strong>. People approve the connection with the <strong>connector password</strong> below — this is <strong>separate</strong> from your admin console password, so you can share it without exposing admin access.
+    </p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding-top:.7rem;">
+      <input type="text" id="connPw" placeholder="connector password" style="padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;min-width:220px;" />
+      <button class="button" id="btnConnPwSave">Save password</button>
+      <span id="connPwMsg" class="mono" style="color:var(--muted);font-size:.78rem;"></span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.6rem;">
+      One bearer token per agent → REST + MCP. <strong>Deny-by-default</strong>. Read everything; write pack counts &amp; temp-staff only (toggle <strong>write</strong> per token). Each token is individually revocable, rate-limited, optional IP allowlist. No deletes, no roster/day-off writes, no uploads.
+    </p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding-top:.7rem;">
+      <input type="text" id="agName" placeholder="agent / company name" style="padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+      <input type="number" id="agRate" placeholder="rate/min" value="60" style="width:90px;padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+      <label style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;color:var(--muted);"><input type="checkbox" id="agWrite" checked /> write</label>
+      <input type="text" id="agIps" placeholder="IP allowlist (optional, space/comma)" style="flex:1;min-width:170px;padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+      <button class="button" id="btnAgAdd">Add agent</button>
+    </div>
+    <div id="agNewTok" class="mono" style="display:none;margin-top:.6rem;padding:.5rem .7rem;border:1px solid var(--line);border-radius:4px;background:var(--surface);font-size:.8rem;"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Agent</th><th class="mono">ID</th><th>Token</th><th class="num">Rate/min</th><th>Write</th><th>IP allowlist</th><th class="num">Calls</th><th>Last seen</th><th>State</th><th></th></tr></thead>
+        <tbody id="agapiTbody"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.6rem;">Request log — every <span class="mono">/api/agent/v1/*</span> &amp; <span class="mono">/mcp</span> call.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>When</th><th>Agent</th><th>IP</th><th>Path</th><th class="num">Status</th><th class="num">ms</th></tr></thead>
+        <tbody id="agLogTbody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ CHANGE REQUESTS ============================ -->
+<section id="panel-changereq" class="panel">
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:1rem;padding:0.7rem 1rem;">
+    <div>
+      <strong style="color:var(--brand);">Agent Change Requests</strong>
+      <span class="mono" style="color:var(--muted);font-size:0.78rem;margin-left:0.5rem;" id="crCounts">—</span>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <select id="crFilter" style="padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;">
+        <option value="">All</option>
+        <option value="commitments">Commitments (approved/in-progress + timeline)</option>
+        <option value="submitted">Submitted</option>
+        <option value="under_review">Under review</option>
+        <option value="approved">Approved</option>
+        <option value="needs_info">Needs info</option>
+        <option value="in_progress">In progress</option>
+        <option value="completed">Completed</option>
+        <option value="rejected">Rejected</option>
+        <option value="failed">Failed</option>
+      </select>
+      <button class="button" id="btnCrRefresh">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="scroll">
+      <table>
+        <thead><tr><th class="num">#</th><th>Agent</th><th>Title</th><th>Category</th><th>Status</th><th>Risk</th><th>Timeline</th><th>Updated</th><th></th></tr></thead>
+        <tbody id="crTbody"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" id="crDetail" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;">
+      <strong id="crdTitle" style="color:var(--brand);"></strong>
+      <span class="mono" id="crdMeta" style="color:var(--muted);font-size:.78rem;"></span>
+    </div>
+    <p id="crdBody" style="white-space:pre-wrap;margin:.5rem 0;color:var(--muted);font-size:.85rem;"></p>
+
+    <div style="border-top:1px solid var(--line);margin-top:.5rem;padding-top:.6rem;">
+      <strong style="font-size:.82rem;">Conversation</strong>
+      <div id="crdThread" style="max-height:260px;overflow:auto;margin:.4rem 0;"></div>
+      <div style="display:flex;gap:.5rem;">
+        <input type="text" id="crdMsg" placeholder="reply to the agent…" style="flex:1;padding:.35rem .5rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+        <button class="button" id="btnCrMsg">Send</button>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--line);margin-top:.7rem;padding-top:.6rem;display:flex;gap:1.2rem;flex-wrap:wrap;">
+      <div style="flex:1;min-width:260px;">
+        <strong style="font-size:.82rem;">Evaluation</strong>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-top:.4rem;">
+          <select id="crdFeasible" style="padding:.3rem .4rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;"><option value="">feasible?</option><option value="true">feasible: yes</option><option value="false">feasible: no</option></select>
+          <select id="crdRisk" style="padding:.3rem .4rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;"><option value="">risk?</option><option value="low">low</option><option value="med">med</option><option value="high">high</option></select>
+          <input type="text" id="crdTimeline" placeholder="timeline (e.g. 2 days)" style="flex:1;min-width:120px;padding:.3rem .4rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+        </div>
+        <textarea id="crdNotes" placeholder="evaluation notes" style="width:100%;margin-top:.4rem;min-height:48px;padding:.3rem .4rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;"></textarea>
+        <button class="button" id="btnCrEval" style="margin-top:.4rem;">Save evaluation</button>
+      </div>
+      <div style="flex:1;min-width:260px;">
+        <strong style="font-size:.82rem;">Decision &amp; progress</strong>
+        <input type="text" id="crdDecNotes" placeholder="decision / status note (optional)" style="width:100%;margin-top:.4rem;padding:.3rem .4rem;background:var(--surface);border:1px solid var(--line);color:inherit;border-radius:4px;" />
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem;">
+          <button class="button" data-cr-decide="approved">Approve</button>
+          <button class="button" data-cr-decide="needs_info">Needs info</button>
+          <button class="button" data-cr-decide="rejected">Reject</button>
+        </div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem;">
+          <button class="button" data-cr-status="in_progress">In progress</button>
+          <button class="button" data-cr-status="completed">Completed</button>
+          <button class="button" data-cr-status="failed">Failed</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============================ API STATUS ============================ -->
 <section id="panel-apistatus" class="panel">
   <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:1rem;padding:0.7rem 1rem;">
@@ -685,7 +828,7 @@ function pill(ok, label){ return `<span class="pill ${ok?'ok':'bad'}">${label}</
 function setKV(el, rows){ el.innerHTML = rows.map(([k,v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(""); }
 
 /* ----------- Tab routing (hash-based) ----------- */
-const PANELS = ["overview","access","debug","agent","partner","apistatus","visitors","alerts","security","announcement","bridge","autodoc"];
+const PANELS = ["overview","access","debug","agent","partner","agentapi","changereq","apistatus","visitors","alerts","security","announcement","bridge","autodoc"];
 function showTab(name){
   if (!PANELS.includes(name)) name = "overview";
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
@@ -696,6 +839,8 @@ function showTab(name){
   else if (name === "debug")    refreshDebugLog();
   else if (name === "agent")    { refreshAgent(); loadLocalFiles(); }
   else if (name === "partner")  refreshPartner();
+  else if (name === "agentapi") refreshAgentApi();
+  else if (name === "changereq") refreshChangeReq();
   else if (name === "apistatus") refreshApiStatus();
   else if (name === "visitors") refreshVisitors();
   else if (name === "alerts")   refreshAlerts();
@@ -1177,6 +1322,165 @@ async function setQuota(id, cur){
 $("btnPtRefresh").addEventListener("click", refreshPartner);
 $("btnPtToggle").addEventListener("click", togglePartnerApi);
 $("btnPtAdd").addEventListener("click", addPartner);
+
+/* ----------- Agent API (token CRUD) ----------- */
+async function refreshAgentApi(){
+  loadConnPw();
+  try{
+    const r = await fetch("/admin/api/agentapi-log?limit=200", {credentials:"same-origin"});
+    const j = await r.json();
+    const st = j.status || {};
+    const on = !!st.enabled;
+    const pill = $("agapiState");
+    pill.textContent = on ? "ENABLED" : "DISABLED";
+    pill.className = "pill " + (on ? "ok" : "warn");
+    $("btnAgToggle").textContent = on ? "Disable API" : "Enable API";
+    $("agapiPath").textContent = j.path || "—";
+    $("agapiSize").textContent = fmtBytes(j.file_size_bytes);
+    const as = st.agents || [];
+    $("agapiTbody").innerHTML = as.length ? as.map(a => `<tr>
+      <td>${fmt.esc(a.name||"")}</td>
+      <td class="mono">${fmt.esc(a.id)}</td>
+      <td class="mono">${fmt.esc(a.token_tail||"")}</td>
+      <td class="num">${a.rate_per_min}</td>
+      <td>${a.write_enabled?'<span class="pill ok">write</span>':'<span class="pill">read</span>'}</td>
+      <td class="mono">${fmt.esc((a.ip_allowlist||[]).join(", ")||"any")}</td>
+      <td class="num">${a.calls||0}</td>
+      <td title="${fmt.esc(a.last_seen||"")}">${a.last_seen?fmt.rel(a.last_seen):"—"}</td>
+      <td>${a.disabled?'<span class="pill bad">disabled</span>':'<span class="pill ok">active</span>'}</td>
+      <td style="white-space:nowrap;">
+        <button class="button" data-ag-write="${fmt.esc(a.id)}" data-w="${a.write_enabled?0:1}">${a.write_enabled?"Read-only":"Allow write"}</button>
+        <button class="button" data-ag-toggle="${fmt.esc(a.id)}" data-dis="${a.disabled?0:1}">${a.disabled?"Enable":"Disable"}</button>
+        <button class="button" data-ag-revoke="${fmt.esc(a.id)}">Revoke</button>
+      </td></tr>`).join("") : `<tr><td colspan="10" class="empty">No agents. Add one to issue a token.</td></tr>`;
+    $("agapiTbody").querySelectorAll("[data-ag-revoke]").forEach(b=>b.addEventListener("click",()=>revokeAgent(b.dataset.agRevoke)));
+    $("agapiTbody").querySelectorAll("[data-ag-toggle]").forEach(b=>b.addEventListener("click",()=>updateAgent(b.dataset.agToggle,{disabled:b.dataset.dis==="1"})));
+    $("agapiTbody").querySelectorAll("[data-ag-write]").forEach(b=>b.addEventListener("click",()=>updateAgent(b.dataset.agWrite,{write_enabled:b.dataset.w==="1"})));
+    const items = j.items || [];
+    $("agLogTbody").innerHTML = items.length ? items.map(it=>`<tr>
+      <td title="${fmt.esc(it.ts)}">${fmt.rel(it.ts)}</td>
+      <td>${fmt.esc(it.agent||"")}</td>
+      <td class="mono">${fmt.esc(it.ip||"")}</td>
+      <td class="mono">${fmt.esc(it.path||"")}</td>
+      <td class="num">${it.status}</td>
+      <td class="num">${it.duration_ms}</td></tr>`).join("") : `<tr><td colspan="6" class="empty">No agent calls yet.</td></tr>`;
+  }catch(e){ $("agapiTbody").innerHTML = `<tr><td colspan="10" class="empty">Failed: ${fmt.esc(String(e))}</td></tr>`; }
+}
+async function toggleAgentApi(){
+  const on = $("btnAgToggle").textContent.startsWith("Enable");
+  if (on && !confirm("Enable the AI-Agent API? It stays deny-by-default per token, but /api/agent/v1 and /mcp become reachable.")) return;
+  try{
+    const r = await fetch("/admin/api/agentapi-enable",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:on})});
+    if(!r.ok) throw new Error("HTTP "+r.status); await refreshAgentApi();
+  }catch(e){ alert("Toggle failed: "+e); }
+}
+async function addAgent(){
+  const name = $("agName").value.trim();
+  if(!name){ alert("Enter an agent name."); return; }
+  try{
+    const r = await fetch("/admin/api/agentapi-add",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({name, rate_per_min:Number($("agRate").value)||60, write_enabled:$("agWrite").checked, ip_allowlist:$("agIps").value})});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const j = await r.json();
+    const box = $("agNewTok");
+    box.style.display=""; box.textContent = `Token for "${j.name}" (shown once — copy now): ${j.token}`;
+    $("agName").value=""; $("agIps").value="";
+    await refreshAgentApi();
+  }catch(e){ alert("Add failed: "+e); }
+}
+async function revokeAgent(id){
+  if(!confirm("Revoke this agent? Their token stops working immediately.")) return;
+  try{
+    const r=await fetch("/admin/api/agentapi-revoke",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});
+    if(!r.ok) throw new Error("HTTP "+r.status); await refreshAgentApi();
+  }catch(e){ alert("Revoke failed: "+e); }
+}
+async function updateAgent(id, fields){
+  try{
+    const r=await fetch("/admin/api/agentapi-update",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.assign({id},fields))});
+    if(!r.ok) throw new Error("HTTP "+r.status); await refreshAgentApi();
+  }catch(e){ alert("Update failed: "+e); }
+}
+async function loadConnPw(){
+  try{ const r=await fetch("/admin/api/agentapi-connect-pw",{credentials:"same-origin"}); if(!r.ok) return;
+    const j=await r.json(); $("connPw").value=j.password||""; $("connUrl").textContent=j.mcp_url||""; }catch(e){}
+}
+async function saveConnPw(){
+  try{ const r=await fetch("/admin/api/agentapi-connect-pw",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("connPw").value.trim()})});
+    if(!r.ok) throw new Error("HTTP "+r.status); const j=await r.json();
+    $("connPwMsg").textContent = j.set?"✓ saved":"✓ cleared (no password = only admin pw works)"; setTimeout(()=>{$("connPwMsg").textContent="";},2500);
+  }catch(e){ $("connPwMsg").textContent="failed: "+e; }
+}
+$("btnConnPwSave").addEventListener("click", saveConnPw);
+$("btnAgRefresh").addEventListener("click", refreshAgentApi);
+$("btnAgToggle").addEventListener("click", toggleAgentApi);
+$("btnAgAdd").addEventListener("click", addAgent);
+
+/* ----------- Change Requests ----------- */
+let crCurrentId = null;
+const CR_STATUS = {submitted:"warn",under_review:"warn",approved:"ok",rejected:"bad",needs_info:"warn",in_progress:"ok",completed:"ok",failed:"bad"};
+function crPill(s){ return `<span class="pill ${CR_STATUS[s]||""}">${fmt.esc(s||"")}</span>`; }
+async function refreshChangeReq(){
+  try{
+    const f = $("crFilter").value;
+    const q = (f && f!=="commitments") ? `?status=${encodeURIComponent(f)}` : "";
+    const r = await fetch("/admin/api/change-requests"+q, {credentials:"same-origin"});
+    const j = await r.json();
+    const counts = j.counts || {};
+    const sub = counts.submitted || 0;
+    const badge = $("crBadge");
+    badge.style.display = sub ? "" : "none"; badge.textContent = sub;
+    $("crCounts").textContent = Object.keys(counts).length ? Object.entries(counts).map(([k,v])=>`${k}:${v}`).join(" · ") : "no requests yet";
+    let items = j.items || [];
+    if (f === "commitments") items = items.filter(it => (it.status==="approved"||it.status==="in_progress") && it.timeline_estimate);
+    $("crTbody").innerHTML = items.length ? items.map(it=>`<tr>
+      <td class="num">${it.id}</td>
+      <td>${fmt.esc(it.agent_name||it.agent_id||"")}</td>
+      <td>${fmt.esc(it.title||"")}</td>
+      <td>${fmt.esc(it.category||"")}</td>
+      <td>${crPill(it.status)}</td>
+      <td>${fmt.esc(it.risk_level||"—")}</td>
+      <td>${fmt.esc(it.timeline_estimate||"—")}</td>
+      <td title="${fmt.esc(it.updated_at||"")}">${it.updated_at?fmt.rel(it.updated_at):"—"}</td>
+      <td><button class="button" data-cr-open="${it.id}">Open</button></td></tr>`).join("") : `<tr><td colspan="9" class="empty">No requests.</td></tr>`;
+    $("crTbody").querySelectorAll("[data-cr-open]").forEach(b=>b.addEventListener("click",()=>openChangeReq(b.dataset.crOpen)));
+  }catch(e){ $("crTbody").innerHTML = `<tr><td colspan="9" class="empty">Failed: ${fmt.esc(String(e))}</td></tr>`; }
+}
+async function openChangeReq(id){
+  try{
+    const r = await fetch("/admin/api/change-requests/"+id, {credentials:"same-origin"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const d = await r.json();
+    crCurrentId = d.id;
+    $("crDetail").style.display = "";
+    $("crdTitle").textContent = `#${d.id} · ${d.title}`;
+    $("crdMeta").innerHTML = `${fmt.esc(d.agent_name||d.agent_id)} · ${fmt.esc(d.category)} · ${crPill(d.status)} · feasible:${d.feasible===null?"—":d.feasible} · risk:${fmt.esc(d.risk_level||"—")} · timeline:${fmt.esc(d.timeline_estimate||"—")}`;
+    $("crdBody").textContent = d.body || "";
+    $("crdThread").innerHTML = (d.messages||[]).map(m=>`<div style="border-bottom:1px solid var(--line);padding:.3rem 0;">
+      <span class="pill ${m.author==='admin'?'ok':''}" style="font-size:.7rem;">${fmt.esc(m.author)}</span>
+      <span class="mono" style="color:var(--muted);font-size:.7rem;">${fmt.esc(m.kind)} · ${fmt.rel(m.created_at)}</span>
+      <div style="white-space:pre-wrap;font-size:.84rem;margin-top:.2rem;">${fmt.esc(m.body||"")}</div></div>`).join("") || '<div class="empty">No messages.</div>';
+    // prefill eval form from current values
+    $("crdFeasible").value = d.feasible===null?"":String(d.feasible);
+    $("crdRisk").value = d.risk_level||"";
+    $("crdTimeline").value = d.timeline_estimate||"";
+    $("crdNotes").value = d.eval_notes||"";
+    $("crDetail").scrollIntoView({behavior:"smooth", block:"nearest"});
+  }catch(e){ alert("Open failed: "+e); }
+}
+async function crPost(path, body){
+  const r = await fetch("/admin/api/change-requests/"+crCurrentId+path,{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});
+  if(!r.ok){ const t=await r.text(); throw new Error("HTTP "+r.status+" "+t); }
+  await openChangeReq(crCurrentId); await refreshChangeReq();
+}
+$("btnCrRefresh").addEventListener("click", refreshChangeReq);
+$("crFilter").addEventListener("change", refreshChangeReq);
+$("btnCrMsg").addEventListener("click", async ()=>{ const m=$("crdMsg").value.trim(); if(!m)return; try{ await crPost("/messages",{message:m}); $("crdMsg").value=""; }catch(e){ alert(e); } });
+$("btnCrEval").addEventListener("click", async ()=>{ try{
+  const fe=$("crdFeasible").value; await crPost("/evaluate",{feasible: fe===""?null:(fe==="true"), risk_level:$("crdRisk").value||null, timeline_estimate:$("crdTimeline").value, notes:$("crdNotes").value});
+}catch(e){ alert(e); } });
+document.querySelectorAll("[data-cr-decide]").forEach(b=>b.addEventListener("click", async ()=>{ try{ await crPost("/decision",{decision:b.dataset.crDecide, notes:$("crdDecNotes").value}); }catch(e){ alert(e); } }));
+document.querySelectorAll("[data-cr-status]").forEach(b=>b.addEventListener("click", async ()=>{ try{ await crPost("/status",{status:b.dataset.crStatus}); }catch(e){ alert(e); } }));
 
 /* ----------- API Status ----------- */
 let _apsTimer = null;

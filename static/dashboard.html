@@ -3,248 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Dashboard · 現場 FMS</title>
+<title>SCADA · Plant Overview · 現場 FMS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  /* Surface — refined light professional (現場 FMS) */
-  --bg:           #f6f8fa;
-  --bg-grad-1:    #f6f8fa;
-  --bg-grad-2:    #eef2f5;
-  --surface:      #ffffff;       /* card body */
-  --surface-2:    #f1f4f7;       /* nested */
-  --line:         #e3e8ee;
-  --line-soft:    #eef2f5;
-
-  /* Ink */
-  --ink:          #1f2933;
-  --ink-2:        #44525c;
-  --muted:        #5a6b73;
-  --dim:          #8a99a3;
-
-  /* Accents */
-  --brand:        #0d9488;       /* teal */
-  --brand-strong: #0b6f58;
-  --brand-soft:   rgba(13,148,136,.12);
-  --accent:       #4f46e5;       /* indigo */
-  --accent-soft:  rgba(79,70,229,.10);
-
-  /* Semantic */
-  --good:         #0b6f58;
-  --good-soft:    rgba(13,148,136,.12);
-  --warn:         #9b640f;
-  --warn-soft:    rgba(155,100,15,.12);
-  --danger:       #b42318;
-  --danger-soft:  rgba(180,35,24,.10);
-
-  /* Chart palette */
-  --c-line-a:     #0d9488;
-  --c-line-b:     #4f46e5;
-  --c-line-c:     #d97706;
-  --c-sec1:       #0d9488;
-  --c-sec2:       #7c3aed;
-
-  /* Effects */
-  --shadow-card:  0 1px 2px rgba(16,32,40,.04), 0 8px 24px rgba(16,32,40,.06);
-  --shadow-glow:  0 0 0 1px rgba(13,148,136,.06);
-  --radius:       14px;
-  --radius-lg:    18px;
+  --bg:#070b10; --bg-2:#0e1620; --panel:#111c27; --panel-2:#16232f;
+  --line:#1f3140; --line-soft:#16242f;
+  --ink:#e6f0f4; --ink-2:#b4c6d0; --muted:#7d96a3; --dim:#4f6573;
+  --brand:#2dd4bf; --cyan:#38bdf8; --amber:#f5a524; --steam:#ff7849;
+  --good:#34d399; --warn:#fbbf24; --danger:#f4524d;
+  --good-soft:rgba(52,211,153,.14); --warn-soft:rgba(251,191,36,.14); --dang-soft:rgba(244,82,77,.14);
+  --radius:12px; --mono:"JetBrains Mono",ui-monospace,monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{background:var(--bg);}
-body{
-  font-family:"Inter","Noto Sans JP","Segoe UI",sans-serif;color:var(--ink);min-height:100vh;line-height:1.55;
+body{font-family:"Inter","Noto Sans JP","Segoe UI",sans-serif;color:var(--ink);min-height:100vh;
   background:
-    radial-gradient(1100px 560px at 82% -12%, rgba(13,148,136,.05), transparent 60%),
-    radial-gradient(820px 380px at 8% 112%, rgba(79,70,229,.05), transparent 60%),
-    linear-gradient(180deg, var(--bg-grad-1), var(--bg-grad-2) 70%);
-  background-attachment:fixed;
-}
-
-/* ------- Layout ------- */
+    radial-gradient(1200px 600px at 80% -10%, rgba(45,212,191,.06), transparent 60%),
+    radial-gradient(900px 420px at 6% 110%, rgba(56,189,248,.05), transparent 60%),
+    linear-gradient(180deg,#070b10,#0b121a 70%);
+  background-attachment:fixed;}
 main{max-width:1320px;margin:0 auto;padding:1rem 1.1rem 3rem;}
-.h-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:.4rem 0 1.1rem;flex-wrap:wrap;}
+
+.h-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:.3rem 0 1rem;flex-wrap:wrap;}
 .h-row .title{display:flex;align-items:baseline;gap:.7rem;flex-wrap:wrap;}
-.h-row h1{font-size:1.5rem;font-weight:800;letter-spacing:-.01em;background:linear-gradient(120deg,var(--brand),var(--accent));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
-.h-row .anchor{font-family:"JetBrains Mono",monospace;font-size:.8rem;color:var(--muted);}
-.h-row .anchor b{color:var(--ink);font-weight:600;}
-.ctrl{display:flex;gap:.45rem;align-items:center;}
-.ctrl input[type=date]{font:inherit;font-size:.82rem;padding:.4rem .65rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);color-scheme:light;}
-.ctrl button{font:inherit;font-size:.82rem;padding:.4rem .8rem;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--brand);font-weight:600;transition:all .15s;}
-.ctrl button:hover{background:var(--surface-2);border-color:var(--brand);box-shadow:0 0 12px var(--brand-soft);}
+.h-row h1{font-size:1.35rem;font-weight:800;letter-spacing:.01em;background:linear-gradient(110deg,var(--brand),var(--cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.h-row .clk{font-family:var(--mono);font-size:.85rem;color:var(--ink-2);}
+.h-row .clk b{color:var(--brand);font-weight:700;}
+.demo-tag{font-family:var(--mono);font-size:.66rem;font-weight:700;letter-spacing:.12em;color:var(--amber);border:1px solid rgba(245,165,36,.4);background:rgba(245,165,36,.08);padding:.2rem .5rem;border-radius:6px;}
+.plant-state{display:flex;align-items:center;gap:.45rem;font-family:var(--mono);font-size:.8rem;color:var(--good);font-weight:700;}
+.plant-state .dot{width:9px;height:9px;border-radius:50%;background:var(--good);animation:pulse 2s infinite;}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.55);}70%{box-shadow:0 0 0 7px rgba(52,211,153,0);}100%{box-shadow:0 0 0 0 rgba(52,211,153,0);}}
 
-/* ------- Cards ------- */
-.card{
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
-  padding:1.05rem 1.15rem;box-shadow:var(--shadow-card);
-  margin-bottom:1.05rem;position:relative;overflow:hidden;
-}
-.card::before{
-  content:"";position:absolute;inset:0 0 auto 0;height:1px;
-  background:linear-gradient(90deg, transparent, var(--brand-soft), transparent);
-}
-.card h2{font-size:.85rem;font-weight:700;color:var(--ink-2);margin-bottom:.85rem;display:flex;align-items:center;gap:.5rem;letter-spacing:-.005em;}
-.card h2 .meta{margin-left:auto;font-size:.7rem;color:var(--muted);font-weight:500;font-family:"JetBrains Mono",monospace;}
+.kstrip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem;margin-bottom:1rem;}
+.kpi{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:var(--radius);padding:.75rem .9rem;position:relative;overflow:hidden;}
+.kpi::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--brand);opacity:.8;}
+.kpi.k-amber::before{background:var(--amber);} .kpi.k-cyan::before{background:var(--cyan);}
+.kpi.k-warn::before{background:var(--warn);} .kpi.k-dang::before{background:var(--danger);}
+.kpi .lab{font-size:.64rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:700;}
+.kpi .val{font-family:var(--mono);font-size:1.55rem;font-weight:700;line-height:1.1;margin-top:.2rem;color:var(--ink);}
+.kpi .val small{font-size:.62rem;color:var(--muted);font-weight:500;margin-left:.3rem;}
+.kpi .sub{font-size:.66rem;color:var(--dim);margin-top:.15rem;font-family:var(--mono);}
 
-/* ------- Hero KPI band ------- */
-.hero-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.85rem;margin-bottom:1.05rem;}
-.kpi{
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
-  padding:1rem 1.1rem;position:relative;overflow:hidden;box-shadow:var(--shadow-card);
-  transition:transform .25s, box-shadow .25s, border-color .25s;
-}
-.kpi:hover{transform:translateY(-2px);border-color:var(--brand);box-shadow:var(--shadow-card),var(--shadow-glow);}
-.kpi::after{
-  content:"";position:absolute;inset:0;border-radius:var(--radius);
-  background:radial-gradient(140px 80px at 100% 0%, var(--brand-soft), transparent 70%);
-  pointer-events:none;opacity:.6;
-}
-.kpi.ind1::after{background:radial-gradient(140px 80px at 100% 0%, var(--accent-soft), transparent 70%);}
-.kpi.ind2::after{background:radial-gradient(140px 80px at 100% 0%, var(--good-soft), transparent 70%);}
-.kpi.ind3::after{background:radial-gradient(140px 80px at 100% 0%, var(--warn-soft), transparent 70%);}
-.kpi .label{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;position:relative;z-index:1;}
-.kpi .v{font-family:"JetBrains Mono",monospace;font-size:1.85rem;font-weight:700;margin-top:.3rem;color:var(--ink);position:relative;z-index:1;line-height:1.1;}
-.kpi .v small{font-size:.7rem;color:var(--muted);font-weight:400;font-family:"Inter",sans-serif;margin-left:.4rem;}
-.kpi .row{display:flex;align-items:center;justify-content:space-between;margin-top:.55rem;position:relative;z-index:1;gap:.5rem;}
-.kpi .spark{height:30px;flex:1;}
-.kpi .spark svg{display:block;width:100%;height:100%;}
-.kpi-wide{grid-column:1/-1;}
-.kpi-chart{margin-top:.7rem;height:190px;position:relative;z-index:1;}
-.kpi-chart svg{width:100%;height:100%;display:block;}
-.delta{display:inline-block;padding:.18rem .55rem;border-radius:999px;font-size:.7rem;font-weight:700;font-family:"JetBrains Mono",monospace;white-space:nowrap;}
-.delta.up{background:var(--good-soft);color:var(--good);}
-.delta.down{background:var(--danger-soft);color:var(--danger);}
-.delta.flat{background:rgba(255,255,255,.05);color:var(--muted);}
+.mimic{background:
+    radial-gradient(1100px 520px at 50% 8%, #11202c, #0a131b 70%),
+    linear-gradient(180deg,#0b141c,#080f15);
+  border:1px solid var(--line);border-radius:var(--radius);padding:.4rem;margin-bottom:1rem;overflow:hidden;position:relative;
+  box-shadow:inset 0 0 60px rgba(0,0,0,.6);}
+.mimic .bar{display:flex;align-items:center;justify-content:space-between;padding:.4rem .7rem .55rem;flex-wrap:wrap;gap:.5rem;border-bottom:1px solid var(--line);margin-bottom:.2rem;}
+.mimic .bar .t{font-family:var(--mono);font-size:.74rem;color:var(--ink-2);font-weight:700;letter-spacing:.04em;display:flex;align-items:center;gap:.6rem;}
+.mimic .bar .auto{color:var(--good);border:1px solid rgba(52,211,153,.4);background:var(--good-soft);padding:.05rem .4rem;border-radius:4px;font-size:.62rem;}
+.mimic .bar .scan{color:var(--muted);font-size:.66rem;}
+.mimic .bar .lg{display:flex;gap:.9rem;flex-wrap:wrap;font-family:var(--mono);font-size:.66rem;color:var(--muted);}
+.mimic .bar .lg i{display:inline-block;width:18px;height:3px;border-radius:2px;margin-right:.3rem;vertical-align:middle;}
+.mimic svg{display:block;width:100%;height:auto;}
 
-/* ------- Weather (compact strip) ------- */
-.wx-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.55rem;}
-.wx-day{
-  padding:.7rem .85rem;border-radius:10px;
-  background:linear-gradient(135deg, rgba(94,234,212,.06), rgba(129,140,248,.08));
-  border:1px solid var(--line);position:relative;overflow:hidden;
-}
-.wx-day .d{font-size:.68rem;color:var(--brand);font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
-.wx-day .t{font-size:1.5rem;font-weight:700;margin-top:.1rem;color:var(--ink);font-family:"JetBrains Mono",monospace;}
-.wx-day .t small{font-size:.62rem;color:var(--muted);font-weight:400;margin-left:.4rem;}
-.wx-day .desc{font-size:.72rem;color:var(--ink-2);margin-top:.15rem;}
-.wx-day .meta{font-size:.66rem;color:var(--muted);margin-top:.35rem;font-family:"JetBrains Mono",monospace;display:flex;gap:.7rem;flex-wrap:wrap;}
+.flow{stroke-dasharray:10 8;animation:flow 1s linear infinite;}
+.flow.slow{animation-duration:2.2s;}
+@keyframes flow{to{stroke-dashoffset:-18;}}
+.spin{transform-box:fill-box;transform-origin:center;animation:spin 1.4s linear infinite;}
+.spin.slow{animation-duration:3s;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.flick{animation:flick .5s steps(2) infinite;}
+@keyframes flick{50%{opacity:.5;}}
+.conv-belt{animation:belt 3s linear infinite;}
+@keyframes belt{to{transform:translateX(-60px);}}
+.scanbar{transform-box:fill-box;animation:scanb 1.4s ease-in-out infinite;}
+@keyframes scanb{0%,100%{transform:translateY(0);}50%{transform:translateY(26px);}}
+.smoke{transform-box:fill-box;transform-origin:center;animation:smoke 3.2s ease-out infinite;opacity:0;}
+@keyframes smoke{0%{transform:translateY(0) scale(.5);opacity:0;}20%{opacity:.45;}100%{transform:translateY(-42px) scale(1.7);opacity:0;}}
+@media(prefers-reduced-motion:reduce){.flow,.spin,.flick,.conv-belt,.scanbar,.smoke{animation:none;}}
+.lamp{filter:drop-shadow(0 0 5px currentColor);}
 
-/* ------- 2-column row ------- */
-.two-col{display:grid;grid-template-columns:1.4fr 1fr;gap:1.05rem;margin-bottom:1.05rem;}
-@media(max-width:900px){.two-col{grid-template-columns:1fr;}}
-.two-col .card{margin-bottom:0;}
+.lower{display:grid;grid-template-columns:1.3fr 1fr;gap:1rem;}
+@media(max-width:900px){.lower{grid-template-columns:1fr;}}
+.card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:var(--radius);padding:.9rem 1rem;}
+.card h2{font-size:.78rem;font-weight:700;color:var(--ink-2);margin-bottom:.7rem;display:flex;align-items:center;gap:.5rem;letter-spacing:.02em;}
+.card h2 .meta{margin-left:auto;font-size:.66rem;color:var(--muted);font-family:var(--mono);font-weight:500;}
+.alog{font-family:var(--mono);font-size:.72rem;max-height:230px;overflow:auto;}
+.alog .r{display:grid;grid-template-columns:64px 56px 1fr;gap:.5rem;padding:.32rem .2rem;border-bottom:1px solid var(--line-soft);align-items:center;}
+.alog .r:last-child{border-bottom:0;}
+.alog .ts{color:var(--dim);}
+.alog .sev{font-weight:700;text-align:center;border-radius:4px;font-size:.62rem;padding:.1rem 0;}
+.alog .sev.ALARM{background:var(--dang-soft);color:var(--danger);}
+.alog .sev.WARN{background:var(--warn-soft);color:var(--warn);}
+.alog .sev.INFO{background:rgba(56,189,248,.12);color:var(--cyan);}
+.alog .sev.OK{background:var(--good-soft);color:var(--good);}
+.alog .msg{color:var(--ink-2);}
 
-/* Plan card */
-.plan-grid{display:grid;grid-template-columns:1fr;gap:.6rem;}
-.line{
-  border:1px solid var(--line);border-radius:10px;padding:.75rem .9rem;
-  background:linear-gradient(180deg,var(--surface-2),var(--surface));
-  position:relative;
-}
-.line summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:.7rem;outline:none;}
-.line summary::-webkit-details-marker{display:none;}
-.line summary::before{content:"▸";color:var(--muted);transition:transform .2s;display:inline-block;font-size:.7rem;}
-.line[open] summary::before{transform:rotate(90deg);}
-.line .ln-badge{font-weight:700;font-size:.78rem;padding:.18rem .55rem;border-radius:6px;background:var(--brand-soft);color:var(--brand);font-family:"JetBrains Mono",monospace;}
-.line .ln-name{color:var(--ink);font-weight:600;font-size:.88rem;}
-.line .ln-meta{margin-left:auto;font-family:"JetBrains Mono",monospace;font-weight:600;font-size:.95rem;color:var(--ink);text-align:right;}
-.line .ln-meta small{display:block;font-size:.62rem;color:var(--muted);font-weight:400;font-family:"Inter",sans-serif;margin-top:.1rem;}
-.line .ln-bar{height:5px;background:rgba(255,255,255,.05);border-radius:3px;margin-top:.55rem;overflow:hidden;position:relative;}
-.line .ln-bar > span{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--brand-strong));border-radius:3px;transition:width .5s;}
-.line table{width:100%;font-size:.76rem;margin-top:.65rem;border-collapse:collapse;}
-.line th,.line td{padding:.32rem .35rem;text-align:left;border-bottom:1px solid var(--line-soft);}
-.line th{font-size:.62rem;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em;}
-.line td.num{text-align:right;font-family:"JetBrains Mono",monospace;color:var(--ink-2);}
-.line td:first-child{color:var(--ink);font-weight:500;}
-.plan-tot{margin-top:.85rem;padding:.85rem 1rem;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem;}
-.plan-tot .tag{font-size:.66rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
-.plan-tot .num{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:1.15rem;color:var(--ink);}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;}
+.tcell{border:1px solid var(--line);border-radius:10px;padding:.6rem .7rem;background:var(--bg-2);}
+.tcell .th{font-size:.66rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;display:flex;justify-content:space-between;}
+.tcell .tv{font-family:var(--mono);font-size:1.15rem;font-weight:700;color:var(--ink);margin-top:.1rem;}
+.tcell .tv small{font-size:.6rem;color:var(--muted);font-weight:500;margin-left:.25rem;}
+.tcell svg{display:block;width:100%;height:34px;margin-top:.25rem;}
 
-/* Section breakdown / Donut */
-.donut-wrap{display:flex;flex-direction:column;align-items:center;gap:.5rem;padding:.5rem 0 0.8rem;}
-.donut{width:180px;height:180px;position:relative;}
-.donut svg{display:block;transform:rotate(-90deg);}
-.donut .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
-.donut .center .v{font-family:"JetBrains Mono",monospace;font-size:1.35rem;font-weight:700;color:var(--ink);}
-.donut .center .lbl{font-size:.7rem;color:var(--muted);}
-.donut-legend{display:flex;gap:1.1rem;justify-content:center;flex-wrap:wrap;font-size:.78rem;}
-.donut-legend .it{display:flex;align-items:center;gap:.4rem;}
-.donut-legend .sw{width:11px;height:11px;border-radius:3px;}
-
-/* Section list (under donut) */
-.sec-list{margin-top:.7rem;border-top:1px solid var(--line-soft);padding-top:.8rem;}
-.sec-row{padding:.55rem 0;border-bottom:1px solid var(--line-soft);}
-.sec-row:last-child{border-bottom:0;}
-.sec-row .head{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;}
-.sec-row .name{font-size:.82rem;color:var(--ink);font-weight:600;}
-.sec-row .lp{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:1rem;color:var(--ink);}
-.sec-row .lp small{font-size:.62rem;color:var(--muted);font-weight:400;font-family:"Inter",sans-serif;margin-left:.25rem;}
-.sec-row .bar{height:5px;background:rgba(255,255,255,.05);border-radius:3px;margin-top:.5rem;overflow:hidden;}
-.sec-row .bar > span{display:block;height:100%;border-radius:3px;transition:width .5s;}
-.sec-row.s1 .bar > span{background:linear-gradient(90deg, var(--c-sec1), #2dd4bf);}
-.sec-row.s2 .bar > span{background:linear-gradient(90deg, var(--c-sec2), #a855f7);}
-.sec-row .meta{display:flex;justify-content:space-between;font-size:.7rem;color:var(--muted);margin-top:.3rem;font-family:"JetBrains Mono",monospace;}
-
-/* ------- Charts ------- */
-.chart-wrap{padding:.4rem 0 0;}
-.chart-svg{width:100%;display:block;}
-.grid-line{stroke:var(--line-soft);stroke-width:1;stroke-dasharray:2 4;}
-.axis-label{font-size:9px;fill:var(--muted);font-family:"JetBrains Mono",monospace;}
-.bar{transition:opacity .15s;}
-.bar:hover{opacity:.85;}
-.bar-value{font-size:9px;fill:var(--ink-2);font-family:"JetBrains Mono",monospace;}
-.area-line{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
-.area-fill{opacity:.18;}
-.line-dot{fill:#fff;stroke-width:2;}
-
-.legend{display:flex;gap:1rem;justify-content:flex-end;font-size:.72rem;color:var(--muted);margin-top:.5rem;}
-.legend .it{display:flex;align-items:center;gap:.35rem;}
-.legend .sw{width:13px;height:3px;border-radius:2px;}
-
-/* Empty / error states */
-.empty{padding:1.4rem 1rem;color:var(--muted);font-size:.85rem;text-align:center;border:1px dashed var(--line);border-radius:10px;}
-.error{padding:.8rem 1rem;background:var(--danger-soft);border:1px solid rgba(248,113,113,.3);color:var(--danger);border-radius:10px;font-size:.85rem;}
-
-/* Skeleton loading */
-.skel{height:32px;background:linear-gradient(90deg,var(--surface-2),var(--surface),var(--surface-2));background-size:200% 100%;animation:skel 1.2s infinite;border-radius:6px;}
-@keyframes skel{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
-
-/* Entrance animation */
-@keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
-.card,.kpi,.hero-grid,.two-col{animation:fadeUp .35s ease-out;}
-
-@media(max-width:600px){
-  .h-row h1{font-size:1.2rem;}
-  .card{padding:.85rem .95rem;}
-  .kpi .v{font-size:1.5rem;}
-  .donut{width:150px;height:150px;}
-}
-
-/* ===== TODO §5 — dashboard restructure ===== */
-#cardSec{display:none!important;}                       /* 5.1 hide Section Breakdown */
-.two-col{grid-template-columns:1fr!important;}          /* plan card full width */
-#cardPlan .plan-grid{grid-template-columns:1fr 1fr;gap:.85rem;}  /* 5.1 Line A | Line B */
-@media(max-width:820px){#cardPlan .plan-grid{grid-template-columns:1fr;}}
-.wx-ico{display:inline-block;transform-origin:50% 60%;animation:wxBob 3s ease-in-out infinite;}
-@keyframes wxBob{0%,100%{transform:translateY(0) rotate(0);}50%{transform:translateY(-3px) rotate(-8deg);}}
-@media(prefers-reduced-motion:reduce){.wx-ico{animation:none;}}
-.kpi .clk{margin-top:.5rem;font-family:"JetBrains Mono",monospace;font-size:.82rem;color:var(--muted);letter-spacing:.04em;}
-.kpi .clk b{color:var(--brand-strong);font-weight:700;}
-.lp-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;}
-@media(max-width:900px){.lp-cards{grid-template-columns:1fr;}}
-.lp-card{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:1rem 1.1rem;}
-.lp-card .lp-h{font-size:.82rem;font-weight:700;color:var(--ink-2);margin-bottom:.5rem;line-height:1.35;}
-.lp-card .lp-v{font-family:"JetBrains Mono",monospace;font-size:1.9rem;font-weight:700;color:var(--ink);line-height:1;}
-.lp-card .lp-v small{font-size:.8rem;color:var(--muted);font-weight:600;margin-left:.3rem;}
-.lp-card .lp-sub{margin-top:.55rem;font-size:.78rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:.3rem .8rem;}
-.lp-card .lp-sub .ok{color:var(--good);font-weight:700;}
-.lp-card .lp-sub .bad{color:var(--danger);font-weight:700;}
-.lp-card .lp-tgtbar{margin-top:.6rem;height:6px;border-radius:4px;background:var(--line);overflow:hidden;}
-.lp-card .lp-tgtbar span{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--brand-strong));}
+@media(max-width:600px){.h-row h1{font-size:1.1rem;}.kpi .val{font-size:1.25rem;}}
 </style>
-<script src="./static/site_header.js?v=20260513-genbalink" defer></script>
+<script src="./static/site_header.js?v=20260610-back" defer></script>
 </head>
 <body>
 <div id="siteHeader"></div>
@@ -252,499 +110,502 @@ main{max-width:1320px;margin:0 auto;padding:1rem 1.1rem 3rem;}
 <main>
   <div class="h-row">
     <div class="title">
-      <h1>📊 Status Dashboard</h1>
-      <div class="anchor">Report date <b id="anchorDate">—</b></div>
+      <h1>⬡ Plant SCADA — Process Overview</h1>
+      <span class="demo-tag">● DEMO DATA</span>
     </div>
-    <div class="ctrl">
-      <input type="date" id="dateInput" />
-      <button type="button" id="reloadBtn" title="Reload data">↻ Refresh</button>
+    <div class="title">
+      <span class="plant-state"><span class="dot"></span><span id="plantState">RUNNING</span></span>
+      <span class="clk">🕒 <b id="clk">--:--:--</b></span>
     </div>
   </div>
 
-  <!-- HERO KPI BAND -->
-  <section class="hero-grid" id="heroGrid">
-    <div class="kpi"><div class="label">Today's Packs</div><div class="v skel" style="width:60%"></div></div>
-    <div class="kpi ind1"><div class="label">vs Plan</div><div class="v skel" style="width:50%"></div></div>
-    <div class="kpi ind2"><div class="label">Productivity</div><div class="v skel" style="width:55%"></div></div>
-    <div class="kpi ind3"><div class="label">Workers Present</div><div class="v skel" style="width:50%"></div></div>
+  <section class="kstrip" id="kstrip">
+    <div class="kpi k-cyan"><div class="lab">Plant OEE</div><div class="val" id="kOee">—<small>%</small></div><div class="sub" id="kOeeS">availability · perf · qual</div></div>
+    <div class="kpi"><div class="lab">Total Throughput</div><div class="val" id="kThru">—<small>pk/h</small></div><div class="sub">Line A + Line B</div></div>
+    <div class="kpi k-amber"><div class="lab">Steam Output</div><div class="val" id="kSteam">—<small>t/h</small></div><div class="sub">2 boilers online</div></div>
+    <div class="kpi k-cyan"><div class="lab">Power Draw</div><div class="val" id="kPwr">—<small>kW</small></div><div class="sub" id="kPwrS">grid + PV</div></div>
+    <div class="kpi" id="kpiAlarm"><div class="lab">Active Alarms</div><div class="val" id="kAlm">0</div><div class="sub" id="kAlmS">all clear</div></div>
   </section>
 
-  <!-- LABOR PRODUCTIVITY TREND — last 30 days (under Today's Packs) -->
-  <section class="card" id="cardPerf">
-    <h2>📈 人時生産性の推移 / Labor Productivity Trend <span class="meta" id="perfMeta">S1 85 / S2 35 / Combined 25</span></h2>
-    <div id="perfBody" class="chart-wrap"><div class="empty">Loading…</div></div>
+  <section class="mimic">
+    <div class="bar">
+      <span class="t">PROCESS MIMIC · 製造ライン総合監視 <span class="auto">AUTO</span> <span class="scan">scan <b id="scanT">--:--:--</b></span></span>
+      <span class="lg">
+        <span><i style="background:var(--steam)"></i>Steam</span>
+        <span><i style="background:var(--amber)"></i>Fuel</span>
+        <span><i style="background:var(--cyan)"></i>Chilled / Water</span>
+        <span><i style="background:var(--brand)"></i>Product</span>
+      </span>
+    </div>
+    <svg id="mimic" viewBox="0 0 1200 640" role="img" aria-label="Plant SCADA mimic diagram">
+      <defs>
+        <linearGradient id="cylSteel" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#16242f"/><stop offset=".18" stop-color="#2c4456"/><stop offset=".5" stop-color="#3a5a70"/><stop offset=".82" stop-color="#243a4c"/><stop offset="1" stop-color="#121e28"/></linearGradient>
+        <linearGradient id="cylSteelV" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#33505f"/><stop offset=".5" stop-color="#1d303d"/><stop offset="1" stop-color="#142430"/></linearGradient>
+        <linearGradient id="cylFuelA" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#7a4d10"/><stop offset=".5" stop-color="#fbbf24"/><stop offset="1" stop-color="#7a4d10"/></linearGradient>
+        <linearGradient id="cylFuelB" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#5c3208"/><stop offset=".5" stop-color="#f59e0b"/><stop offset="1" stop-color="#5c3208"/></linearGradient>
+        <linearGradient id="metal" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1b2c3a"/><stop offset=".5" stop-color="#2c4658"/><stop offset="1" stop-color="#16242f"/></linearGradient>
+        <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+        <radialGradient id="flame" cx="50%" cy="80%" r="70%"><stop offset="0" stop-color="#fff3b0"/><stop offset=".4" stop-color="#f59e0b"/><stop offset="1" stop-color="#dc2626"/></radialGradient>
+        <linearGradient id="cool" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0e2a3a"/><stop offset="1" stop-color="#091620"/></linearGradient>
+        <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3aa0d8"/><stop offset="1" stop-color="#1b6fa8"/></linearGradient>
+        <radialGradient id="vig" cx="50%" cy="42%" r="75%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".45"/></radialGradient>
+        <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.5"/></filter>
+      </defs>
+
+      <!-- ================= FUEL FARM ================= -->
+      <g id="zoneFuel" filter="url(#soft)">
+        <text x="95" y="56" text-anchor="middle" fill="#8aa6b4" font-family="JetBrains Mono" font-size="13" font-weight="700">FUEL FARM</text>
+        <!-- Tank A -->
+        <g transform="translate(40,78)">
+          <ellipse cx="50" cy="6" rx="50" ry="9" fill="#0d1620" stroke="#28465a" stroke-width="2"/>
+          <rect x="0" y="6" width="100" height="196" fill="#0d1620" stroke="#28465a" stroke-width="2"/>
+          <clipPath id="clipFA"><rect x="3" y="6" width="94" height="195"/></clipPath>
+          <rect id="fuelA" x="3" y="100" width="94" height="101" fill="url(#cylFuelA)" clip-path="url(#clipFA)"/>
+          <ellipse cx="50" cy="202" rx="50" ry="9" fill="#16242f" stroke="#28465a" stroke-width="2"/>
+          <rect x="8" y="6" width="84" height="196" fill="url(#sheen)" clip-path="url(#clipFA)" opacity=".5"/>
+          <!-- level scale -->
+          <g font-family="JetBrains Mono" font-size="8" fill="#5a7280">
+            <line x1="100" y1="40" x2="106" y2="40" stroke="#3a5668"/><text x="109" y="43">100</text>
+            <line x1="100" y1="104" x2="106" y2="104" stroke="#3a5668"/><text x="109" y="107">50</text>
+            <line x1="100" y1="168" x2="106" y2="168" stroke="#3a5668"/><text x="109" y="171">0</text>
+          </g>
+          <text x="50" y="-6" text-anchor="middle" fill="#b4c6d0" font-family="JetBrains Mono" font-size="11" font-weight="700">T-101 DIESEL</text>
+          <text x="6" y="20" fill="#6a8290" font-family="JetBrains Mono" font-size="8">LT-101</text>
+          <text id="fuelAt" x="50" y="108" text-anchor="middle" fill="#0a0f14" font-family="JetBrains Mono" font-size="18" font-weight="700">—%</text>
+        </g>
+        <!-- Tank B -->
+        <g transform="translate(40,326)">
+          <ellipse cx="50" cy="6" rx="50" ry="9" fill="#0d1620" stroke="#28465a" stroke-width="2"/>
+          <rect x="0" y="6" width="100" height="196" fill="#0d1620" stroke="#28465a" stroke-width="2"/>
+          <clipPath id="clipFB"><rect x="3" y="6" width="94" height="195"/></clipPath>
+          <rect id="fuelB" x="3" y="100" width="94" height="101" fill="url(#cylFuelB)" clip-path="url(#clipFB)"/>
+          <ellipse cx="50" cy="202" rx="50" ry="9" fill="#16242f" stroke="#28465a" stroke-width="2"/>
+          <rect x="8" y="6" width="84" height="196" fill="url(#sheen)" clip-path="url(#clipFB)" opacity=".5"/>
+          <g font-family="JetBrains Mono" font-size="8" fill="#5a7280">
+            <line x1="100" y1="40" x2="106" y2="40" stroke="#3a5668"/><text x="109" y="43">100</text>
+            <line x1="100" y1="104" x2="106" y2="104" stroke="#3a5668"/><text x="109" y="107">50</text>
+            <line x1="100" y1="168" x2="106" y2="168" stroke="#3a5668"/><text x="109" y="171">0</text>
+          </g>
+          <text x="50" y="-6" text-anchor="middle" fill="#b4c6d0" font-family="JetBrains Mono" font-size="11" font-weight="700">T-102 HEAVY OIL</text>
+          <text x="6" y="20" fill="#6a8290" font-family="JetBrains Mono" font-size="8">LT-102</text>
+          <text id="fuelBt" x="50" y="108" text-anchor="middle" fill="#0a0f14" font-family="JetBrains Mono" font-size="18" font-weight="700">—%</text>
+        </g>
+        <!-- feed: valve + pump + arrow -->
+        <path d="M140,160 H190 V180" fill="none" stroke="var(--amber)" stroke-width="4" class="flow slow"/>
+        <path d="M140,410 H190 V430" fill="none" stroke="var(--amber)" stroke-width="4" class="flow slow"/>
+        <g transform="translate(150,160)"><path d="M-7,-6 L-7,6 L0,0 Z M7,-6 L7,6 L0,0 Z" fill="#22384a" stroke="#6f8aa0" stroke-width="1.5"/><line x1="0" y1="-6" x2="0" y2="-12" stroke="#6f8aa0" stroke-width="1.5"/></g>
+        <g transform="translate(172,160)"><circle r="9" fill="#1b2c3a" stroke="#6f8aa0" stroke-width="1.5"/><path d="M-4,-5 L5,0 L-4,5 Z" fill="var(--amber)"/></g>
+        <g transform="translate(150,410)"><path d="M-7,-6 L-7,6 L0,0 Z M7,-6 L7,6 L0,0 Z" fill="#22384a" stroke="#6f8aa0" stroke-width="1.5"/><line x1="0" y1="-6" x2="0" y2="-12" stroke="#6f8aa0" stroke-width="1.5"/></g>
+        <g transform="translate(172,410)"><circle r="9" fill="#1b2c3a" stroke="#6f8aa0" stroke-width="1.5"/><path d="M-4,-5 L5,0 L-4,5 Z" fill="var(--amber)"/></g>
+      </g>
+
+      <!-- ================= BOILER HOUSE ================= -->
+      <g id="zoneBoiler">
+        <text x="265" y="56" text-anchor="middle" fill="#8aa6b4" font-family="JetBrains Mono" font-size="13" font-weight="700">BOILER HOUSE</text>
+        <!-- Boiler 1 -->
+        <g transform="translate(190,78)" filter="url(#soft)">
+          <!-- stack + smoke -->
+          <rect x="118" y="64" width="16" height="48" rx="2" fill="url(#cylSteelV)" stroke="#2f4a5e" stroke-width="1.5"/>
+          <g><circle cx="126" cy="60" r="6" fill="#6b7d88" class="smoke"/><circle cx="126" cy="60" r="6" fill="#6b7d88" class="smoke" style="animation-delay:1s"/><circle cx="126" cy="60" r="6" fill="#6b7d88" class="smoke" style="animation-delay:2s"/></g>
+          <!-- body -->
+          <ellipse cx="75" cy="104" rx="75" ry="15" fill="#2c4658" stroke="#2f4a5e" stroke-width="2"/>
+          <rect x="0" y="104" width="150" height="118" fill="url(#cylSteel)" stroke="#2f4a5e" stroke-width="2"/>
+          <ellipse cx="75" cy="222" rx="75" ry="14" fill="#172631" stroke="#2f4a5e" stroke-width="2"/>
+          <!-- burner flame + grate -->
+          <ellipse cx="75" cy="208" rx="30" ry="16" fill="url(#flame)" class="flick"/>
+          <!-- sight glass (water level) -->
+          <rect x="10" y="120" width="9" height="84" rx="3" fill="#0c1820" stroke="#2f4a5e" stroke-width="1"/>
+          <rect x="11" y="158" width="7" height="45" rx="2" fill="url(#glass)"/>
+          <text x="14" y="118" text-anchor="middle" fill="#6a8290" font-family="JetBrains Mono" font-size="7">LG</text>
+          <!-- gauge PT-201 -->
+          <g transform="translate(78,150)">
+            <circle r="40" fill="#0e1a24" stroke="#34506a" stroke-width="3"/>
+            <circle r="40" fill="none" stroke="#0a141c" stroke-width="1"/>
+            <path d="M-26.3,9.6 A28 28 0 0 1 12.5,-25.1" fill="none" stroke="#1f9d6b" stroke-width="5"/>
+            <path d="M12.5,-25.1 A28 28 0 0 1 26.0,-10.4" fill="none" stroke="#d9a521" stroke-width="5"/>
+            <path d="M26.0,-10.4 A28 28 0 0 1 26.3,9.6" fill="none" stroke="#c43c2f" stroke-width="5"/>
+            <g stroke="#5b7689" stroke-width="1.5"><line x1="0" y1="-30" x2="0" y2="-24" transform="rotate(-110)"/><line x1="0" y1="-30" x2="0" y2="-25" transform="rotate(-55)"/><line x1="0" y1="-30" x2="0" y2="-24" transform="rotate(0)"/><line x1="0" y1="-30" x2="0" y2="-25" transform="rotate(55)"/><line x1="0" y1="-30" x2="0" y2="-24" transform="rotate(110)"/></g>
+            <line id="g1needle" x1="0" y1="6" x2="0" y2="-24" stroke="#ff7849" stroke-width="2.5" stroke-linecap="round"/>
+            <circle r="4" fill="#ff7849" stroke="#0e1a24" stroke-width="1"/>
+            <rect x="-22" y="16" width="44" height="15" rx="3" fill="#061018" stroke="#34506a" stroke-width="1"/>
+            <text id="g1mpa" y="27" text-anchor="middle" fill="#9be7d4" font-family="JetBrains Mono" font-size="11" font-weight="700">— MPa</text>
+          </g>
+          <!-- nameplate + LED -->
+          <rect x="0" y="104" width="150" height="118" fill="url(#sheen)" opacity=".10"/>
+          <g transform="translate(18,118)"><circle r="9" fill="#0a141c" stroke="#34506a" stroke-width="2"/><circle id="b1lamp" class="lamp" r="5.5" fill="var(--good)" color="#34d399"/></g>
+          <rect x="92" y="190" width="50" height="20" rx="3" fill="#061018" stroke="#34506a" stroke-width="1"/>
+          <text x="117" y="203" text-anchor="middle" fill="#f5a524" font-family="JetBrains Mono" font-size="11" font-weight="700"><tspan id="b1temp">—°C</tspan></text>
+          <text x="75" y="98" text-anchor="middle" fill="#cfe0e8" font-family="JetBrains Mono" font-size="12" font-weight="700">B-1</text>
+          <text x="40" y="118" fill="#6a8290" font-family="JetBrains Mono" font-size="8">PT-201 · 2.5 t/h</text>
+        </g>
+        <!-- Boiler 2 -->
+        <g transform="translate(190,328)" filter="url(#soft)">
+          <rect x="118" y="64" width="16" height="48" rx="2" fill="url(#cylSteelV)" stroke="#2f4a5e" stroke-width="1.5"/>
+          <g><circle cx="126" cy="60" r="6" fill="#6b7d88" class="smoke" style="animation-delay:.5s"/><circle cx="126" cy="60" r="6" fill="#6b7d88" class="smoke" style="animation-delay:1.6s"/><circle cx="126" cy="60" r="6" fill="#6b7d88" class="smoke" style="animation-delay:2.6s"/></g>
+          <ellipse cx="75" cy="104" rx="75" ry="15" fill="#2c4658" stroke="#2f4a5e" stroke-width="2"/>
+          <rect x="0" y="104" width="150" height="118" fill="url(#cylSteel)" stroke="#2f4a5e" stroke-width="2"/>
+          <ellipse cx="75" cy="222" rx="75" ry="14" fill="#172631" stroke="#2f4a5e" stroke-width="2"/>
+          <ellipse cx="75" cy="208" rx="30" ry="16" fill="url(#flame)" class="flick"/>
+          <rect x="10" y="120" width="9" height="84" rx="3" fill="#0c1820" stroke="#2f4a5e" stroke-width="1"/>
+          <rect x="11" y="150" width="7" height="53" rx="2" fill="url(#glass)"/>
+          <text x="14" y="118" text-anchor="middle" fill="#6a8290" font-family="JetBrains Mono" font-size="7">LG</text>
+          <g transform="translate(78,150)">
+            <circle r="40" fill="#0e1a24" stroke="#34506a" stroke-width="3"/>
+            <path d="M-26.3,9.6 A28 28 0 0 1 12.5,-25.1" fill="none" stroke="#1f9d6b" stroke-width="5"/>
+            <path d="M12.5,-25.1 A28 28 0 0 1 26.0,-10.4" fill="none" stroke="#d9a521" stroke-width="5"/>
+            <path d="M26.0,-10.4 A28 28 0 0 1 26.3,9.6" fill="none" stroke="#c43c2f" stroke-width="5"/>
+            <g stroke="#5b7689" stroke-width="1.5"><line x1="0" y1="-30" x2="0" y2="-24" transform="rotate(-110)"/><line x1="0" y1="-30" x2="0" y2="-25" transform="rotate(-55)"/><line x1="0" y1="-30" x2="0" y2="-24" transform="rotate(0)"/><line x1="0" y1="-30" x2="0" y2="-25" transform="rotate(55)"/><line x1="0" y1="-30" x2="0" y2="-24" transform="rotate(110)"/></g>
+            <line id="g2needle" x1="0" y1="6" x2="0" y2="-24" stroke="#ff7849" stroke-width="2.5" stroke-linecap="round"/>
+            <circle r="4" fill="#ff7849" stroke="#0e1a24" stroke-width="1"/>
+            <rect x="-22" y="16" width="44" height="15" rx="3" fill="#061018" stroke="#34506a" stroke-width="1"/>
+            <text id="g2mpa" y="27" text-anchor="middle" fill="#9be7d4" font-family="JetBrains Mono" font-size="11" font-weight="700">— MPa</text>
+          </g>
+          <g transform="translate(18,118)"><circle r="9" fill="#0a141c" stroke="#34506a" stroke-width="2"/><circle id="b2lamp" class="lamp" r="5.5" fill="var(--good)" color="#34d399"/></g>
+          <rect x="92" y="190" width="50" height="20" rx="3" fill="#061018" stroke="#34506a" stroke-width="1"/>
+          <text x="117" y="203" text-anchor="middle" fill="#f5a524" font-family="JetBrains Mono" font-size="11" font-weight="700"><tspan id="b2temp">—°C</tspan></text>
+          <text x="75" y="98" text-anchor="middle" fill="#cfe0e8" font-family="JetBrains Mono" font-size="12" font-weight="700">B-2</text>
+          <text x="40" y="118" fill="#6a8290" font-family="JetBrains Mono" font-size="8">PT-202 · 2.5 t/h</text>
+        </g>
+        <!-- steam risers to header -->
+        <path d="M265,182 V150 H470" fill="none" stroke="var(--steam)" stroke-width="4" class="flow"/>
+        <path d="M265,432 V470 H470" fill="none" stroke="var(--steam)" stroke-width="4" class="flow"/>
+      </g>
+
+      <!-- ================= STEAM HEADER ================= -->
+      <g id="zoneHeader" filter="url(#soft)">
+        <rect x="465" y="144" width="16" height="332" rx="7" fill="url(#cylSteelV)" stroke="var(--steam)" stroke-width="1.5"/>
+        <path d="M473,150 V470" fill="none" stroke="var(--steam)" stroke-width="3" class="flow"/>
+        <!-- safety valve + PI gauge -->
+        <g transform="translate(473,150)"><path d="M-6,-8 L6,-8 L0,-20 Z" fill="#22384a" stroke="#6f8aa0" stroke-width="1.5"/><line x1="0" y1="-8" x2="0" y2="-2" stroke="#6f8aa0" stroke-width="1.5"/></g>
+        <g transform="translate(498,250)"><circle r="13" fill="#0e1a24" stroke="#34506a" stroke-width="2"/><line x1="0" y1="3" x2="6" y2="-8" stroke="#ff7849" stroke-width="1.5"/><circle r="2" fill="#ff7849"/><text y="26" text-anchor="middle" fill="#6a8290" font-family="JetBrains Mono" font-size="8">PI-200</text></g>
+        <text x="498" y="300" fill="#7d96a3" font-family="JetBrains Mono" font-size="10" font-weight="700">STEAM</text>
+        <text x="498" y="312" fill="#7d96a3" font-family="JetBrains Mono" font-size="10" font-weight="700">HEADER</text>
+        <!-- branches + valves -->
+        <path d="M481,152 H700 V152" fill="none" stroke="var(--steam)" stroke-width="4" class="flow"/>
+        <path d="M481,374 H700 V374" fill="none" stroke="var(--steam)" stroke-width="4" class="flow"/>
+        <g transform="translate(540,152)"><path d="M-7,-6 L-7,6 L0,0 Z M7,-6 L7,6 L0,0 Z" fill="#3a2418" stroke="#ff7849" stroke-width="1.5"/></g>
+        <g transform="translate(540,374)"><path d="M-7,-6 L-7,6 L0,0 Z M7,-6 L7,6 L0,0 Z" fill="#3a2418" stroke="#ff7849" stroke-width="1.5"/></g>
+      </g>
+
+      <!-- ================= PRODUCTION LINES (JS) ================= -->
+      <g id="zoneLines">
+        <text x="755" y="56" text-anchor="middle" fill="#8aa6b4" font-family="JetBrains Mono" font-size="13" font-weight="700">PRODUCTION LINES</text>
+        <g id="lines"></g>
+        <path d="M928,233 H1000" fill="none" stroke="var(--brand)" stroke-width="4" class="flow"/>
+        <path d="M928,455 H975 V300 H1000" fill="none" stroke="var(--cyan)" stroke-width="4" class="flow"/>
+        <path d="M962,233 l-7,-4 v8 z" fill="var(--brand)"/>
+        <path d="M988,300 l-7,-4 v8 z" fill="var(--cyan)"/>
+      </g>
+
+      <!-- ================= COLD STORE ================= -->
+      <g id="zoneCool" transform="translate(1000,110)" filter="url(#soft)">
+        <text x="95" y="-52" text-anchor="middle" fill="#8aa6b4" font-family="JetBrains Mono" font-size="13" font-weight="700">COLD STORE</text>
+        <rect x="0" y="0" width="190" height="400" rx="14" fill="url(#cool)" stroke="#2a5a72" stroke-width="2"/>
+        <rect x="0" y="0" width="190" height="400" rx="14" fill="none" stroke="rgba(56,189,248,.25)" stroke-width="1"/>
+        <!-- insulated door + frost -->
+        <rect x="118" y="210" width="62" height="178" rx="6" fill="#0c2230" stroke="#2a5a72" stroke-width="1.5"/>
+        <line x1="124" y1="299" x2="174" y2="299" stroke="#234a5e" stroke-width="1"/>
+        <circle cx="168" cy="299" r="3" fill="#6a8290"/>
+        <!-- shelving with product -->
+        <g opacity=".9">
+          <rect x="14" y="200" width="92" height="6" fill="#1b3a4a"/><rect x="14" y="252" width="92" height="6" fill="#1b3a4a"/><rect x="14" y="304" width="92" height="6" fill="#1b3a4a"/>
+          <rect x="20" y="182" width="16" height="16" rx="2" fill="#2dd4bf"/><rect x="40" y="182" width="16" height="16" rx="2" fill="#2dd4bf"/><rect x="60" y="182" width="16" height="16" rx="2" fill="#38bdf8"/><rect x="80" y="182" width="16" height="16" rx="2" fill="#2dd4bf"/>
+          <rect x="20" y="234" width="16" height="16" rx="2" fill="#38bdf8"/><rect x="44" y="234" width="16" height="16" rx="2" fill="#2dd4bf"/><rect x="70" y="234" width="16" height="16" rx="2" fill="#38bdf8"/>
+          <rect x="20" y="286" width="16" height="16" rx="2" fill="#2dd4bf"/><rect x="48" y="286" width="16" height="16" rx="2" fill="#38bdf8"/><rect x="80" y="286" width="16" height="16" rx="2" fill="#2dd4bf"/>
+        </g>
+        <text x="95" y="30" text-anchor="middle" fill="#38bdf8" font-family="JetBrains Mono" font-size="14" font-weight="700">COOL ROOM</text>
+        <text x="95" y="46" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="10">冷蔵庫 · CR-01 · TT-301</text>
+        <!-- temp faceplate -->
+        <rect x="30" y="58" width="130" height="70" rx="8" fill="#061018" stroke="#2a5a72" stroke-width="1.5"/>
+        <text id="crTemp" x="95" y="108" text-anchor="middle" fill="#38bdf8" font-family="JetBrains Mono" font-size="38" font-weight="700">—°</text>
+        <text x="95" y="146" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="10">SETPOINT <tspan id="crSet">2.0</tspan>°C</text>
+        <text x="20" y="170" fill="#7d96a3" font-family="JetBrains Mono" font-size="9">HUMIDITY</text>
+        <rect x="20" y="174" width="80" height="9" rx="4" fill="#0a1822" stroke="#2a5a72" stroke-width="1"/>
+        <rect id="crHumBar" x="21" y="175" width="60" height="7" rx="3" fill="var(--cyan)"/>
+        <text id="crHum" x="100" y="170" text-anchor="end" fill="#b4c6d0" font-family="JetBrains Mono" font-size="9">—%</text>
+        <!-- evap fan -->
+        <g transform="translate(55,330)">
+          <circle r="28" fill="#0a1822" stroke="#2a5a72" stroke-width="2"/>
+          <g class="spin slow" id="crFan">
+            <path d="M0,-22 Q9,-9 0,0 Q-9,-9 0,-22Z" fill="#38bdf8" opacity=".85"/><path d="M22,0 Q9,9 0,0 Q9,-9 22,0Z" fill="#38bdf8" opacity=".85"/><path d="M0,22 Q-9,9 0,0 Q9,9 0,22Z" fill="#38bdf8" opacity=".85"/><path d="M-22,0 Q-9,-9 0,0 Q-9,9 -22,0Z" fill="#38bdf8" opacity=".85"/>
+          </g>
+          <circle r="4" fill="#2a5a72"/>
+          <text y="42" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="8">EVAP FAN</text>
+        </g>
+        <!-- compressor + stock -->
+        <g transform="translate(95,332)">
+          <rect x="-20" y="-18" width="40" height="36" rx="5" fill="url(#metal)" stroke="#2a5a72" stroke-width="1.5"/>
+          <circle id="crComp" cx="0" cy="0" r="7" fill="var(--good)" class="lamp" color="#34d399"/>
+          <text y="34" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="8">COMP</text>
+        </g>
+        <text x="135" y="200" fill="#7d96a3" font-family="JetBrains Mono" font-size="9">STORED</text>
+        <text id="crStock" x="170" y="200" text-anchor="end" fill="#e6f0f4" font-family="JetBrains Mono" font-size="12" font-weight="700">— pk</text>
+      </g>
+
+      <!-- screen vignette -->
+      <rect x="0" y="0" width="1200" height="640" fill="url(#vig)" pointer-events="none"/>
+    </svg>
   </section>
 
-  <!-- WEATHER (compact) -->
-  <section class="card" id="cardWeather">
-    <h2><span class="wx-ico">🌤</span> Weather <span class="meta" id="wxMeta">—</span></h2>
-    <div id="wxBody" class="empty">Loading…</div>
-  </section>
-
-  <!-- LABOR PRODUCTIVITY SUMMARY (§5.3) -->
-  <section class="card" id="cardLP">
-    <h2>📈 人時生産性 / Labor Productivity <span class="meta" id="lpMeta">month-to-date</span></h2>
-    <div id="lpBody"><div class="lp-cards"><div class="lp-card empty">Loading…</div><div class="lp-card empty">Loading…</div><div class="lp-card empty">Loading…</div></div></div>
-  </section>
-
-  <!-- 2-COLUMN: Plan | Section breakdown -->
-  <div class="two-col">
-    <section class="card" id="cardPlan">
-      <h2>📋 Today's Production Plan <span class="meta" id="planMeta">—</span></h2>
-      <div id="planBody" class="empty">Loading…</div>
+  <div class="lower">
+    <section class="card">
+      <h2>🚨 Alarm &amp; Event Log <span class="meta" id="almMeta">live · demo</span></h2>
+      <div class="alog" id="alog"></div>
     </section>
-
-    <section class="card" id="cardSec">
-      <h2>📦 Section Breakdown <span class="meta">N=製造１課 · Y=製造２課</span></h2>
-      <div id="secBody" class="empty">Loading…</div>
+    <section class="card">
+      <h2>📈 Live Trends <span class="meta">60 s window</span></h2>
+      <div class="tgrid">
+        <div class="tcell"><div class="th"><span>STEAM</span><span id="trSteamN">—</span></div><div class="tv" id="trSteamV">—<small>t/h</small></div><svg id="trSteam" viewBox="0 0 100 34" preserveAspectRatio="none"></svg></div>
+        <div class="tcell"><div class="th"><span>THROUGHPUT</span><span id="trThruN">—</span></div><div class="tv" id="trThruV">—<small>pk/h</small></div><svg id="trThru" viewBox="0 0 100 34" preserveAspectRatio="none"></svg></div>
+        <div class="tcell"><div class="th"><span>COOL ROOM</span><span id="trCoolN">—</span></div><div class="tv" id="trCoolV">—<small>°C</small></div><svg id="trCool" viewBox="0 0 100 34" preserveAspectRatio="none"></svg></div>
+        <div class="tcell"><div class="th"><span>POWER</span><span id="trPwrN">—</span></div><div class="tv" id="trPwrV">—<small>kW</small></div><svg id="trPwr" viewBox="0 0 100 34" preserveAspectRatio="none"></svg></div>
+      </div>
     </section>
   </div>
-
-  <!-- 30-DAY PACK TREND (area chart) -->
-  <section class="card" id="cardTrend">
-    <h2>📈 Last 30 Days — Daily Packs <span class="meta" id="trendMeta">—</span></h2>
-    <div id="trendBody" class="chart-wrap"><div class="empty">Loading…</div></div>
-  </section>
-
 </main>
 
 <script>
 (() => {
-  const $  = id => document.getElementById(id);
-  const fmtN = n => (n == null || isNaN(n)) ? "—" : Number(n).toLocaleString();
-  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
-  // Only the `/attendance/*` mount has a path prefix to strip; on the
-  // genbafms.com vhost the page is served bare at `/dashboard`, so BASE
-  // must stay empty. Greedy-first-segment broke API calls there.
-  const BASE = location.pathname.startsWith("/attendance/") ? "/attendance" : "";
-  const api = path => fetch(BASE + path).then(r => r.ok ? r.json() : Promise.reject(r.statusText));
+  "use strict";
+  const SVGNS="http://www.w3.org/2000/svg";
+  const $=id=>document.getElementById(id);
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const rnd=(a,b)=>a+Math.random()*(b-a);
+  const walk=(v,step,a,b)=>clamp(v+rnd(-step,step),a,b);
 
-  // ---------- Reusable SVG charts ----------
-  function sparkline(values, w=120, h=30, color="#5eead4") {
-    if (!values || !values.length) return "";
-    const v = values.map(x => Number(x) || 0);
-    const max = Math.max(...v, 1);
-    const min = Math.min(...v, 0);
-    const range = (max - min) || 1;
-    const stepX = w / (v.length - 1 || 1);
-    const pts = v.map((y, i) => `${(i*stepX).toFixed(1)},${(h - ((y - min)/range)*h*0.85 - h*0.075).toFixed(1)}`);
-    const polyPts = pts.join(" ");
-    const areaPts = `0,${h} ${polyPts} ${w},${h}`;
-    return `
-      <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-        <polygon points="${areaPts}" fill="${color}" opacity="0.18"/>
-        <polyline points="${polyPts}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>`;
+  // ---------- production-line builder ----------
+  function ro(x,label,id,init,color){
+    return `<text x="${x}" y="160" fill="#7d96a3" font-family="JetBrains Mono" font-size="8">${label}</text>`+
+           `<text id="${id}" x="${x}" y="176" fill="${color}" font-family="JetBrains Mono" font-size="12" font-weight="700">${init}</text>`;
+  }
+  function buildLine(p){
+    const boxes=[0,1,2,3,4,5].map(i=>`<rect x="${100+i*60}" y="120" width="20" height="11" rx="2" fill="${p.prod}"/>`).join("");
+    return `<g transform="translate(${p.x},${p.y})" filter="url(#soft)">
+      <rect x="0" y="0" width="380" height="192" rx="12" fill="#0c1721" stroke="#26404f" stroke-width="1.5"/>
+      <rect x="0" y="0" width="380" height="26" rx="12" fill="#10212c"/>
+      <text x="14" y="18" fill="${p.accent}" font-family="JetBrains Mono" font-size="13" font-weight="700">${p.name}</text>
+      <g transform="translate(356,13)"><circle r="9" fill="#0a141c" stroke="#34506a" stroke-width="2"/><circle id="${p.pre}lamp" class="lamp" r="5.5" fill="var(--good)" color="#34d399"/></g>
+
+      <rect x="90" y="118" width="278" height="14" rx="7" fill="#13222d" stroke="#2f4a5e" stroke-width="1"/>
+      <clipPath id="${p.pre}belt"><rect x="90" y="113" width="278" height="24"/></clipPath>
+      <g clip-path="url(#${p.pre}belt)"><g class="conv-belt">${boxes}</g></g>
+      <circle cx="97" cy="125" r="8" fill="#16242f" stroke="#2f4a5e" stroke-width="1.5"/><circle cx="97" cy="125" r="2.5" fill="${p.accent}" class="spin"/>
+      <circle cx="360" cy="125" r="8" fill="#16242f" stroke="#2f4a5e" stroke-width="1.5"/><circle cx="360" cy="125" r="2.5" fill="${p.accent}" class="spin"/>
+
+      <!-- 1 RAW SILO -->
+      <text x="36" y="42" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="8">SILO·SC-1</text>
+      <clipPath id="${p.pre}siloc"><polygon points="16,48 56,48 44,92 28,92"/></clipPath>
+      <rect id="${p.pre}silo" x="16" y="60" width="40" height="32" fill="#7aa33a" clip-path="url(#${p.pre}siloc)"/>
+      <rect x="16" y="48" width="40" height="44" fill="url(#sheen)" clip-path="url(#${p.pre}siloc)" opacity=".4"/>
+      <polygon points="16,48 56,48 44,92 28,92" fill="none" stroke="#3a5a2e" stroke-width="1.5"/>
+      <rect x="32" y="92" width="8" height="26" fill="#16242f" stroke="#2f4a5e" stroke-width="1"/>
+
+      <!-- 2 MIXER -->
+      <text x="86" y="42" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="8">MIXER·MX-1</text>
+      <rect x="70" y="46" width="32" height="13" rx="3" fill="url(#metal)" stroke="#2f4a5e" stroke-width="1"/>
+      <circle cx="86" cy="86" r="20" fill="#13202b" stroke="#2f4a5e" stroke-width="1.5"/>
+      <ellipse cx="80" cy="80" rx="6" ry="9" fill="#fff" opacity=".06"/>
+      <g class="spin" transform="translate(86,86)"><line x1="-16" y1="0" x2="16" y2="0" stroke="${p.accent}" stroke-width="2.5"/><line x1="0" y1="-16" x2="0" y2="16" stroke="${p.accent}" stroke-width="2.5"/></g>
+      <rect x="82" y="104" width="8" height="14" fill="#16242f" stroke="#2f4a5e" stroke-width="1"/>
+
+      <!-- 3 COOKER -->
+      <text x="140" y="42" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="8">COOK·TT-1</text>
+      <rect x="118" y="50" width="44" height="58" rx="8" fill="url(#cylSteel)" stroke="#2f4a5e" stroke-width="1.5"/>
+      <ellipse cx="140" cy="50" rx="22" ry="5" fill="#2c4658" stroke="#2f4a5e" stroke-width="1"/>
+      <circle cx="130" cy="62" r="3" fill="var(--steam)" class="flick"/><circle cx="140" cy="58" r="3" fill="var(--steam)" class="flick"/><circle cx="150" cy="62" r="3" fill="var(--steam)" class="flick"/>
+      <rect x="122" y="90" width="36" height="15" rx="3" fill="#061018" stroke="#34506a" stroke-width="1"/>
+      <text id="${p.pre}ctemp" x="140" y="101" text-anchor="middle" fill="#f5a524" font-family="JetBrains Mono" font-size="11" font-weight="700">—°</text>
+
+      <!-- 4 COOLING TUNNEL -->
+      <text x="197" y="42" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="8">CHILL·CT-1</text>
+      <rect x="172" y="54" width="50" height="52" rx="6" fill="#0e2330" stroke="#2a5a72" stroke-width="1.5"/>
+      <g transform="translate(197,80)" class="spin slow"><path d="M0,-13 Q5,-5 0,0 Q-5,-5 0,-13Z" fill="#38bdf8"/><path d="M13,0 Q5,5 0,0 Q5,-5 13,0Z" fill="#38bdf8"/><path d="M0,13 Q-5,5 0,0 Q5,5 0,13Z" fill="#38bdf8"/><path d="M-13,0 Q-5,-5 0,0 Q-5,5 -13,0Z" fill="#38bdf8"/></g>
+
+      <!-- 5 CHECKWEIGHER -->
+      <text x="250" y="42" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="8">CW·WT-1</text>
+      <rect x="226" y="48" width="48" height="20" rx="3" fill="#04140a" stroke="#1f9d6b" stroke-width="1"/>
+      <text id="${p.pre}wt" x="250" y="63" text-anchor="middle" fill="#34d399" font-family="JetBrains Mono" font-size="12" font-weight="700">—g</text>
+      <line x1="250" y1="68" x2="250" y2="113" stroke="#2f4a5e" stroke-width="1.5"/>
+      <rect x="236" y="112" width="28" height="5" fill="#2f4a5e"/>
+
+      <!-- 6 METAL DETECTOR -->
+      <text x="304" y="42" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="8">MD-1</text>
+      <rect x="288" y="98" width="34" height="40" rx="3" fill="none" stroke="${p.accent}" stroke-width="3"/>
+      <rect x="293" y="103" width="24" height="30" fill="none" stroke="#22384a" stroke-width="1"/>
+      <rect class="scanbar" x="293" y="103" width="24" height="3" fill="${p.accent}" opacity="0.85"/>
+
+      <!-- 7 PACKER -->
+      <text x="349" y="42" text-anchor="middle" fill="#7d96a3" font-family="JetBrains Mono" font-size="8">PACK·PK-1</text>
+      <rect x="332" y="50" width="34" height="40" rx="4" fill="url(#metal)" stroke="#2f4a5e" stroke-width="1.5"/>
+      <rect x="339" y="62" width="8" height="8" rx="1" fill="${p.prod}"/><rect x="350" y="62" width="8" height="8" rx="1" fill="${p.prod}"/>
+      <rect x="339" y="73" width="8" height="8" rx="1" fill="${p.prod}"/><rect x="350" y="73" width="8" height="8" rx="1" fill="${p.prod}"/>
+
+      <line x1="12" y1="146" x2="368" y2="146" stroke="#1f3140" stroke-width="1"/>
+      ${ro(14,"RATE",p.pre+"rate","— pk/h","#e6f0f4")}
+      ${ro(92,"COUNT",p.pre+"cnt","—","#e6f0f4")}
+      ${ro(170,"TEMP",p.pre+"temp","—°C","#f5a524")}
+      ${ro(232,"REJECT",p.pre+"rej","0","#f4524d")}
+      ${ro(300,"MOTOR",p.pre+"hz","—Hz","#38bdf8")}
+    </g>`;
+  }
+  function injectSVG(parent,markup){
+    const doc=new DOMParser().parseFromString(`<svg xmlns="${SVGNS}">${markup}</svg>`,"image/svg+xml");
+    const root=doc.documentElement;
+    if (root.querySelector("parsererror")){ console.error("SVG parse error"); return; }
+    Array.from(root.childNodes).forEach(n=>parent.appendChild(document.importNode(n,true)));
   }
 
-  // Daily-packs bar chart — day-by-date on the X axis (Today's Packs card).
-  function dailyPacksChart(days){
-    if (!days || !days.length) return `<div class="empty">No data.</div>`;
-    const W=620, H=180, padL=46, padR=12, padT=14, padB=26;
-    const innerW=W-padL-padR, innerH=H-padT-padB;
-    const vals = days.map(d => Number(d.packs)||0);
-    const max  = Math.max(1, ...vals);
-    const niceMax = Math.max(1, Math.ceil(max/1000)*1000);
-    const n = days.length, slot = innerW / n, bw = Math.max(2, slot*0.62);
-    const grid = [0,.5,1].map(f=>{
-      const y = padT + innerH*(1-f);
-      return `<line class="grid-line" x1="${padL}" y1="${y}" x2="${padL+innerW}" y2="${y}"/>`
-           + `<text class="axis-label" x="${padL-6}" y="${y+3}" text-anchor="end">${fmtN(Math.round(niceMax*f))}</text>`;
-    }).join("");
-    const bars = days.map((d,i)=>{
-      const v = Number(d.packs)||0;
-      const bh = (v/niceMax)*innerH;
-      const x = padL + i*slot + (slot-bw)/2;
-      const y = padT + innerH - bh;
-      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,bh).toFixed(1)}" rx="1.5" fill="var(--brand)" opacity="0.9"><title>${esc(d.date)}: ${fmtN(v)} packs</title></rect>`;
-    }).join("");
-    const ticks = days.map((d,i)=>{
-      if (!(i===0 || i===n-1 || i%5===0)) return "";
-      const x = padL + i*slot + slot/2;
-      return `<text class="axis-label" x="${x.toFixed(1)}" y="${(padT+innerH+15).toFixed(1)}" text-anchor="middle">${esc(String(d.date).slice(5))}</text>`;
-    }).join("");
-    return `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Daily packs by date">${grid}${bars}${ticks}</svg>`;
+  // ---------- demo plant state ----------
+  const S={
+    b1:{p:0.82,t:184,on:true}, b2:{p:0.78,t:179,on:true},
+    fuelA:68, fuelB:74,
+    lineA:{rate:920,cnt:0,temp:78,hz:48.5,silo:72,rej:3,wt:248,on:true},
+    lineB:{rate:760,cnt:0,temp:72,hz:47.2,silo:65,rej:1,wt:312,on:true},
+    cool:{temp:2.1,set:2.0,hum:86,stock:14200},
+    steam:6.4, power:412, oee:84.6,
+  };
+  const hist={steam:[],thru:[],cool:[],power:[]};
+  const activeAlarms=new Set();
+
+  const setText=(id,t)=>{const e=$(id);if(e)e.textContent=t;};
+  const lamp=(id,c)=>{const e=$(id);if(e){e.setAttribute("fill",c);e.setAttribute("color",c);}};
+  const needle=(id,frac)=>{const e=$(id);if(e)e.setAttribute("transform",`rotate(${(-110+frac*220).toFixed(1)})`);};
+  const nowHMS=()=>new Date().toLocaleTimeString('en-GB',{hour12:false});
+
+  function pushAlarm(sev,msg,key){
+    if (key){ if(activeAlarms.has(key)) return; activeAlarms.add(key); }
+    const log=$("alog"),row=document.createElement("div");
+    row.className="r";
+    row.innerHTML=`<span class="ts">${nowHMS()}</span><span class="sev ${sev}">${sev}</span><span class="msg">${msg}</span>`;
+    log.prepend(row);
+    while(log.children.length>60) log.removeChild(log.lastChild);
+  }
+  const clearAlarm=(key,msg)=>{ if(activeAlarms.has(key)){activeAlarms.delete(key);pushAlarm("OK",msg);} };
+
+  function spark(svgId,arr,color){
+    const svg=$(svgId); if(!svg||!arr.length) return;
+    const w=100,h=34,max=Math.max(...arr),min=Math.min(...arr),rng=(max-min)||1,stepX=w/(arr.length-1||1);
+    const pts=arr.map((v,i)=>`${(i*stepX).toFixed(1)},${(h-((v-min)/rng)*(h-6)-3).toFixed(1)}`).join(" ");
+    svg.innerHTML=`<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>`+
+      `<polygon points="0,${h} ${pts} ${w},${h}" fill="${color}" opacity="0.14"/>`;
+  }
+  const arrow=a=>{ if(a.length<2)return""; const d=a[a.length-1]-a[a.length-2]; return d>0.05?"▲":d<-0.05?"▼":"≈"; };
+  const pushHist=(k,v,max)=>{ hist[k].push(v); while(hist[k].length>max) hist[k].shift(); };
+
+  function paintTank(rectId,txtId,pct){
+    const r=$(rectId); if(!r) return;
+    const top=6, bottom=200, span=bottom-top;
+    const h=span*pct/100;
+    r.setAttribute("y",(bottom-h).toFixed(1));
+    r.setAttribute("height",h.toFixed(1));
+    const t=$(txtId);
+    t.textContent=Math.round(pct)+"%";
+    t.setAttribute("y", clamp(bottom-h+22,30,bottom-8).toFixed(0));
+    t.setAttribute("fill", pct<22?"#fff":"#0a0f14");
+  }
+  function paintSilo(id,pct){
+    const r=$(id); if(!r) return;
+    const top=48,bottom=92,span=bottom-top,h=span*pct/100;
+    r.setAttribute("y",(bottom-h).toFixed(1)); r.setAttribute("height",h.toFixed(1));
   }
 
-  function deltaPill(pct) {
-    if (pct == null) return `<span class="delta flat">—</span>`;
-    if (pct > 0.5)   return `<span class="delta up">▲ +${pct.toFixed(1)}%</span>`;
-    if (pct < -0.5)  return `<span class="delta down">▼ ${pct.toFixed(1)}%</span>`;
-    return `<span class="delta flat">≈ ${pct.toFixed(1)}%</span>`;
+  function updateLine(pre,L,name){
+    setText(pre+"rate",Math.round(L.rate)+" pk/h");
+    setText(pre+"cnt",L.cnt.toLocaleString());
+    setText(pre+"temp",Math.round(L.temp)+"°C");
+    setText(pre+"ctemp",Math.round(L.temp)+"°");
+    setText(pre+"hz",L.hz.toFixed(1)+"Hz");
+    setText(pre+"wt",Math.round(L.wt)+"g");
+    setText(pre+"rej",L.rej);
+    paintSilo(pre+"silo",L.silo);
+    if (L.rate>60){ lamp(pre+"lamp","#34d399"); clearAlarm(pre+"stall",`${name} flow restored`); }
+    else { lamp(pre+"lamp","#fbbf24"); pushAlarm("WARN",`${name} throughput stalled`,pre+"stall"); }
+  }
+  function simLine(pre,L,name){
+    L.rate=walk(L.rate, pre==="lA"?35:30, 0, pre==="lA"?1100:950);
+    L.temp=walk(L.temp,1.5, pre==="lA"?70:64, pre==="lA"?88:82);
+    L.hz=walk(L.hz,0.5, pre==="lA"?44:42, 50);
+    L.wt=walk(L.wt,3, pre==="lA"?242:300, pre==="lA"?258:320);
+    L.cnt+=Math.round(L.rate/60);
+    L.silo-=rnd(0.12,0.4);
+    if (L.silo<12){ L.silo=rnd(86,96); pushAlarm("INFO",`${name} raw silo refilled`); clearAlarm(pre+"silolo",`${name} silo restored`); }
+    else if (L.silo<22){ pushAlarm("WARN",`${name} raw material low`,pre+"silolo"); }
+    if (Math.random()<0.18){ L.rej++; if (L.rej%10===0) pushAlarm("WARN",`${name} reject count ${L.rej} — check checkweigher`); }
+    updateLine(pre,L,name);
   }
 
-  // ---------- HERO KPI band ----------
-  function renderHero(snap) {
-    const days = snap.last_30_days || [];
-    const last7 = days.slice(-7);
-    const todayTotal = snap.today.total_packs || 0;
-    const yest = days.length >= 2 ? (days[days.length-2].packs || 0) : 0;
-    const dayDelta = yest > 0 ? ((todayTotal - yest) / yest * 100) : null;
-
-    const planPct = snap.today.progress_pct;
-    const lp = (snap.productivity.combined_today || {}).lp;
-    const lpPrev = (snap.productivity.combined_prev || {}).lp;
-    const lpDelta = (lpPrev > 0) ? ((Number(lp||0) - Number(lpPrev)) / Number(lpPrev) * 100) : null;
-
-    let presentNum = 0, totalNum = 0;
-    for (const s of (snap.productivity.sections || [])) {
-      presentNum += Number(s.staff_present||0);
-      totalNum += Number(s.staff_total||0);
-    }
-    const presentPct = totalNum > 0 ? (presentNum / totalNum * 100) : 0;
-    const lpSeries = days.map(d => d.lp || 0);
-    const presSeries = days.map(d => (d.sec1_hours||0) + (d.sec2_hours||0));
-
-    const tiles = [
-      {
-        cls:"", label:"Today's Packs", value:fmtN(todayTotal), unit:"packs",
-        spark:sparkline(days.map(d => d.packs), 120, 30, "#5eead4"),
-        delta: deltaPill(dayDelta),
-      },
-      {
-        cls:"ind1", label:"vs Plan", value:(planPct != null ? planPct.toFixed(1) : "—"), unit:"%",
-        spark:sparkline(days.map(d => d.packs), 120, 30, "#818cf8"),
-        delta: planPct != null ? `<span class="delta ${planPct >= 95 ? 'up' : planPct >= 80 ? 'flat' : 'down'}">${planPct >= 95 ? '✓ on track' : planPct >= 80 ? '~ behind' : '! short'}</span>` : `<span class="delta flat">—</span>`,
-      },
-      {
-        cls:"ind2", label:"Productivity", value:(lp != null ? Number(lp).toFixed(1) : "—"), unit:"p/h",
-        spark:sparkline(lpSeries, 120, 30, "#34d399"),
-        delta: deltaPill(lpDelta),
-      },
-      {
-        cls:"ind3", label:"Workers Present", value:`${presentNum}<small>/ ${totalNum}</small>`, unit:"",
-        spark:sparkline(presSeries, 120, 30, "#fbbf24"),
-        delta: `<span class="delta ${presentPct >= 80 ? 'up' : presentPct >= 60 ? 'flat' : 'down'}">${presentPct.toFixed(0)}% on floor</span>`,
-      },
-    ];
-
-    const HIDDEN_TILES = new Set(["vs Plan","Productivity","Workers Present"]);  // §5.1 hidden (reversible)
-    $("heroGrid").innerHTML = tiles.filter(t => !HIDDEN_TILES.has(t.label)).map((t, idx) => `
-      <div class="kpi ${t.cls}${idx === 0 ? ' kpi-wide' : ''}">
-        <div class="label">${esc(t.label)}</div>
-        <div class="v">${t.value}${t.unit ? `<small>${esc(t.unit)}</small>` : ""}</div>
-        <div class="row">
-          ${t.delta}
-          ${idx === 0 ? '' : `<div class="spark">${t.spark}</div>`}
-        </div>
-        ${idx === 0 ? '<div class="clk">🕒 <b data-clock>--:--:--</b></div>' : ''}
-        ${idx === 0 ? `<div class="kpi-chart">${dailyPacksChart(days)}</div>` : ''}
-      </div>`).join("");
-    startClock();
-  }
-
-  // §5.4 — live clock shown in the top Status card
-  function startClock(){
-    const tick = () => {
-      const t = new Date().toLocaleTimeString('en-GB', { hour12:false });
-      document.querySelectorAll('[data-clock]').forEach(el => el.textContent = t);
-    };
-    tick();
-    if (!window.__dashClock) window.__dashClock = setInterval(tick, 1000);
-  }
-
-  // ---------- Weather (compact) ----------
-  function renderWeather(w) {
-    const root = $("wxBody"), meta = $("wxMeta");
-    if (!w || !w.days || !w.days.length) {
-      root.className = "empty"; root.innerHTML = "Weather unavailable.";
-      meta.textContent = w && w.error ? "fetch failed" : "—";
-      return;
-    }
-    meta.textContent = `${w.location || ""} · ${w.cached ? `cached ${Math.floor((w.age_seconds||0)/60)}m` : "live"}${w.stale ? " (stale)" : ""}`;
-    root.className = "wx-strip";
-    root.innerHTML = w.days.map(d => `
-      <div class="wx-day">
-        <div class="d">${esc(d.date)}</div>
-        <div class="t">${esc(d.avg_c)}°<small>${esc(d.max_c)}° / ${esc(d.min_c)}°</small></div>
-        <div class="desc">${esc(d.desc)}</div>
-        <div class="meta"><span>💧 ${esc(d.humidity)}%</span><span>☔ ${esc(d.rain_chance)}%</span><span>💨 ${esc(d.wind_kph)} km/h</span></div>
-      </div>`).join("");
-  }
-
-  // ---------- Plan ----------
-  function renderPlan(plan, todayTotal) {
-    const root = $("planBody"), meta = $("planMeta");
-    if (!plan || !plan.lines || !plan.lines.length) {
-      root.className = "empty"; root.innerHTML = "No production plan saved for this date.";
-      meta.textContent = "—"; return;
-    }
-    meta.textContent = `${plan.lines.length} line${plan.lines.length === 1 ? "" : "s"} · ${plan.lines.reduce((a,b) => a + b.item_count, 0)} items`;
-    const tp = plan.total_planned || 0;
-    const overallPct = (tp > 0 && todayTotal != null) ? (todayTotal / tp * 100) : null;
-
-    const lineCards = plan.lines.map((ln, i) => {
-      const linePctOfTotal = tp > 0 ? (ln.total_planned / tp * 100) : 0;
-      const items = (ln.items || []).map(it => `
-        <tr>
-          <td>${esc(it.item_name)}</td>
-          <td class="num">${fmtN(it.planned_qty)}</td>
-          <td class="num">${it.pph_target ? fmtN(it.pph_target) : "—"}</td>
-          <td class="num">${esc(it.takt_time || "—")}</td>
-        </tr>`).join("");
-      return `
-        <details class="line" open>
-          <summary>
-            <span class="ln-badge">${esc(ln.line_code)}</span>
-            <span class="ln-name">${esc(ln.line_code)} Line</span>
-            <span class="ln-meta">${fmtN(ln.total_planned)}<small>${ln.item_count} items · ${linePctOfTotal.toFixed(0)}% of plan</small></span>
-          </summary>
-          <div class="ln-bar"><span style="width:${linePctOfTotal}%"></span></div>
-          <table>
-            <thead><tr><th>Product</th><th>Planned</th><th>PPH target</th><th>Takt</th></tr></thead>
-            <tbody>${items || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">No items</td></tr>`}</tbody>
-          </table>
-        </details>`;
-    }).join("");
-
-    root.className = "";
-    root.innerHTML = `
-      <div class="plan-grid">${lineCards}</div>
-      <div class="plan-tot">
-        <div><div class="tag">Total planned</div><div class="num">${fmtN(tp)}</div></div>
-        <div style="text-align:right;"><div class="tag">Actual today ${overallPct != null ? `(${overallPct.toFixed(1)}%)` : ""}</div><div class="num">${fmtN(todayTotal)}</div></div>
-      </div>`;
-  }
-
-  // ---------- Section breakdown (donut + per-section) ----------
-  function donut(n, y) {
-    const total = (n||0) + (y||0);
-    if (total <= 0) return `<div class="donut"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="62" fill="none" stroke="#2a3a5c" stroke-width="22"/></svg><div class="center"><div class="v">—</div><div class="lbl">no data</div></div></div>`;
-    const r = 62, cx = 90, cy = 90, C = 2 * Math.PI * r;
-    const nFrac = (n||0) / total;
-    return `
-      <div class="donut">
-        <svg viewBox="0 0 180 180">
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#2a3a5c" stroke-width="22"/>
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--c-sec1)" stroke-width="22" stroke-dasharray="${(C*nFrac).toFixed(2)} ${C.toFixed(2)}" stroke-linecap="butt"/>
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--c-sec2)" stroke-width="22"
-            stroke-dasharray="${(C*(1-nFrac)).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-C*nFrac).toFixed(2)}" stroke-linecap="butt"/>
-        </svg>
-        <div class="center">
-          <div class="v">${fmtN(total)}</div>
-          <div class="lbl">total packs</div>
-        </div>
-      </div>
-      <div class="donut-legend">
-        <div class="it"><span class="sw" style="background:var(--c-sec1);"></span>N ${(nFrac*100).toFixed(1)}%</div>
-        <div class="it"><span class="sw" style="background:var(--c-sec2);"></span>Y ${((1-nFrac)*100).toFixed(1)}%</div>
-      </div>`;
-  }
-  function renderSec(today, perf) {
-    const root = $("secBody");
-    const have = today && (today.n_total != null || today.y_total != null);
-    if (!have && (!perf || !perf.sections || !perf.sections.length)) {
-      root.className = "empty"; root.innerHTML = "No section data for this date.";
-      return;
-    }
-    root.className = "";
-    const maxLp = Math.max(1, ...(perf.sections||[]).map(s => Number(s.lp||0)));
-    const sections = (perf.sections || []).map(s => {
-      const lp = Number(s.lp || 0);
-      const pct = maxLp > 0 ? (lp / maxLp * 100) : 0;
-      const sCls = s.id === 1 ? "s1" : s.id === 2 ? "s2" : "";
-      return `
-        <div class="sec-row ${sCls}">
-          <div class="head">
-            <div class="name">${esc(s.label || "Section " + s.id)}</div>
-            <div class="lp">${lp.toFixed(1)}<small>p/h</small></div>
-          </div>
-          <div class="bar"><span style="width:${pct}%"></span></div>
-          <div class="meta">
-            <span>${esc(s.total_hours_hhmm || "0:00")} hrs · ${fmtN(s.staff_present)}/${fmtN(s.staff_total)} present</span>
-            ${deltaPill(s.delta_pct)}
-          </div>
-        </div>`;
-    }).join("");
-    root.innerHTML = `
-      <div class="donut-wrap">${donut(today.n_total, today.y_total)}</div>
-      <div class="sec-list">${sections}</div>`;
-  }
-
-  // ---------- 30-day area chart (with grid + axis) ----------
-  function renderTrend(days) {
-    const root = $("trendBody"), meta = $("trendMeta");
-    if (!days || !days.length) { root.innerHTML = `<div class="empty">No trend data.</div>`; return; }
-    const W = 1200, H = 240, padL = 44, padR = 16, padT = 14, padB = 28;
-    const innerW = W - padL - padR, innerH = H - padT - padB;
-    const max = Math.max(1, ...days.map(d => d.packs));
-    const niceMax = Math.ceil(max / 1000) * 1000;
-    const stepX = innerW / (days.length - 1 || 1);
-
-    const total = days.reduce((a,d) => a + (d.packs||0), 0);
-    const avg = days.length ? Math.round(total / days.length) : 0;
-    meta.textContent = `total ${fmtN(total)} · avg ${fmtN(avg)}/day`;
-
-    const pts = days.map((d, i) => {
-      const x = padL + i * stepX;
-      const y = padT + innerH - (d.packs / niceMax) * innerH;
-      return [x, y, d];
+  function tick(){
+    setText("scanT",nowHMS());
+    // Boilers
+    S.b1.p=walk(S.b1.p,0.04,0.55,1.15); S.b2.p=walk(S.b2.p,0.04,0.55,1.15);
+    S.b1.t=walk(S.b1.t,3,160,205); S.b2.t=walk(S.b2.t,3,160,205);
+    setText("g1mpa",S.b1.p.toFixed(2)+" MPa"); setText("g2mpa",S.b2.p.toFixed(2)+" MPa");
+    setText("b1temp",Math.round(S.b1.t)+"°C"); setText("b2temp",Math.round(S.b2.t)+"°C");
+    needle("g1needle",(S.b1.p-0.4)/0.8); needle("g2needle",(S.b2.p-0.4)/0.8);
+    [["B-1",S.b1,"b1lamp","b1"],["B-2",S.b2,"b2lamp","b2"]].forEach(([nm,b,lp,k])=>{
+      if (b.p>1.05){ lamp(lp,"#f4524d"); pushAlarm("ALARM",`${nm} high steam pressure ${b.p.toFixed(2)} MPa`,k+"hp"); }
+      else { lamp(lp,b.on?"#34d399":"#7d96a3"); clearAlarm(k+"hp",`${nm} pressure normalised`); }
     });
-    const polyPts = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
-    const areaPts = `${padL},${padT+innerH} ${polyPts} ${(padL + innerW).toFixed(1)},${padT+innerH}`;
-    const grid = [0, .25, .5, .75, 1].map(f => {
-      const y = padT + innerH * (1 - f);
-      const lbl = Math.round(niceMax * f);
-      return `
-        <line class="grid-line" x1="${padL}" y1="${y}" x2="${padL+innerW}" y2="${y}"/>
-        <text class="axis-label" x="${padL-6}" y="${y+3}" text-anchor="end">${fmtN(lbl)}</text>`;
-    }).join("");
-    const ticks = pts.filter((_, i) => i === 0 || i === pts.length-1 || i % 5 === 0).map(p => {
-      const lbl = p[2].date.slice(5);
-      return `<text class="axis-label" x="${p[0].toFixed(1)}" y="${(padT+innerH+14).toFixed(1)}" text-anchor="middle">${esc(lbl)}</text>`;
-    }).join("");
-    const dots = pts.map((p, i) => `<circle class="line-dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" stroke="#5eead4"><title>${esc(p[2].date)}: ${fmtN(p[2].packs)} packs</title></circle>`).join("");
-
-    root.innerHTML = `
-      <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="30 day daily packs">
-        <defs>
-          <linearGradient id="gradPacks" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#5eead4" stop-opacity=".55"/>
-            <stop offset="100%" stop-color="#5eead4" stop-opacity="0"/>
-          </linearGradient>
-        </defs>
-        ${grid}
-        <polygon class="area-fill" points="${areaPts}" fill="url(#gradPacks)"/>
-        <polyline class="area-line" points="${polyPts}" stroke="#5eead4"/>
-        ${dots}
-        ${ticks}
-      </svg>
-      <div class="legend">
-        <div class="it"><span class="sw" style="background:#5eead4;"></span>Daily packs (avg ${fmtN(avg)})</div>
-      </div>`;
+    // Fuel
+    S.fuelA-=rnd(0.05,0.18); S.fuelB-=rnd(0.04,0.15);
+    if (S.fuelA<15){ S.fuelA=rnd(88,96); pushAlarm("INFO","T-101 diesel replenished by tanker"); clearAlarm("fuelAlo","T-101 level restored"); }
+    if (S.fuelB<15){ S.fuelB=rnd(88,96); pushAlarm("INFO","T-102 heavy-oil replenished"); clearAlarm("fuelBlo","T-102 level restored"); }
+    if (S.fuelA<22) pushAlarm("WARN","T-101 diesel low — schedule refill","fuelAlo");
+    if (S.fuelB<22) pushAlarm("WARN","T-102 heavy-oil low — schedule refill","fuelBlo");
+    paintTank("fuelA","fuelAt",S.fuelA); paintTank("fuelB","fuelBt",S.fuelB);
+    // Lines
+    simLine("lA",S.lineA,"LINE A"); simLine("lB",S.lineB,"LINE B");
+    // Cool room
+    S.cool.temp=walk(S.cool.temp,0.25,0.5,5.5);
+    S.cool.hum=walk(S.cool.hum,1.2,78,94);
+    S.cool.stock += Math.round((S.lineA.rate+S.lineB.rate)/120) - Math.round(rnd(8,22));
+    S.cool.stock=clamp(S.cool.stock,0,30000);
+    setText("crTemp",S.cool.temp.toFixed(1)+"°"); setText("crSet",S.cool.set.toFixed(1));
+    setText("crHum",Math.round(S.cool.hum)+"%"); $("crHumBar").setAttribute("width",(78*S.cool.hum/100).toFixed(0));
+    setText("crStock",S.cool.stock.toLocaleString()+" pk");
+    const crT=$("crTemp");
+    if (S.cool.temp>5.0){ crT.setAttribute("fill","#f4524d"); lamp("crComp","#fbbf24"); pushAlarm("ALARM",`Cool room temp high ${S.cool.temp.toFixed(1)}°C (SP ${S.cool.set}°C)`,"crhi"); }
+    else { crT.setAttribute("fill","#38bdf8"); lamp("crComp","#34d399"); clearAlarm("crhi","Cool room temp recovered"); }
+    // Aggregates
+    S.steam=(S.b1.p+S.b2.p)*3.9+rnd(-0.2,0.2);
+    S.power=360+S.lineA.rate*0.12+S.lineB.rate*0.11+rnd(-8,8);
+    const thru=Math.round(S.lineA.rate+S.lineB.rate);
+    const avail=clamp(95-(activeAlarms.size*4),60,99);
+    const perf=clamp(thru/2050*100,40,100);
+    S.oee=avail*0.4+perf*0.4+96*0.2;
+    $("kOee").innerHTML=S.oee.toFixed(1)+"<small>%</small>";
+    setText("kOeeS",`avail ${avail.toFixed(0)} · perf ${perf.toFixed(0)} · qual 96`);
+    $("kThru").innerHTML=thru.toLocaleString()+"<small>pk/h</small>";
+    $("kSteam").innerHTML=S.steam.toFixed(1)+"<small>t/h</small>";
+    $("kPwr").innerHTML=Math.round(S.power).toLocaleString()+"<small>kW</small>";
+    setText("kPwrS",`grid ${Math.round(S.power*0.78)} · PV ${Math.round(S.power*0.22)} kW`);
+    const n=activeAlarms.size;
+    $("kAlm").textContent=n; $("kAlmS").textContent=n===0?"all clear":(n+" require attention");
+    $("kpiAlarm").className="kpi "+(n===0?"":"k-dang");
+    $("plantState").textContent=n===0?"RUNNING":(n>=2?"RUNNING · FAULTS":"RUNNING · WARN");
+    // Trends
+    pushHist("steam",S.steam,60); pushHist("thru",thru,60); pushHist("cool",S.cool.temp,60); pushHist("power",S.power,60);
+    spark("trSteam",hist.steam,"#ff7849"); spark("trThru",hist.thru,"#2dd4bf"); spark("trCool",hist.cool,"#38bdf8"); spark("trPwr",hist.power,"#fbbf24");
+    $("trSteamV").innerHTML=S.steam.toFixed(1)+"<small>t/h</small>";
+    $("trThruV").innerHTML=thru.toLocaleString()+"<small>pk/h</small>";
+    $("trCoolV").innerHTML=S.cool.temp.toFixed(1)+"<small>°C</small>";
+    $("trPwrV").innerHTML=Math.round(S.power).toLocaleString()+"<small>kW</small>";
+    setText("trSteamN",arrow(hist.steam)); setText("trThruN",arrow(hist.thru)); setText("trCoolN",arrow(hist.cool)); setText("trPwrN",arrow(hist.power));
   }
 
-  // ---------- Multi-line productivity trend ----------
-  function renderPerfTrend(days) {
-    const root = $("perfBody"), meta = $("perfMeta");
-    if (!days || !days.length) { root.innerHTML = `<div class="empty">No productivity data.</div>`; return; }
-    const W = 1200, H = 240, padL = 44, padR = 16, padT = 14, padB = 28;
-    const innerW = W - padL - padR, innerH = H - padT - padB;
-    const allLp = days.flatMap(d => [d.lp_sec1, d.lp_sec2, d.lp]).filter(v => v != null);
-    const maxLp = Math.max(1, ...allLp);
-    const niceMax = Math.ceil(maxLp / 10) * 10;
-    const stepX = innerW / (days.length - 1 || 1);
-
-    const series = (key, color, label) => {
-      const pts = days.map((d, i) => {
-        if (d[key] == null) return null;
-        const x = padL + i * stepX;
-        const y = padT + innerH - (d[key] / niceMax) * innerH;
-        return [x, y, d, d[key]];
-      }).filter(Boolean);
-      if (!pts.length) return { dots:"", line:"", color, label };
-      const polyPts = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
-      const dots = pts.map(p => `<circle class="line-dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.2" stroke="${color}"><title>${esc(p[2].date)}: ${Number(p[3]).toFixed(1)} p/h (${esc(label)})</title></circle>`).join("");
-      const line = `<polyline class="area-line" points="${polyPts}" stroke="${color}"/>`;
-      return { dots, line, color, label };
-    };
-    const sCom = series("lp", "#fbbf24", "Combined");
-    const s1 = series("lp_sec1", "#5eead4", "製造１課");
-    const s2 = series("lp_sec2", "#c084fc", "製造２課");
-
-    // Target reference lines — S1 85 / S2 35 / Combined 25 (like the summary).
-    const TGT = [
-      { v:85, c:s1.color,  t:"S1 85" },
-      { v:35, c:s2.color,  t:"S2 35" },
-      { v:25, c:sCom.color, t:"CB 25" },
-    ];
-    const targets = TGT.filter(g => g.v <= niceMax).map(g => {
-      const y = padT + innerH - (g.v / niceMax) * innerH;
-      return `
-        <line x1="${padL}" y1="${y.toFixed(1)}" x2="${padL+innerW}" y2="${y.toFixed(1)}" stroke="${g.c}" stroke-width="1" stroke-dasharray="5 4" opacity="0.65"/>
-        <text x="${(padL+innerW-3).toFixed(1)}" y="${(y-3).toFixed(1)}" text-anchor="end" style="font-size:9px;font-weight:700;fill:${g.c};">${g.t}</text>`;
-    }).join("");
-
-    const grid = [0, .25, .5, .75, 1].map(f => {
-      const y = padT + innerH * (1 - f);
-      const lbl = (niceMax * f).toFixed(0);
-      return `
-        <line class="grid-line" x1="${padL}" y1="${y}" x2="${padL+innerW}" y2="${y}"/>
-        <text class="axis-label" x="${padL-6}" y="${y+3}" text-anchor="end">${esc(lbl)}</text>`;
-    }).join("");
-    const ticks = days.filter((_, i) => i === 0 || i === days.length-1 || i % 5 === 0).map((d, i, arr) => {
-      const realIdx = days.indexOf(d);
-      const x = padL + realIdx * stepX;
-      return `<text class="axis-label" x="${x.toFixed(1)}" y="${(padT+innerH+14).toFixed(1)}" text-anchor="middle">${esc(d.date.slice(5))}</text>`;
-    }).join("");
-
-    const validLp = days.map(d => d.lp).filter(v => v != null);
-    const avgLp = validLp.length ? (validLp.reduce((a,b)=>a+b,0) / validLp.length) : 0;
-    meta.textContent = `S1 85 / S2 35 / Combined 25 · avg ${avgLp.toFixed(1)} p/h`;
-
-    root.innerHTML = `
-      <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="30 day productivity">
-        ${grid}
-        ${targets}
-        ${s1.line} ${s2.line} ${sCom.line}
-        ${s1.dots} ${s2.dots} ${sCom.dots}
-        ${ticks}
-      </svg>
-      <div class="legend">
-        <div class="it"><span class="sw" style="background:${s1.color};"></span>${esc(s1.label)}</div>
-        <div class="it"><span class="sw" style="background:${s2.color};"></span>${esc(s2.label)}</div>
-        <div class="it"><span class="sw" style="background:${sCom.color};"></span>${esc(sCom.label)}</div>
-      </div>`;
-  }
-
-  // ---------- Labor Productivity summary cards (§5.3) ----------
-  async function loadLP(dateStr){
-    const root = document.getElementById("lpBody");
-    if (!root) return;
-    const hhmm = h => { h = Number(h||0); const H = Math.floor(h); const M = Math.round((h-H)*60); return H + ":" + String(M).padStart(2,"0"); };
-    const moPct = (c,p) => (p>0) ? ((c-p)/p*100) : null;
-    const card = (title, lp, target, hours, moChg) => {
-      const pct = target>0 ? (Number(lp||0)/target*100) : 0;
-      const ar  = moChg==null ? "" : (moChg<0 ? `<span class="bad">month ▼ ${moChg.toFixed(1)}%</span>` : `<span class="ok">month ▲ ${moChg.toFixed(1)}%</span>`);
-      return `<div class="lp-card">
-        <div class="lp-h">${esc(title)}</div>
-        <div class="lp-v">${Number(lp||0).toFixed(2)}<small>P/h</small></div>
-        <div class="lp-sub"><span>Target ${fmtN(target)} P/h</span><span class="${pct>=100?'ok':'bad'}">${pct.toFixed(1)}% of target</span></div>
-        <div class="lp-sub"><span>Hours ${esc(hours)}</span>${ar}</div>
-        <div class="lp-tgtbar"><span style="width:${Math.max(0,Math.min(100,pct)).toFixed(1)}%"></span></div>
-      </div>`;
-    };
-    try{
-      const j = await api("/api/productivity?range=month" + (dateStr ? "&end=" + encodeURIComponent(dateStr) : ""));
-      const cur = (j.current && j.current.summary) || {};
-      const prv = (j.previous && j.previous.summary) || {};
-      root.innerHTML = `<div class="lp-cards">
-        ${card("製造１課 人時生産性 / Dept 1 Labor Productivity", cur.lp_s1, 85, hhmm(cur.total_hours_s1), moPct(Number(cur.lp_s1||0), Number(prv.lp_s1||0)))}
-        ${card("製造２課 人時生産性 / Dept 2 Labor Productivity", cur.lp_s2, 35, hhmm(cur.total_hours_s2), moPct(Number(cur.lp_s2||0), Number(prv.lp_s2||0)))}
-        ${card("合計 人時生産性 / Combined Labor Productivity", cur.lp_combined, 25, hhmm(cur.total_hours_combined), moPct(Number(cur.lp_combined||0), Number(prv.lp_combined||0)))}
-      </div>`;
-    }catch(e){
-      root.innerHTML = `<div class="lp-cards"><div class="lp-card"><div class="lp-h">Labor Productivity</div><div class="lp-sub"><span class="bad">Failed to load (${esc(e)})</span></div></div></div>`;
-    }
-  }
-
-  // ---------- Loaders ----------
-  async function loadSnapshot(dateStr) {
-    const url = "/api/dashboard/snapshot" + (dateStr ? `?date=${encodeURIComponent(dateStr)}` : "");
-    try {
-      const j = await api(url);
-      $("anchorDate").textContent = j.report_date || "—";
-      $("dateInput").value = j.report_date || "";
-      renderHero(j);
-      renderPlan(j.plan, j.today && j.today.total_packs);
-      renderSec(j.today, j.productivity);
-      renderTrend(j.last_30_days);
-      renderPerfTrend(j.last_30_days);
-      loadLP(j.report_date);
-    } catch (e) {
-      $("planBody").innerHTML = `<div class="error">Failed to load snapshot: ${esc(e)}</div>`;
-    }
-  }
-  async function loadWeather() {
-    try { renderWeather(await api("/api/dashboard/weather")); }
-    catch { renderWeather(null); }
-  }
-
-  // ---------- Init ----------
-  $("reloadBtn").addEventListener("click", () => { loadSnapshot($("dateInput").value); loadWeather(); });
-  $("dateInput").addEventListener("change", () => loadSnapshot($("dateInput").value));
-  loadSnapshot();
-  loadWeather();
+  injectSVG($("lines"),
+    buildLine({pre:"lA",x:560,y:108,name:"LINE A · 製造1課",accent:"#2dd4bf",prod:"#2dd4bf"})+
+    buildLine({pre:"lB",x:560,y:330,name:"LINE B · 製造2課",accent:"#38bdf8",prod:"#38bdf8"})
+  );
+  setInterval(()=>setText("clk",nowHMS()),1000); setText("clk",nowHMS());
+  pushAlarm("INFO","SCADA session started · demo simulation");
+  pushAlarm("OK","All units online · 2 boilers, 2 lines, cool room");
+  tick();
+  setInterval(tick,2000);
 })();
 </script>
 </body>

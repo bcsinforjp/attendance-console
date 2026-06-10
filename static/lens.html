@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lens — Member Hours</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:"Space Grotesk","Hiragino Sans","Meiryo",sans-serif;background:#eef3f5;color:#132026;font-size:12px;}
+.page{width:min(calc(100vw - 24px),1400px);background:#fff;margin:12px auto;padding:6mm 5mm;box-shadow:0 8px 24px rgba(0,0,0,.08);border-radius:6px;}
+@media screen and (max-width:600px){
+  body{font-size:11px;}
+  .page{margin:8px auto;padding:4mm 3mm;}
+}
+.mono{font-family:"IBM Plex Mono",monospace;}
+.doc-header{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #e5edf0;padding-bottom:6px;margin-bottom:12px;}
+.doc-title{font-size:14px;font-weight:700;}
+.doc-meta{font-size:10.5px;color:#8a9ba3;}
+
+/* ===== Member Hours (moved from the Gantt page) ===== */
+.prod-wrap{display:block;}
+.mem-controls{display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-bottom:0.6rem;}
+.mem-search{position:relative;flex:1 1 220px;max-width:340px;}
+.mem-search input{width:100%;padding:6px 10px;border:1px solid #d5e2ea;border-radius:6px;font:inherit;font-size:11px;}
+.mem-dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d5e2ea;border-radius:6px;box-shadow:0 6px 18px rgba(16,39,50,.12);max-height:280px;overflow:auto;list-style:none;padding:0;margin:2px 0 0;z-index:50;font-size:11px;}
+.mem-dropdown li{display:flex;justify-content:space-between;gap:0.6rem;padding:5px 10px;cursor:pointer;}
+.mem-dropdown li:hover{background:#f5fbfd;}
+.mem-dropdown li.sel{background:#eef6fb;}
+.mem-dropdown li label{display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;min-width:0;}
+.mem-dropdown li label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mem-dropdown li input[type=checkbox]{pointer-events:none;flex-shrink:0;width:13px;height:13px;accent-color:#125e91;margin:0;}
+.mem-dates{display:flex;gap:0.45rem;align-items:center;font-size:11px;color:#5f7078;}
+.mem-dates input{margin-left:4px;padding:4px 6px;border:1px solid #d5e2ea;border-radius:5px;font:inherit;font-size:11px;}
+.mem-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:0.6rem;min-height:24px;}
+.mem-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 6px 3px 8px;border-radius:999px;font-size:10.5px;color:#fff;background:var(--c, #125e91);}
+.mem-chip-code{opacity:0.78;font-size:9px;}
+.mem-chip-x{background:rgba(255,255,255,0.25);border:0;color:#fff;border-radius:50%;width:15px;height:15px;line-height:1;cursor:pointer;font-size:11px;}
+.mem-chip-x:hover{background:rgba(255,255,255,0.45);}
+.mem-empty-chip{color:#8a9ba3;font-size:11px;font-style:italic;}
+.mem-empty{color:#8a9ba3;font-size:12px;text-align:center;padding:1.4rem 0;}
+.mem-card{background:#fff;border:1px solid #d5e2ea;border-radius:8px;padding:0.7rem 0.9rem;margin-bottom:0.6rem;}
+.mem-card h3{font-size:11px;color:#5f7078;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem;}
+.mem-card h3 small{font-weight:400;text-transform:none;letter-spacing:0;color:#8a9ba3;margin-left:0.4rem;}
+.mem-legend{display:flex;flex-wrap:wrap;gap:0.7rem;font-size:10.5px;color:#39474f;margin-top:0.4rem;}
+.mem-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle;}
+/* Per-member daily-strip block — mimics the section/employee gantt layout
+   so each selected member reads like its own mini section. */
+.mem-mblock{margin-bottom:14px;}
+.mem-mhead{font-size:10px;font-weight:700;letter-spacing:.04em;color:#fff;background:var(--c,#125e91);padding:4px 8px;border-radius:3px;margin:6px 0 4px;display:flex;align-items:center;gap:8px;}
+.mem-mhead .mh-sec{font-weight:500;opacity:.85;font-size:9px;}
+.mem-mhead .mh-tot{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:10px;opacity:.95;}
+.mem-axis{display:flex;padding-left:108px;padding-right:90px;margin-bottom:2px;}
+.mem-axis .axis-tick{flex:1;font-size:7px;color:#8a9ba3;white-space:nowrap;text-align:left;border-left:.5px dotted #e5edf0;padding-left:1px;}
+.mem-axis .axis-tick:first-child{border-left:none;}
+.mem-axis .axis-tick.mn{color:#b42318;font-weight:700;}
+.mem-drow{display:flex;align-items:center;margin-bottom:1px;font-size:10px;}
+.mem-dcell{width:108px;flex-shrink:0;padding-right:4px;color:#39474f;}
+.mem-dcell .d-day{font-family:"IBM Plex Mono",monospace;}
+.mem-dcell .d-dow{font-size:8.5px;color:#8a9ba3;margin-left:3px;}
+.mem-dtrack{flex:1;position:relative;}
+.mem-dtrack .track{width:100%;height:14px;background:#f0f3f5;border-radius:2px;position:relative;overflow:hidden;}
+.mem-dtrack .seg{position:absolute;top:0;height:14px;border-radius:2px;display:flex;align-items:center;justify-content:space-between;padding:0 4px;color:#fff;font-size:7.5px;font-weight:700;white-space:nowrap;}
+.mem-dtrack .seg.narrow{justify-content:flex-start;padding-left:3px;}
+.mem-dtrack .seg .seg-l,.mem-dtrack .seg .seg-r{font-size:7px;letter-spacing:.01em;}
+.mem-dright{width:90px;flex-shrink:0;text-align:right;font-family:"IBM Plex Mono",monospace;font-size:10px;color:#132026;padding-left:6px;}
+.mem-dright .pph{color:#0d8f71;margin-left:6px;font-size:9px;}
+.mem-dright .pph.none{color:#bcc8cd;}
+.mem-drow.off .mem-dright{color:#bcc8cd;}
+.mem-mempty{font-size:10px;color:#8a9ba3;padding:6px 0 0 108px;font-style:italic;}
+.mem-totals{width:100%;font-size:11px;border-collapse:collapse;}
+.mem-totals th,.mem-totals td{padding:5px 8px;border-bottom:1px solid #eef3f5;text-align:left;}
+.mem-totals th{color:#5f7078;font-size:9.5px;text-transform:uppercase;letter-spacing:0.06em;background:#f5fbfd;}
+.mem-totals td.num,.mem-totals th.num{text-align:right;font-family:"IBM Plex Mono",monospace;}
+.prod-btn{padding:4px 10px;border:1px solid #d4e2e8;background:#fff;border-radius:4px;cursor:pointer;font:600 10px/1 inherit;color:#132026;}
+.prod-btn:hover{background:#f7fbfc;}
+.prod-btn.primary{background:#0d8f71;color:#fff;border-color:#0d8f71;}
+.prod-btn.primary:hover{background:#0b6f58;}
+/* View toggle (Daily strip ↔ Weekly grid) */
+.mem-viewtoggle{display:flex;gap:2px;background:#f0f3f5;border-radius:4px;padding:2px;}
+.mem-vbtn{padding:4px 10px;border:none;background:transparent;cursor:pointer;font:600 10px/1 inherit;color:#5a6b73;border-radius:3px;}
+.mem-vbtn.active{background:#125e91;color:#fff;}
+/* Weekly grid view — rows = members, columns = Mon..Sun */
+.mem-grid{width:100%;border-collapse:collapse;font-size:11px;margin-top:2px;}
+.mem-grid th,.mem-grid td{border:1px solid #e5edf0;padding:5px 6px;text-align:center;vertical-align:middle;}
+.mem-grid th{background:#f5fbfd;color:#5f7078;font-size:9px;text-transform:uppercase;letter-spacing:.05em;}
+.mem-grid th.sat{color:#125e91;}
+.mem-grid th.sun{color:#b42318;}
+.mem-grid td.gname{text-align:left;font-weight:600;white-space:nowrap;color:var(--c,#132026);}
+.mem-grid td.gname .mono{font-size:9px;color:#8a9ba3;font-weight:400;margin-left:4px;}
+.mem-grid .g-hr{font-family:"IBM Plex Mono",monospace;font-weight:700;color:#132026;}
+.mem-grid .g-off{display:block;font-size:8.5px;color:#c7701b;margin-top:2px;}
+.mem-grid td.gtotal{font-family:"IBM Plex Mono",monospace;font-weight:700;background:#f7fbfc;}
+.mem-grid td.gempty{color:#cbd5da;}
+/* Weekly grid: off-days bar + ratio — full red + highlight = regular day off */
+.mem-grid .g-bar{height:5px;width:80%;margin:3px auto 1px;background:#eef3f5;border-radius:3px;overflow:hidden;}
+.mem-grid .g-bar i{display:block;height:100%;background:#e0736a;}
+.mem-grid .g-bar.full i{background:#b42318;}
+.mem-grid .g-ratio{display:block;font-size:8px;font-family:"IBM Plex Mono",monospace;color:#8a9ba3;line-height:1.1;}
+.mem-grid td.alloff{background:#fdecec;}
+.mem-grid td.alloff .g-ratio{color:#b42318;font-weight:700;}
+/* Monthly grid — one column per calendar day, horizontally scrollable */
+.mem-monthscroll{overflow-x:auto;}
+.mem-month{font-size:10px;}
+.mem-month th.mcell,.mem-month td.mcell{padding:3px 4px;min-width:26px;}
+.mem-month th.mcell .m-dnum{display:block;font-weight:700;}
+.mem-month th.mcell .m-dow{display:block;font-size:7px;color:#8a9ba3;font-weight:400;}
+.mem-month td.m-work{font-family:"IBM Plex Mono",monospace;font-weight:600;color:#0d8f71;}
+.mem-month td.m-off{color:#c7701b;font-weight:600;}
+.mem-month td.mcell.gempty{color:#cbd5da;}
+.mem-month td.sat,.mem-month th.sat{background:#f3f7fb;}
+.mem-month td.sun,.mem-month th.sun{background:#fdf3f3;}
+.mem-month .mh-name{position:sticky;left:0;background:#fff;z-index:1;box-shadow:1px 0 0 #e5edf0;}
+/* Print / PDF report — clean layout, controls hidden */
+.mem-printhead{display:none;}
+@media print{
+  body{background:#fff;}
+  .site-topbar,#annBanner,.ann-banner,#annRestore,.ann-restore,#feedbackFab,#demoFeedbackModal,.mem-controls,.mem-chips,#memEmpty{display:none !important;}
+  .page > .doc-header{display:none !important;}   /* hide on-screen page title; report uses #memPrintHead */
+  .page{box-shadow:none;margin:0;width:auto;max-width:none;padding:0;border-radius:0;}
+  .mem-printhead{display:block !important;margin-bottom:8px;}
+  .mem-card{border:none;padding:0;margin-bottom:10px;}
+  .mem-monthscroll{overflow:visible !important;}
+  .mem-month .mh-name{position:static !important;box-shadow:none !important;}
+  .mem-mblock,table,tr{break-inside:avoid;}
+  @page{size:A4 landscape;margin:10mm;}
+}
+.hidden{display:none;}
+</style>
+<script src="static/site_header.js?v=20260610-back" defer></script>
+</head>
+<body>
+
+<div id="siteHeader"></div>
+
+<div class="page">
+  <div class="doc-header">
+    <span class="doc-title">👥 Member Hours</span>
+    <span class="doc-meta">Section-filtered roster · multi-member day comparison (range capped at 3 months)</span>
+  </div>
+
+  <!-- Member Hours: section toggle + member picker + range + day-strips + totals. -->
+  <div class="prod-wrap" id="memWrap">
+    <div class="mem-controls">
+      <div class="mem-search">
+        <input type="text" id="memSearch" placeholder="Type name or code…" autocomplete="off"/>
+        <ul id="memDropdown" class="mem-dropdown hidden"></ul>
+      </div>
+      <div class="mem-dates">
+        <label>From <input type="date" id="memFrom"/></label>
+        <label>To <input type="date" id="memTo"/></label>
+      </div>
+      <button class="prod-btn primary" id="memRunBtn" type="button">Compare →</button>
+      <button class="prod-btn" id="memClearBtn" type="button">✕ Clear</button>
+      <button class="prod-btn" id="memPrintBtn" type="button">🖨 Print / PDF</button>
+      <div class="mem-viewtoggle" id="memView">
+        <button class="mem-vbtn active" data-view="strip" type="button">📊 Daily strip</button>
+        <button class="mem-vbtn" data-view="grid" type="button">📅 Weekly grid</button>
+        <button class="mem-vbtn" data-view="month" type="button">🗓 Monthly grid</button>
+      </div>
+    </div>
+    <div class="mem-chips" id="memChips"></div>
+    <div class="mem-result" id="memResult">
+      <p class="mem-empty" id="memEmpty">Pick at least one member, choose a date range, then click <b>Compare →</b>.</p>
+      <div id="memPrintHead" class="mem-printhead">
+        <div class="doc-header">
+          <span class="doc-title">👥 Member Hours Report</span>
+          <span class="doc-meta" id="memPrintMeta"></span>
+        </div>
+      </div>
+      <div id="memChartWrap" class="hidden">
+        <div class="mem-card">
+          <h3 id="memViewTitle">Daily strip <small>(IN → OUT per day · range capped at 3 months)</small></h3>
+          <div id="memStrips"></div>
+        </div>
+        <div class="mem-card">
+          <h3>Totals <small>(per-member summary across selected range)</small></h3>
+          <table id="memTotals" class="mem-totals">
+            <thead><tr>
+              <th>Member</th><th>Section</th>
+              <th class="num">Days worked</th><th class="num">Total hrs</th>
+              <th>Earliest IN</th><th>Latest IN</th>
+              <th>Earliest OUT</th><th>Latest OUT</th>
+              <th class="num">Longest day</th><th class="num">Max p/h</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Axis window: 10:00 → 08:30 next day (22.5 hrs) — shared with the Gantt page so
+// the member day-strips use the exact same projection math.
+const WIN_START=10, WIN_HOURS=22.5;
+const parseH=s=>{if(!s)return null;const t=String(s).replace(/\s*hr?s?\.?\s*$/i,'').trim();if(!t)return null;const[h,m]=t.split(':').map(Number);return isNaN(h)?null:h+(m||0)/60;};
+const toAxis=r=>(r<WIN_START?r+24:r)-WIN_START;
+const toPct=a=>Math.max(0,Math.min(100,(a/WIN_HOURS)*100));
+function fmtHHMM(h){
+  if(!h||h<=0)return '0:00';
+  const total=Math.round(h*60);
+  return `${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`;
+}
+
+/* ================================================================
+   Member Hours — section-filtered roster + multi-member day comparison.
+   Backend: /api/members/{list,compare}.
+   ================================================================ */
+const MemberHours = (() => {
+  const COLORS = ["#125e91","#c7701b","#0d8f71","#6b3fa0","#b42318","#9b640f","#3f72af","#0a6a3c","#5b3a8e","#a83248"];
+  const WEEKDAYS = [{d:1,l:"Mon"},{d:2,l:"Tue"},{d:3,l:"Wed"},{d:4,l:"Thu"},{d:5,l:"Fri"},{d:6,l:"Sat",c:"sat"},{d:0,l:"Sun",c:"sun"}];
+  const state = { loaded:false, section:"all", roster:[], rosterIdx:[], selected:[], from:null, to:null, data:null, view:"strip" };
+
+  function defaultRange(){
+    const today = new Date();
+    const to = today.toISOString().slice(0,10);
+    const start = new Date(today.getTime() - 6*86400000);
+    return { from: start.toISOString().slice(0,10), to };
+  }
+  async function loadRoster(){
+    const r = await fetch(`api/members/list?section=${state.section}`);
+    const j = await r.json();
+    state.roster = j.items || [];
+    state.rosterIdx = state.roster.map(m => `${m.code} ${m.name}`.toLowerCase());
+  }
+  function renderChips(){
+    const host = document.getElementById("memChips");
+    if (!state.selected.length){ host.innerHTML = `<span class="mem-empty-chip">No members selected.</span>`; return; }
+    host.innerHTML = state.selected.map(m => `
+      <span class="mem-chip" data-code="${m.code}" style="--c:${m.color}">
+        ${m.name || m.code}<span class="mem-chip-code mono">${m.code}</span>
+        <button type="button" class="mem-chip-x" data-rm="${m.code}">×</button>
+      </span>`).join("");
+    host.querySelectorAll("[data-rm]").forEach(b =>
+      b.addEventListener("click", () => removeMember(b.dataset.rm)));
+  }
+  function addMember(code){
+    if (state.selected.some(s => s.code === code)) return;
+    if (state.selected.length >= 12) return;
+    const m = state.roster.find(x => x.code === code); if (!m) return;
+    const color = COLORS[state.selected.length % COLORS.length];
+    state.selected.push({ code: m.code, name: m.name, section_id: m.section_id, color });
+    renderChips();
+  }
+  function removeMember(code){
+    state.selected = state.selected.filter(m => m.code !== code);
+    state.selected.forEach((m, i) => { m.color = COLORS[i % COLORS.length]; });
+    renderChips();
+    if (state.data) renderResult();
+  }
+  // Checkbox dropdown: tick to add, untick to remove — the dropdown stays open
+  // so several members can be picked from one search without reopening it.
+  function toggleMember(code){
+    if (state.selected.some(s => s.code === code)) removeMember(code);
+    else addMember(code);
+  }
+  // Clear filter — drop all selected members + results, back to the empty prompt.
+  function clearAll(){
+    state.selected = [];
+    state.data = null;
+    renderChips();
+    const $s = document.getElementById("memSearch");
+    if ($s) $s.value = "";
+    document.getElementById("memDropdown").classList.add("hidden");
+    document.getElementById("memChartWrap").classList.add("hidden");
+    document.getElementById("memEmpty").classList.remove("hidden");
+  }
+  // Print / PDF — browser print of the current result (use "Save as PDF" in the dialog).
+  function updatePrintHead(){
+    const ph = document.getElementById("memPrintMeta");
+    if (!ph) return;
+    const names = state.selected.map(m => m.name || m.code).join(", ");
+    const viewLabel = state.view === "grid" ? "Weekly grid" : state.view === "month" ? "Monthly grid" : "Daily strip";
+    ph.textContent = `${state.from} → ${state.to} · ${viewLabel} · ${state.selected.length} member(s): ${names}`;
+  }
+  function printReport(){
+    if (!state.data){ alert("Run a comparison first, then print."); return; }
+    updatePrintHead();
+    window.print();
+  }
+
+  function bindControls(){
+    // Section is fixed to "all" — search spans both 製造１課 and 製造２課.
+    // (Section pills were removed; the dropdown still shows each member's section.)
+    const $s  = document.getElementById("memSearch");
+    const $dd = document.getElementById("memDropdown");
+    function refreshDropdown(){
+      const q = ($s.value || "").trim().toLowerCase();
+      if (!q){ $dd.classList.add("hidden"); $dd.innerHTML = ""; return; }
+      const matches = [];
+      for (let i = 0; i < state.roster.length && matches.length < 12; i++){
+        if (state.rosterIdx[i].includes(q)) matches.push(state.roster[i]);
+      }
+      if (!matches.length){ $dd.classList.add("hidden"); return; }
+      $dd.innerHTML = matches.map(m => {
+        const sel = state.selected.some(x => x.code === m.code);
+        return `<li data-code="${m.code}" class="${sel ? 'sel' : ''}">
+          <label><input type="checkbox" ${sel ? 'checked' : ''} tabindex="-1"/>
+            <span>${m.name || "(no name)"}</span></label>
+          <span class="mono" style="color:#5f7078;">${m.code} · ${m.section_label || ""}</span>
+        </li>`;
+      }).join("");
+      $dd.classList.remove("hidden");
+      $dd.querySelectorAll("li").forEach(li => li.addEventListener("click", () => {
+        toggleMember(li.dataset.code);
+        refreshDropdown();   // keep the list open, refresh the checked states
+        $s.focus();
+      }));
+    }
+    $s.addEventListener("input", refreshDropdown);
+    $s.addEventListener("focus", refreshDropdown);
+    $s.addEventListener("blur",  () => setTimeout(() => $dd.classList.add("hidden"), 120));
+    // Clicking inside the dropdown must NOT blur the input (that would hide it)
+    // — keeping focus is what lets you tick several checkboxes in one go.
+    $dd.addEventListener("mousedown", e => e.preventDefault());
+
+    const def = defaultRange();
+    document.getElementById("memFrom").value = def.from;
+    document.getElementById("memTo").value   = def.to;
+    document.getElementById("memRunBtn").addEventListener("click", runCompare);
+    document.getElementById("memClearBtn").addEventListener("click", clearAll);
+    document.getElementById("memPrintBtn").addEventListener("click", printReport);
+
+    document.querySelectorAll("#memView .mem-vbtn").forEach(b =>
+      b.addEventListener("click", () => {
+        document.querySelectorAll("#memView .mem-vbtn").forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
+        state.view = b.dataset.view;
+        if (state.data) renderResult();
+      }));
+  }
+
+  async function runCompare(){
+    if (!state.selected.length){ alert("Pick at least one member first."); return; }
+    state.from = document.getElementById("memFrom").value;
+    state.to   = document.getElementById("memTo").value;
+    if (!state.from || !state.to){ alert("Pick a date range."); return; }
+    // Hard 3-month cap (matches backend) — let users know up front.
+    const days = Math.round((new Date(state.to) - new Date(state.from)) / 86400000) + 1;
+    if (days > 92){ alert("Range capped at 3 months (92 days). Please narrow the dates."); return; }
+    const codes = state.selected.map(m => m.code).join(",");
+    const r = await fetch(`api/members/compare?from=${state.from}&to=${state.to}&codes=${encodeURIComponent(codes)}`);
+    const j = await r.json();
+    if (!r.ok){ alert(j.detail || "compare failed"); return; }
+    state.data = j;
+    document.getElementById("memEmpty").classList.add("hidden");
+    document.getElementById("memChartWrap").classList.remove("hidden");
+    renderResult();
+  }
+  function renderResult(){
+    if (!state.data) return;
+    const title = document.getElementById("memViewTitle");
+    if (state.view === "grid"){
+      if (title) title.innerHTML = 'Weekly grid <small>(worked hours per weekday · 休 = leave / off days · summed across the range)</small>';
+      renderGrid();
+    } else if (state.view === "month"){
+      if (title) title.innerHTML = 'Monthly grid <small>(one column per day · cell = worked hours · 休 = leave / off day)</small>';
+      renderMonth();
+    } else {
+      if (title) title.innerHTML = 'Daily strip <small>(IN → OUT per day · range capped at 3 months)</small>';
+      renderStrips();
+    }
+    renderTotals();
+  }
+
+  /* Weekly grid — rows = selected members, columns = Mon..Sun. Each cell sums
+     worked hours for that weekday across the range and counts leave/off days. */
+  function renderGrid(){
+    const host = document.getElementById("memStrips");
+    const colorOf = code => (state.selected.find(m=>m.code===code) || {}).color || "#125e91";
+    const head = `<tr><th style="text-align:left;">Member</th>`
+      + WEEKDAYS.map(w => `<th class="${w.c||''}">${w.l}</th>`).join("")
+      + `<th>Total</th></tr>`;
+    const rows = state.data.members.map(m => {
+      const color = colorOf(m.code);
+      const agg = {}; WEEKDAYS.forEach(w => agg[w.d] = { hours:0, off:0, worked:0, has:false });
+      let weekTotal = 0;
+      (m.days || []).forEach(d => {
+        const cell = agg[new Date(d.date + "T00:00:00").getDay()];
+        if (!cell) return;
+        cell.has = true;
+        if (d.in && d.out && (d.work_hours || 0) > 0){ cell.hours += d.work_hours; cell.worked += 1; weekTotal += d.work_hours; }
+        else { cell.off += 1; }
+      });
+      const cells = WEEKDAYS.map(w => {
+        const c = agg[w.d];
+        if (!c.has) return `<td class="${w.c||''} gempty">—</td>`;
+        const count = c.worked + c.off;
+        const hr = `<span class="g-hr"${c.hours>0?'':' style="color:#cbd5da;"'}>${fmtHHMM(c.hours)}</span>`;
+        let extra = "", tdcls = w.c || "";
+        if (c.off > 0){
+          const allOff = c.off === count;        // off on every occurrence → regular day off
+          if (allOff) tdcls += " alloff";
+          const pct = Math.round((c.off / count) * 100);
+          extra = `<div class="g-bar${allOff?' full':''}" title="off ${c.off} of ${count} ${w.l}${count>1?'s':''}"><i style="width:${pct}%"></i></div>`
+                + `<span class="g-ratio">${c.off}/${count}</span>`;
+        }
+        return `<td class="${tdcls.trim()}">${hr}${extra}</td>`;
+      }).join("");
+      return `<tr>
+        <td class="gname" style="--c:${color}">${m.name || "(no name)"}<span class="mono">${m.code}</span></td>
+        ${cells}
+        <td class="gtotal">${fmtHHMM(weekTotal)}</td>
+      </tr>`;
+    }).join("");
+    host.innerHTML = `<table class="mem-grid"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+  }
+
+  /* Monthly grid — rows = members, one column per calendar day across the range.
+     Each cell = that day's worked hours (休 for a leave/off day). Wide ranges
+     scroll horizontally; the member-name column stays sticky. */
+  const _fmtISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  function _dateRange(fromStr, toStr){
+    const out = []; const end = new Date(toStr + "T00:00:00");
+    for (let d = new Date(fromStr + "T00:00:00"); d <= end; d.setDate(d.getDate()+1)) out.push(new Date(d));
+    return out;
+  }
+  function renderMonth(){
+    const host = document.getElementById("memStrips");
+    const colorOf = code => (state.selected.find(m=>m.code===code) || {}).color || "#125e91";
+    const WDI = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+    const dates = _dateRange(state.from, state.to);
+    const dowCls = dow => dow===0 ? 'sun' : (dow===6 ? 'sat' : '');
+
+    const head = `<tr><th class="mh-name" style="text-align:left;">Member</th>`
+      + dates.map(d => `<th class="mcell ${dowCls(d.getDay())}"><span class="m-dnum">${d.getDate()}</span><span class="m-dow">${WDI[d.getDay()]}</span></th>`).join("")
+      + `<th>Total</th></tr>`;
+
+    const rows = state.data.members.map(m => {
+      const color = colorOf(m.code);
+      const byDate = {}; (m.days || []).forEach(d => { byDate[d.date] = d; });
+      let total = 0;
+      const cells = dates.map(dt => {
+        const cls = dowCls(dt.getDay());
+        const d = byDate[_fmtISO(dt)];
+        if (!d) return `<td class="mcell ${cls} gempty">·</td>`;
+        if (d.in && d.out && (d.work_hours || 0) > 0){
+          total += d.work_hours;
+          const hrs = d.work_hours.toFixed(1).replace(/\.0$/, "");
+          const tip = `${d.date}: ${d.in}→${d.out} · ${fmtHHMM(d.work_hours)}${d.pph!=null?' · p/h '+d.pph.toFixed(2):''}`;
+          return `<td class="mcell ${cls} m-work" title="${tip}">${hrs}</td>`;
+        }
+        return `<td class="mcell ${cls} m-off" title="${d.date}: leave / off">休</td>`;
+      }).join("");
+      return `<tr>
+        <td class="mh-name gname" style="--c:${color}">${m.name || "(no name)"}<span class="mono">${m.code}</span></td>
+        ${cells}
+        <td class="gtotal">${fmtHHMM(total)}</td>
+      </tr>`;
+    }).join("");
+
+    host.innerHTML = `<div class="mem-monthscroll"><table class="mem-grid mem-month"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function _axisRowHTML(){
+    let out = '<div class="mem-axis">';
+    for (let i = 0; i <= WIN_HOURS; i += 2){
+      const rh = (WIN_START + i) % 24;
+      out += `<div class="axis-tick${rh===0?' mn':''}">${String(rh).padStart(2,'0')}:00</div>`;
+    }
+    return out + '</div>';
+  }
+  function _dowLabel(dateStr){
+    const d = new Date(dateStr + "T00:00:00");
+    return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
+  }
+
+  function renderStrips(){
+    const host = document.getElementById("memStrips");
+    const colorOf = code => (state.selected.find(m=>m.code===code) || {}).color || "#125e91";
+
+    host.innerHTML = state.data.members.map(m => {
+      const color = colorOf(m.code);
+      const s = m.summary || {};
+      const totHdr = `${(s.total_hours ?? 0).toFixed(2)}h · ${s.days_worked ?? 0} days`
+                   + (s.max_pph != null ? ` · max p/h ${s.max_pph.toFixed(2)}` : "");
+      const head = `<div class="mem-mhead" style="--c:${color}">
+          <span>${m.name || "(no name)"}</span>
+          <span class="mono" style="opacity:.8;">${m.code}</span>
+          <span class="mh-sec">${m.section_label || "—"}</span>
+          <span class="mh-tot">${totHdr}</span>
+        </div>`;
+
+      // One row per day in the requested range — top-to-bottom comparison.
+      const rows = m.days.map(d => {
+        const dateMD = d.date.slice(5);
+        const dow    = _dowLabel(d.date);
+        const pphTxt = d.pph != null ? `<span class="pph">p/h ${d.pph.toFixed(2)}</span>`
+                                     : `<span class="pph none">p/h —</span>`;
+
+        if (!d.in || !d.out){
+          return `<div class="mem-drow off">
+            <div class="mem-dcell"><span class="d-day">${dateMD}</span><span class="d-dow">${dow}</span></div>
+            <div class="mem-dtrack"><div class="track"></div></div>
+            <div class="mem-dright">— ${pphTxt}</div>
+          </div>`;
+        }
+
+        const inH  = parseH(d.in);
+        const outH = parseH(d.out);
+        const wh   = d.work_hours || 0;
+        // Replicate the gantt-row math: project IN/OUT onto the 10:00→08:30 axis.
+        let axIn  = inH  != null ? toAxis(inH)  : 0;
+        let axOut = outH != null ? toAxis(outH) : axIn + wh;
+        // OUT before IN on the wall clock means it crossed midnight — bump it forward.
+        if (outH != null && inH != null && outH <= inH) axOut = toAxis(outH + 24);
+        axIn  = Math.max(0, Math.min(WIN_HOURS, axIn));
+        axOut = Math.max(0, Math.min(WIN_HOURS, axOut));
+        const left  = toPct(axIn);
+        const width = Math.max(0.6, toPct(axOut) - left);
+        const narrow = width < 14;
+        const whTxt  = fmtHHMM(wh);
+        const segInner = narrow
+          ? `<span class="seg-l">${whTxt}</span>`
+          : `<span class="seg-l">${d.in}</span><span class="seg-r">${whTxt} · ${d.out}</span>`;
+
+        return `<div class="mem-drow" title="${d.date}: ${d.in} → ${d.out} · ${whTxt}${d.pph!=null?' · p/h '+d.pph.toFixed(2):''}">
+          <div class="mem-dcell"><span class="d-day">${dateMD}</span><span class="d-dow">${dow}</span></div>
+          <div class="mem-dtrack"><div class="track">
+            <div class="seg${narrow?' narrow':''}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${color};">${segInner}</div>
+          </div></div>
+          <div class="mem-dright">${whTxt} ${pphTxt}</div>
+        </div>`;
+      }).join("");
+
+      return `<div class="mem-mblock">${head}${_axisRowHTML()}${rows || '<div class="mem-mempty">No days in range.</div>'}</div>`;
+    }).join("");
+  }
+
+  function renderTotals(){
+    const tbody = document.querySelector("#memTotals tbody");
+    const fmt = v => v == null ? "—" : v;
+    const fmtN = v => (v == null || isNaN(v)) ? "—" : v.toFixed(2);
+    tbody.innerHTML = state.data.members.map(m => {
+      const s = m.summary || {};
+      return `<tr>
+        <td>${m.name || "(no name)"} <span class="mono" style="color:#5f7078;">${m.code}</span></td>
+        <td>${m.section_label || "—"}</td>
+        <td class="num">${s.days_worked ?? "—"}</td>
+        <td class="num">${fmtN(s.total_hours)}</td>
+        <td class="mono">${fmt(s.earliest_in)}</td>
+        <td class="mono">${fmt(s.latest_in)}</td>
+        <td class="mono">${fmt(s.earliest_out)}</td>
+        <td class="mono">${fmt(s.latest_out)}</td>
+        <td class="num">${fmtN(s.longest_day)}</td>
+        <td class="num">${fmtN(s.max_pph)}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  return {
+    async ensureLoaded(){
+      if (state.loaded) return;
+      state.loaded = true;
+      await loadRoster();
+      bindControls();
+      renderChips();
+    },
+  };
+})();
+
+document.addEventListener("DOMContentLoaded", () => MemberHours.ensureLoaded());
+</script>
+</body>
+</html>

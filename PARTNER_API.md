@@ -46,8 +46,17 @@ Rate  : 120 requests / minute
 ```bash
 curl -H "Authorization: Bearer pt_IeNAMYtxlY8wbU1DKwf7vmDpWZHIVR14cmO3fQ" \
      "https://api.genbafms.com/v1/ping"
-# → {"ok":true,"partner":"TEST partner","server_time":"2026-05-19T12:50:46"}
+# → {"ok":true,
+#    "data":{"pong":true,"server_time":"2026-05-19T12:50:46"},
+#    "meta":{"partner":"TEST partner","ts":"...","api_version":"...","cached":false}}
 ```
+
+> **Response envelope.** Every response is wrapped as
+> `{ "ok": true, "data": <payload>, "meta": { "partner", "ts", "api_version",
+> "cached", ... } }`. The per-endpoint examples in §4 show only the **`data`**
+> payload. List endpoints (`packs`, `attendance`, `datasets`) accept
+> `?limit=&offset=` and add pagination keys to `meta`. Responses carry an
+> `ETag` + `Cache-Control`; send `If-None-Match` to get a `304`.
 
 Ready-to-open test links (add the `Authorization` header — browsers can't set
 it, so use curl/Postman/your HTTP client):
@@ -59,6 +68,7 @@ it, so use curl/Postman/your HTTP client):
 | `https://api.genbafms.com/v1/productivity?range=month` | Labor productivity series + summary |
 | `https://api.genbafms.com/v1/production?date=2026-05-19` | Production + section summary for a date |
 | `https://api.genbafms.com/v1/packs?date=2026-05-19` | Per-item produced-packs rows for a date |
+| `https://api.genbafms.com/v1/attendance?date=2026-05-19` | Per-employee attendance + per-section/grand totals for a date |
 
 ## 4. Endpoints
 
@@ -105,6 +115,22 @@ Targets (fixed): S1 = 85 P/h, S2 = 35 P/h, Combined = 25 P/h.
 
 ### `GET /partner/v1/packs?date=YYYY-MM-DD`
 Per-item produced-packs rows for the given date (`date` required).
+Accepts `?limit=&offset=` for pagination.
+
+### `GET /partner/v1/attendance?date=YYYY-MM-DD`
+Per-employee attendance for a date: name, code, section, in/out times, worked
+hours (`hours` HH:MM + `minutes`), `is_temp` flag — plus per-section and grand
+totals. `date` required. Optional `section=1|2` filter and `?limit=&offset=`.
+```jsonc
+{
+  "date": "2026-05-19",
+  "employees": [ { "name":"…", "code":"…", "section_id":1, "section":"製造１課",
+                   "in":"…", "out":"…", "hours":"8:00", "minutes":480, "is_temp":false } ],
+  "totals": { "employees":…, "present":…, "total_hours_hhmm":"…", "total_hours":…,
+              "by_section":[ { "id":1, "label":"製造１課", "employees":…, "present":…,
+                               "total_hours_hhmm":"…", "total_hours":… } ] }
+}
+```
 
 ## 5. Rate limits & errors
 

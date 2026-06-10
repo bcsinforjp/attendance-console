@@ -19,10 +19,28 @@
   // <div id="siteHeader"> placeholder so it doesn't reserve space.
   const _sp = new URLSearchParams(location.search);
   if (_sp.get("report") === "1") {
+    // Reports URL = current path with the trailing /<page> swapped for /reports
+    // (works at root and under the /attendance/* mount).
+    const rpath = location.pathname.replace(/\/+$/, "")
+      .replace(/\/(gantt|summary|dashboard|console|management|lens|m\/report|m\/summary)$/, "");
+    const reportsUrl = (rpath || "") + "/reports";
     const drop = () => {
       document.body && document.body.classList.add("report-mode");
       const slot = document.getElementById("siteHeader");
       if (slot) slot.remove();
+      if (document.getElementById("gfBackBtn")) return;
+      const back = document.createElement("a");
+      back.id = "gfBackBtn";
+      back.href = reportsUrl;
+      back.innerHTML = "← <span>レポートに戻る</span> / Back to Reports";
+      back.style.cssText = "position:fixed;top:10px;left:10px;z-index:99999;background:#0d9488;" +
+        "color:#fff;padding:.5rem .9rem;border-radius:9px;text-decoration:none;font-weight:700;" +
+        "font-family:'Inter','Noto Sans JP',system-ui,sans-serif;font-size:.85rem;" +
+        "box-shadow:0 3px 12px rgba(0,0,0,.25);";
+      const st = document.createElement("style");
+      st.textContent = "@media print{#gfBackBtn{display:none!important}}";
+      (document.head || document.documentElement).appendChild(st);
+      document.body.appendChild(back);
     };
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", drop);
@@ -37,7 +55,7 @@
   // Strip the trailing /<page> to get the API base. Recognised pages: console,
   // dashboard, gantt, summary, reports, management, logs, m/report, m/summary
   const BASE = (() => {
-    const m = PATH.match(/^(\/.*?)(?:\/m)?\/(?:dashboard|console|gantt|summary|reports|management|logs|report|summary)$/);
+    const m = PATH.match(/^(\/.*?)(?:\/m)?\/(?:dashboard|console|gantt|summary|reports|management|logs|lens|report|summary)$/);
     return (m && m[1]) || "";
   })();
   const api = (p) => BASE + (p.startsWith("/") ? p : "/" + p);
@@ -66,14 +84,14 @@
 
   // ---------- Active link detection ----------
   function activeKey() {
-    // Tabs collapsed to 4: status / reports / setup / intake.
-    // Gantt + Summary pages live under Reports — they highlight the Reports tab.
-    if (PATH.endsWith("/dashboard")) return "status";
-    if (PATH.endsWith("/console") || PATH === BASE || PATH === "" || PATH === "/") return "intake";
-    if (PATH.endsWith("/gantt") || PATH.endsWith("/m/report") || PATH.endsWith("/m/gantt")) return "reports";
-    if (PATH.endsWith("/summary") || PATH.endsWith("/m/summary")) return "reports";
+    // One key per page — matches the unified HMI tab set.
+    if (PATH.endsWith("/dashboard")) return "dashboard";
+    if (PATH.endsWith("/gantt") || PATH.endsWith("/m/report") || PATH.endsWith("/m/gantt")) return "gantt";
+    if (PATH.endsWith("/summary") || PATH.endsWith("/m/summary")) return "summary";
+    if (PATH.endsWith("/lens")) return "lens";
     if (PATH.endsWith("/reports")) return "reports";
-    if (PATH.endsWith("/management")) return "setup";
+    if (PATH.endsWith("/console") || PATH === BASE || PATH === "" || PATH === "/") return "console";
+    if (PATH.endsWith("/management")) return "management";
     return "";
   }
 
@@ -122,7 +140,7 @@
       transition: all .2s ease;
     }
     .site-topbar .topnav a:hover { color: #0b6f58; border-color: #e3e8ee; background: #f5f9fa; }
-    .site-topbar .topnav a.active { color: #0b6f58; border-color: #b8e4d8; background: #ecfaf4; }
+    .site-topbar .topnav a.active { color: #fff; border-color: transparent; background: #0d9488; box-shadow: 0 2px 8px rgba(13,148,136,.28); }
     .site-topbar .topnav a.dash-link { background: linear-gradient(135deg,#0d9488,#0b6f58); color: #fff; border-color: transparent; font-weight: 700; box-shadow: 0 2px 8px rgba(13,148,136,.28); }
     .site-topbar .topnav a.dash-link:hover { background: linear-gradient(135deg,#0b6f58,#0a5c49); border-color: transparent; color: #fff; }
     .site-topbar .pill {
@@ -145,11 +163,37 @@
     .site-topbar .clockbox .pair { display: flex; flex-direction: column; gap: .08rem; }
     .site-topbar .clockbox .pair b { color: #125e91; font-weight: 600; }
     .site-topbar .clockbox .pair span { color: #5a6b73; font-size: .7rem; }
+    /* HMI-style right cluster: KPIs + clock + lang toggle + fullscreen */
+    .site-topbar .brand .brand-sub { color:#5a6b73; font-weight:600; font-size:.78rem; margin-left:.15rem; }
+    .site-topbar .gf-pills { display:flex; align-items:center; gap:.5rem; justify-self:start; flex-wrap:wrap; }
+    /* separate tabs card below the topbar (mirrors the HMI two-card layout) */
+    .site-tabs { display:flex; gap:6px; flex-wrap:wrap; align-items:center; background:#fff;
+      border:1px solid #e3e8ee; border-radius:12px; padding:7px 10px; margin:10px 1.15rem 0;
+      box-shadow:0 2px 12px rgba(20,40,60,.05); font-family:"Inter","Noto Sans JP",system-ui,sans-serif; }
+    .site-tabs a { display:flex; align-items:center; gap:.4rem; padding:.46rem .8rem; border-radius:8px;
+      color:#5a6b73; text-decoration:none; font-size:.9rem; font-weight:700; white-space:nowrap; border:1px solid transparent; }
+    .site-tabs a:hover { background:#f1f4f7; color:#1f2933; border-color:#e3e8ee; }
+    .site-tabs a.active { background:#0d9488; color:#fff; box-shadow:0 2px 8px rgba(13,148,136,.28); }
+    body.report-mode .site-tabs, body.mobile .site-tabs { display:none !important; }
+    .site-topbar .gf-right { display:flex; align-items:center; gap:.7rem; }
+    .site-topbar .gf-kpis { display:flex; gap:.85rem; }
+    .site-topbar .gf-kpi { display:flex; flex-direction:column; align-items:flex-end; line-height:1.12; }
+    .site-topbar .gf-kpi b { font-size:1.02rem; font-weight:800; color:#0b6f58; font-variant-numeric:tabular-nums; }
+    .site-topbar .gf-kpi span { font-size:.62rem; color:#5a6b73; }
+    .site-topbar .gf-ctl { display:flex; align-items:center; gap:.4rem; }
+    .site-topbar .gf-seg { display:flex; border:1px solid #e3e8ee; border-radius:8px; overflow:hidden; }
+    .site-topbar .gf-seg button { background:#fff; color:#5a6b73; border:0; padding:.32rem .55rem; font-size:.72rem; cursor:pointer; font-weight:700; }
+    .site-topbar .gf-seg button.on { background:#0d9488; color:#fff; }
+    .site-topbar .gf-fs { background:#f5f9fa; border:1px solid #e3e8ee; border-radius:8px; padding:.3rem .52rem; cursor:pointer; font-size:.95rem; line-height:1; color:#1f2933; }
+    .site-topbar .gf-fs:hover { border-color:#0d9488; }
+    /* language toggle visibility (scoped to the topbar so page content is untouched) */
+    body.lang-jp .site-topbar .en { display:none; }
+    body.lang-en .site-topbar .jp { display:none; }
+    @media (max-width: 1200px){ .site-topbar .gf-kpis{ display:none; } }
     @media (max-width: 900px) {
-      .site-topbar { grid-template-columns: 1fr auto; grid-template-areas: "brand clock" "nav nav"; gap: .5rem; }
-      .site-topbar > .brand   { grid-area: brand; }
-      .site-topbar > .topnav  { grid-area: nav;   justify-self: start; }
-      .site-topbar > .clockbox{ grid-area: clock; }
+      .site-topbar { grid-template-columns: 1fr; grid-template-areas: none; gap: .5rem; }
+      .site-topbar .gf-right { flex-wrap: wrap; }
+      .site-tabs { overflow-x: auto; flex-wrap: nowrap; }
     }
     @media (max-width: 680px) {
       .site-topbar .clockbox { font-size: .72rem; padding: .25rem .4rem; }
@@ -212,6 +256,10 @@
 
   // ---------- Build header element ----------
   const cur = activeKey();
+  const PAGE_LABELS = { dashboard:["監視概要","Overview"], gantt:["ガント","Gantt"], summary:["集計","Summary"],
+    lens:["メンバー時間","Members"], reports:["レポート","Reports"], console:["コンソール","Console"], management:["名簿管理","Roster"] };
+  const _pl = PAGE_LABELS[cur] || ["",""];
+  const subLabel = `<span class="jp">${_pl[0]}</span><span class="en">${_pl[1]}</span>`;
   const link = (key, href, label, extraClass = "") => {
     const cls = (cur === key ? "active " : "") + extraClass;
     return `<a href="${href}"${cls.trim() ? ` class="${cls.trim()}"` : ""}>${label}</a>`;
@@ -219,24 +267,44 @@
   const header = document.createElement("header");
   header.className = "site-topbar";
   header.innerHTML = `
-    <div class="brand">現場 FMS</div>
-    <nav class="topnav">
-      ${link("status",  BASE + "/dashboard",  "Status",  "dash-link")}
-      ${link("reports", BASE + "/reports",    "Reports")}
-      ${link("setup",   BASE + "/management", "Setup")}
-      ${link("intake",  BASE + "/console",    "Intake")}
+    <div class="brand">GENBA FMS <span class="brand-sub">${subLabel}</span></div>
+    <div class="gf-pills">
       <span id="healthPill" class="pill">checking…</span>
       <span id="agentPill" class="pill" style="display:none;"></span>
       <span id="userPill" class="pill" style="display:none;"></span>
-    </nav>
-    <div class="clockbox" id="clockBox" title="Live clock and computed shift / production dates">
-      <div class="now">
-        <span class="tm" id="clkTime">--:--:--</span>
-        <span class="dt" id="clkDate">----/--/--</span>
-      </div>
-      <div class="pair"><span>Shift</span><b id="clkShift">—</b></div>
-      <div class="pair"><span>Prod</span><b id="clkProd">—</b></div>
     </div>
+    <div class="gf-right">
+      <div class="gf-kpis">
+        <div class="gf-kpi"><b id="gfPacks">—</b><span><span class="jp">本日パック</span><span class="en">Packs</span></span></div>
+        <div class="gf-kpi"><b id="gfLines">—</b><span><span class="jp">稼働ライン</span><span class="en">Lines</span></span></div>
+        <div class="gf-kpi"><b id="gfDate">—</b><span><span class="jp">日付</span><span class="en">Date</span></span></div>
+      </div>
+      <div class="clockbox" id="clockBox" title="Live clock and computed shift / production dates">
+        <div class="now">
+          <span class="tm" id="clkTime">--:--:--</span>
+          <span class="dt" id="clkDate">----/--/--</span>
+        </div>
+        <div class="pair"><span>Shift</span><b id="clkShift">—</b></div>
+        <div class="pair"><span>Prod</span><b id="clkProd">—</b></div>
+      </div>
+      <div class="gf-ctl">
+        <div class="gf-seg" id="gfLang"><button data-l="jp">日本語</button><button data-l="en">EN</button></div>
+        <button class="gf-fs" id="gfFs" title="Fullscreen / 全画面">⛶</button>
+      </div>
+    </div>
+  `;
+
+  // ---------- Separate tabs card (its own bar below the topbar — like the HMI) ----------
+  const tabsBar = document.createElement("nav");
+  tabsBar.className = "site-tabs";
+  tabsBar.innerHTML = `
+    ${link("dashboard",  BASE + "/dashboard",  '📺 <span class="jp">監視概要</span><span class="en">Overview</span>')}
+    ${link("gantt",      BASE + "/gantt",      '📊 <span class="jp">ガントチャート</span><span class="en">Gantt</span>')}
+    ${link("summary",    BASE + "/summary",    '📈 <span class="jp">集計</span><span class="en">Summary</span>')}
+    ${link("lens",       BASE + "/lens",       '🔍 <span class="jp">メンバー時間</span><span class="en">Members</span>')}
+    ${link("reports",    BASE + "/reports",    '📄 <span class="jp">レポート</span><span class="en">Reports</span>')}
+    ${link("console",    BASE + "/console",    '🖥️ <span class="jp">コンソール</span><span class="en">Console</span>')}
+    ${link("management", BASE + "/management", '👥 <span class="jp">名簿管理</span><span class="en">Roster</span>')}
   `;
 
   // ---------- Announcement banner (driven by /api/announcement) ----------
@@ -433,8 +501,9 @@
     } else {
       document.body.insertBefore(header, document.body.firstChild);
     }
-    // Announcement banner sits directly below the topbar.
-    header.insertAdjacentElement("afterend", annBanner);
+    // Tabs card sits directly below the topbar; announcement banner below that.
+    header.insertAdjacentElement("afterend", tabsBar);
+    tabsBar.insertAdjacentElement("afterend", annBanner);
     document.body.appendChild(annRestore);
     document.head.appendChild(bannerCss);
     document.body.appendChild(fab);
@@ -443,6 +512,8 @@
     wireAnnouncement();
     startClock();
     pingHealth();
+    loadGfKpis();
+    wireGfControls();
   }
 
   // ---------- Announcement banner ----------
@@ -601,6 +672,38 @@
     });
   }
   setInterval(() => pingHealth(), 60_000);
+
+  // ---------- HMI-style controls: live KPIs + language toggle + fullscreen ----------
+  function loadGfKpis() {
+    fetch(api("/api/dashboard/snapshot")).then(r => r.json()).then(j => {
+      const today = j.today || {};
+      const packs = header.querySelector("#gfPacks");
+      const lines = header.querySelector("#gfLines");
+      if (packs) packs.textContent = (today.total_packs || 0).toLocaleString();
+      const psec = (j.productivity || {}).sections || [];
+      if (lines) lines.textContent = psec.filter(s => (s.staff_present || 0) > 0).length + " / 2";
+      const dt = header.querySelector("#gfDate");
+      if (dt) dt.textContent = j.report_date || "—";
+    }).catch(() => {});
+  }
+  function wireGfControls() {
+    function setLang(l) {
+      document.body.classList.remove("lang-jp", "lang-en");
+      document.body.classList.add("lang-" + l);
+      header.querySelectorAll("#gfLang button").forEach(b => b.classList.toggle("on", b.dataset.l === l));
+      try { localStorage.setItem("hmiLang", l); } catch (e) {}
+    }
+    header.querySelectorAll("#gfLang button").forEach(b => b.addEventListener("click", () => setLang(b.dataset.l)));
+    let l = "jp"; try { l = localStorage.getItem("hmiLang") || "jp"; } catch (e) {}
+    if (l === "both") l = "jp";
+    setLang(l);
+    const fs = header.querySelector("#gfFs");
+    if (fs) fs.addEventListener("click", () => {
+      if (!document.fullscreenElement) { (document.documentElement.requestFullscreen || function(){}).call(document.documentElement); }
+      else { (document.exitFullscreen || function(){}).call(document); }
+    });
+  }
+  setInterval(loadGfKpis, 60_000);
 
   // ---------- GenbaLink user pill (only shows when logged in via genbafms.com) ----------
   // The /api/auth/whoami endpoint returns {authenticated:false} when accessed

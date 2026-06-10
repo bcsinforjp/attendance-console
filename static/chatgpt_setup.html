@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connect your ChatGPT — GENBA FMS</title>
+<style>
+  :root{--bg:#f6f8fa;--card:#fff;--ink:#1f2933;--muted:#5a6b73;--line:#e3e8ee;--teal:#0d9488;--teal-d:#0b6f58}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter','Noto Sans JP','Hiragino Sans',system-ui,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:26px 18px 80px}
+  .head{display:flex;align-items:center;gap:.6rem;margin-bottom:14px}
+  .head .dot{width:13px;height:13px;border-radius:3px;background:var(--teal);box-shadow:0 0 10px rgba(13,148,136,.6)}
+  .head b{color:var(--teal-d);font-size:1.15rem}
+  h1{font-size:1.5rem;margin:.2rem 0 .3rem;color:var(--ink)}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .keybox{background:#0e1a2b;color:#e6ecf5;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;margin-bottom:8px}
+  .keybox .lbl{font-size:.72rem;color:#8ea0b6;letter-spacing:.5px;text-transform:uppercase}
+  .keybox code{font-family:'JetBrains Mono','IBM Plex Mono',monospace;font-size:1rem;word-break:break-all;flex:1;min-width:200px}
+  .warn{background:#fff8ea;border:1px solid #f0dbb8;color:#8a5a12;border-radius:10px;padding:.6rem .8rem;font-size:.85rem;margin-bottom:22px}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px;box-shadow:0 3px 14px rgba(20,40,60,.05);position:relative}
+  .step .n{position:absolute;left:-11px;top:16px;width:30px;height:30px;border-radius:50%;background:var(--teal);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.95rem;box-shadow:0 2px 8px rgba(13,148,136,.4)}
+  .step{padding-left:30px}
+  .step h3{margin:.1rem 0 .5rem;font-size:1.05rem;color:var(--teal-d)}
+  .step p{margin:.2rem 0;color:var(--ink)}
+  .crumb{display:inline-block;background:#eef2f5;border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem;font-size:.82rem;font-family:monospace;margin:.15rem .15rem}
+  .copyrow{display:flex;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap}
+  .copyrow input{flex:1;min-width:220px;padding:.55rem .6rem;border:1px solid var(--line);border-radius:8px;background:#f8fafb;font-family:monospace;font-size:.9rem;color:var(--ink)}
+  .btn{background:var(--teal);color:#fff;border:0;border-radius:8px;padding:.55rem .9rem;font-weight:700;cursor:pointer;font-size:.9rem;white-space:nowrap}
+  .btn:hover{background:var(--teal-d)}
+  .btn.copied{background:#0b6f58}
+  .done{background:#eef6f4;border:1px solid #bfe3da;border-radius:12px;padding:14px 16px;margin-top:6px}
+  .done b{color:var(--teal-d)}
+  .ask{color:var(--muted);font-size:.9rem}
+  ul{padding-left:1.2rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head"><span class="dot"></span><b>GENBA FMS</b></div>
+  <h1>Connect your ChatGPT</h1>
+  <p class="sub">One-time setup, about 3 minutes. You need <b>ChatGPT Plus or Team</b>.</p>
+
+  <div class="keybox">
+    <span class="lbl">Your key</span>
+    <code id="keyText">—</code>
+    <button class="btn" data-copy="keyText">Copy key</button>
+  </div>
+  <div class="warn">🔒 This key is yours — keep it private. It works until the admin turns it off.</div>
+
+  <div class="step"><div class="n">1</div>
+    <h3>Create a GPT</h3>
+    <p>In ChatGPT: <span class="crumb">Explore GPTs</span> → <span class="crumb">+ Create</span> → open the <span class="crumb">Configure</span> tab.</p>
+  </div>
+
+  <div class="step"><div class="n">2</div>
+    <h3>Add an Action</h3>
+    <p>Scroll to <span class="crumb">Actions</span> → click <span class="crumb">Create new action</span>.</p>
+  </div>
+
+  <div class="step"><div class="n">3</div>
+    <h3>Import the schema</h3>
+    <p><span class="crumb">Schema</span> → <span class="crumb">Import from URL</span> → paste this and click Import:</p>
+    <div class="copyrow">
+      <input id="schemaUrl" readonly value="https://link.genbafms.com/api/agent/v1/openapi.json">
+      <button class="btn" data-copy="schemaUrl">Copy</button>
+    </div>
+  </div>
+
+  <div class="step"><div class="n">4</div>
+    <h3>Add your key</h3>
+    <p><span class="crumb">Authentication</span> → <span class="crumb">API Key</span> → Auth Type <span class="crumb">Bearer</span> → paste your key:</p>
+    <div class="copyrow">
+      <input id="keyInput" readonly value="">
+      <button class="btn" data-copy="keyInput">Copy key</button>
+    </div>
+  </div>
+
+  <div class="step"><div class="n">5</div>
+    <h3>Save &amp; use</h3>
+    <p>Click <span class="crumb">Save</span>. Then just chat. Try:</p>
+    <ul>
+      <li>“What was today’s production?”</li>
+      <li>“Total hours for employee 00000376 this month.”</li>
+      <li>“Submit a request: add a CSV export of pack counts.”</li>
+    </ul>
+  </div>
+
+  <div class="done"><b>✅ That’s it.</b> ChatGPT now talks to the factory system — ask in any language. Full guide: <a href="/ai-guide">link.genbafms.com/ai-guide</a></div>
+</div>
+
+<script>
+  const key = new URLSearchParams(location.search).get("key") || "";
+  if (key) {
+    document.getElementById("keyText").textContent = key;
+    document.getElementById("keyInput").value = key;
+  } else {
+    document.getElementById("keyText").innerHTML = '<span class="ask">— ask Buddhika for your key —</span>';
+    document.getElementById("keyInput").value = "(ask Buddhika for your key)";
+  }
+  document.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", () => {
+    const el = document.getElementById(b.dataset.copy);
+    const txt = el.value !== undefined ? el.value : el.textContent;
+    navigator.clipboard.writeText(txt).then(() => {
+      const old = b.textContent; b.textContent = "Copied ✓"; b.classList.add("copied");
+      setTimeout(() => { b.textContent = old; b.classList.remove("copied"); }, 1400);
+    });
+  }));
+</script>
+</body>
+</html>

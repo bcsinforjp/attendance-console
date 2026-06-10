@@ -54,6 +54,36 @@ from partner_api import (
 app.include_router(partner_router)
 _register_partner_errs(app)   # scoped enveloped errors for /partner/v1 only
 
+# Unified AI-Agent API (REST + MCP) — self-contained module (deny-by-default;
+# managed from /admin → Agent API). Part A: read/write data. Part B: change-mgmt.
+from agent_api import (
+    router as agent_router,
+    mcp_post as _agent_mcp_post,
+    mcp_get as _agent_mcp_get,
+    register_agent_error_handler as _register_agent_errs,
+    agent_status as _agent_status,
+    agent_set_enabled as _agent_set_enabled,
+    agent_add as _agent_add,
+    agent_update as _agent_update,
+    agent_revoke as _agent_revoke,
+    agent_log_tail as _agent_log_tail,
+)
+import change_requests as _change_requests
+app.include_router(agent_router)
+_register_agent_errs(app)              # scoped enveloped errors for /api/agent/v1
+
+# MCP (Model Context Protocol) front door — JSON-RPC over plain HTTP. Explicit
+# routes (not app.mount) so POST /mcp has no trailing-slash redirect.
+app.add_api_route("/mcp", _agent_mcp_post, methods=["POST"], include_in_schema=False)
+app.add_api_route("/mcp", _agent_mcp_get, methods=["GET"], include_in_schema=False)
+
+# OAuth 2.1 authorization server for the MCP connector (lets Claude's "Add custom
+# connector" sign in instead of pasting a token). Tokens map to a managed agent.
+import agent_api as _agent_api_mod
+from mcp_oauth import router as _mcp_oauth_router, resolve_token as _mcp_oauth_resolve
+app.include_router(_mcp_oauth_router)
+_agent_api_mod.set_oauth_resolver(_mcp_oauth_resolve)
+
 BASE_DIR = Path(__file__).resolve().parent
 EMPLOYEE_ROSTER_PATH = BASE_DIR / "employee_roster.json"
 EMPLOYEE_ROSTER = json.loads(EMPLOYEE_ROSTER_PATH.read_text(encoding="utf-8"))
@@ -506,6 +536,41 @@ def _gbl_request_user(request: "Request") -> dict | None:
     return _gbl_session_lookup(request.cookies.get("gbl_session"))
 
 
+# Short-lived, single-use tokens for browser auto-login. The desktop agent
+# exchanges its X-API-Key (sent in the HEADER, never a URL) for one of these
+# via POST /api/v1/auth/login-token, then opens /auto-login?token=... in the
+# user's default browser. 60s TTL + consumed on first use — this keeps the
+# long-lived, high-privilege API key out of browser history, Referer headers
+# and access/agent logs. token -> {"key_label", "expires_at"}
+_LOGIN_TOKEN_TTL_SECONDS = 60
+_login_tokens: dict[str, dict] = {}
+_login_tokens_lock = threading.Lock()
+
+
+def _login_token_create(key_label: str) -> str:
+    token = secrets.token_urlsafe(32)
+    now = time.time()
+    with _login_tokens_lock:
+        _login_tokens[token] = {"key_label": key_label,
+                                "expires_at": now + _LOGIN_TOKEN_TTL_SECONDS}
+        # Opportunistic cleanup of expired tokens on every create.
+        for tok in [t for t, s in _login_tokens.items() if s["expires_at"] < now]:
+            del _login_tokens[tok]
+    return token
+
+
+def _login_token_consume(token: str | None) -> str | None:
+    """Validate AND consume (single use). Returns the key_label, or None."""
+    if not token:
+        return None
+    now = time.time()
+    with _login_tokens_lock:
+        s = _login_tokens.pop(token, None)   # pop == single-use consume
+    if not s or s["expires_at"] < now:
+        return None
+    return s["key_label"]
+
+
 def _gbl_host_requires_auth(request: "Request") -> bool:
     """Auth is required only when the request arrives via the new GenbaLink
     domain; existing /attendance/ access via the default vhost stays open."""
@@ -770,6 +835,7 @@ app.add_middleware(AccessTrackingMiddleware)
 # ----------------------------------------------------------------------------
 GBL_PUBLIC_PREFIXES = (
     "/login", "/logout",
+    "/auto-login",         # token→cookie bridge for agent deep-links (self-guarded)
     "/api/auth/",          # login/logout/whoami POST endpoints
     "/api/announcement",
     "/api/line/",
@@ -777,17 +843,32 @@ GBL_PUBLIC_PREFIXES = (
     "/api/data-status/",                # dashboard + agent verify (browser-facing)
     "/api/daily-packs/auto-extract",    # Auto-update PDF + Excel triggers (browser-facing)
                                         # — startswith match also covers /auto-extract-excel
+    "/api/daily-packs/save-excel-batch",# Desktop-agent chains here after auto-extract-excel.
+                                        # Handler itself enforces session-or-X-API-Key on wall hosts.
     "/api/daily-packs/items/",          # GET-only — used by /m/report to load pack data
     "/api/gantt/",          # GET-only family: /latest-date, /dates-with-data, /{date} — used by /m/report
     "/api/members/",        # GET-only family: /list, /compare — used by /m/report comparison panel
     "/api/productivity",    # GET — used by /m/summary
     "/api/m/",              # GET — used by /m/summary (rolling 30d summary feed)
     "/m/",                  # mobile report pages (employees access via LINE)
+    "/hmi",                 # SCADA/HMI wall-display overview (data already public)
+    "/ai-guide",            # public AI integration guide (+ /ai-guide.md)
+    "/desktop-guide",       # public desktop-app user guide (+ /desktop-guide.md)
+    "/guides",              # public guides hub (AI + Desktop, switchable)
+    "/onboard",             # per-user onboarding card (creds via #hash, not logged)
+    "/chatgpt-setup",       # personalized ChatGPT setup card (key via ?key= in URL)
+    "/download/desktop",    # public desktop-app installer download
+    "/dashboard",           # now serves the HMI wall display (public, like /hmi)
     "/static/",
     "/favicon",
     "/admin",               # legacy /admin has its own password
     "/partner/v1",          # external partner API — self-protected (per-partner tokens)
     "/api/v1",              # desktop-agent API — self-protected (X-API-Key, deny-by-default)
+    "/api/agent/v1",        # unified AI-agent API — self-protected (agent bearer token)
+    "/mcp",                 # MCP front door — self-protected (same agent token)
+    "/.well-known/oauth",   # MCP OAuth discovery metadata (public)
+    "/.well-known/openid",  # OIDC config alias (public)
+    "/oauth/",              # MCP OAuth endpoints — self-protected (admin password / PKCE)
 )
 
 
@@ -1136,6 +1217,10 @@ def init_db() -> None:
         connection.commit()
 
 init_db()
+try:
+    _change_requests.ensure_tables()   # Part B: agent change-request ledger
+except Exception as _cr_exc:
+    print(f"[CHANGE_REQUESTS] ensure_tables failed: {_cr_exc}")
 
 def clean_cell(value: object) -> str:
     """Normalize PDF table cell values for matching and display."""
@@ -1897,7 +1982,8 @@ def create_excel_file(records: list[dict[str, str]], filename: Path) -> Path:
 @app.get("/")
 async def root():
     """Serve web interface"""
-    return FileResponse(BASE_DIR / "index.html")
+    return FileResponse(BASE_DIR / "index.html",
+                        headers={"Cache-Control": "no-store"})
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -1930,10 +2016,92 @@ async def gantt_page():
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
+@app.get("/lens")
+async def lens_page():
+    """Lens — analytical views over attendance data. Hosts the Member Hours
+    comparison (moved out of the Gantt page). `no-store` so reloads always pick
+    up the newest template.
+    """
+    return FileResponse(
+        STATIC_DIR / "lens.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+@app.get("/download/desktop")
+async def download_desktop_app():
+    """Public download of the latest desktop-app installer (no secrets inside;
+    the API key is configured by the user after install)."""
+    meta = _load_json(APP_UPDATE_CONFIG_PATH, {}) or {}
+    fn = meta.get("filename")
+    if fn:
+        p = APP_UPDATE_DIR / fn
+        if p.exists():
+            return FileResponse(p, filename=fn, media_type="application/octet-stream")
+    raise HTTPException(status_code=404, detail="No desktop app build available.")
+
+@app.get("/chatgpt-setup")
+async def chatgpt_setup_page():
+    """Personalized ChatGPT setup card. Send the link with ?key=at_… to one
+    person; the page pre-fills their key + copy buttons. No key is baked in."""
+    return FileResponse(STATIC_DIR / "chatgpt_setup.html",
+                        headers={"Cache-Control": "no-store"})
+
+@app.get("/onboard")
+async def onboard_page():
+    """Per-user onboarding card. Credentials are passed in the URL #hash (client-
+    side only — never sent to the server/logs). The page pre-fills them."""
+    return FileResponse(STATIC_DIR / "onboard.html",
+                        headers={"Cache-Control": "no-store"})
+
+@app.get("/guides")
+async def guides_hub_page():
+    """Public guides hub — switch between the AI and Desktop guides in one page."""
+    return FileResponse(STATIC_DIR / "guides.html",
+                        headers={"Cache-Control": "no-store"})
+
+@app.get("/desktop-guide")
+async def desktop_guide_page():
+    """Public Desktop App user guide (rendered)."""
+    return FileResponse(STATIC_DIR / "desktop_guide.html",
+                        headers={"Cache-Control": "no-store"})
+
+@app.get("/desktop-guide.md")
+async def desktop_guide_md():
+    """Raw markdown for the desktop app guide."""
+    return FileResponse(BASE_DIR / "DESKTOP_APP_GUIDE.md",
+                        media_type="text/markdown; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+@app.get("/ai-guide")
+async def ai_guide_page():
+    """Public AI Integration Guide (rendered)."""
+    return FileResponse(STATIC_DIR / "ai_guide.html",
+                        headers={"Cache-Control": "no-store"})
+
+@app.get("/ai-guide.md")
+async def ai_guide_md():
+    """Raw markdown for the AI guide (also what ChatGPT can read)."""
+    return FileResponse(BASE_DIR / "AI_INTEGRATION_GUIDE.md",
+                        media_type="text/markdown; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+@app.get("/hmi")
+async def hmi_page():
+    """SCADA/HMI all-lines overview (wall display). Live KPIs/headcount/worker
+    names from real data; process-sensor tiles are simulated demo values."""
+    return FileResponse(
+        STATIC_DIR / "hmi.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
 @app.get("/reports")
 async def reports_page():
-    """Reports page (separate from main console tabs)."""
-    return FileResponse(STATIC_DIR / "reports.html")
+    """Reports page (separate from main console tabs). `no-store` so edits show
+    on reload without a hard refresh."""
+    return FileResponse(
+        STATIC_DIR / "reports.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
 @app.get("/m/report")
@@ -1969,10 +2137,11 @@ async def console_page():
 
 @app.get("/dashboard")
 async def dashboard_page():
-    """Live operations dashboard — placeholder, under development.
-    Reserved as the landing for the new green Dashboard nav tab."""
+    """Live operations dashboard → now the SCADA/HMI all-lines overview (bilingual
+    JP/EN). Was a placeholder; replaced 2026-06-10. The old placeholder is still on
+    disk at static/dashboard.html if it needs restoring."""
     return FileResponse(
-        STATIC_DIR / "dashboard.html",
+        STATIC_DIR / "hmi.html",
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
@@ -4788,6 +4957,76 @@ async def gbl_logout_page(request: Request):
     return resp
 
 
+# ---- Browser auto-login (desktop agent → /pdf/* without a login form) -------
+# Allowed redirect targets for /auto-login. Same-origin relative paths only;
+# extend this tuple as more browser-facing pages need agent deep-links.
+AUTO_LOGIN_REDIRECT_PREFIXES = ("/pdf/", "/dashboard")
+
+
+@app.post("/api/v1/auth/login-token")
+async def v1_auth_login_token(request: Request, key_label: str = Depends(require_api_key)):
+    """Mint a 60s single-use token the agent can put in a browser URL.
+
+    The agent authenticates here with its X-API-Key HEADER (never a URL), then
+    opens /auto-login?token=...&redirect=... in the user's default browser.
+    Keeps the long-lived API key out of browser history / Referer / logs.
+    """
+    token = _login_token_create(key_label)
+    return {"token": token, "expires_in": _LOGIN_TOKEN_TTL_SECONDS,
+            "redirect_to": "/auto-login"}
+
+
+@app.get("/auto-login", include_in_schema=False)
+async def auto_login(request: Request,
+                     token: str = Query(...),
+                     redirect: str = Query(...)):
+    """Exchange a one-time login token for a gbl_session cookie + 302 redirect.
+
+    Public path (no session required) — the agent's browser hits this first.
+    Open-redirect hardened: same-origin relative paths from an allowlist only.
+    """
+    from fastapi.responses import RedirectResponse
+    started = time.time()
+    ip = (request.headers.get("cf-connecting-ip")
+          or request.headers.get("x-real-ip")
+          or (request.client.host if request.client else "?"))
+    agent_version = request.headers.get("x-agent-version")
+
+    def _fail(status: int, detail: str):
+        _record_agent("/auto-login", "GET", status, ip, None,
+                      f"redirect={redirect}", int((time.time() - started) * 1000),
+                      agent_version)
+        raise HTTPException(status_code=status, detail=detail)
+
+    # 1. Open-redirect guard — same-origin relative paths only.
+    if not redirect.startswith("/") or "://" in redirect or redirect.startswith("//"):
+        _fail(400, "redirect must be a relative path")
+    if redirect.startswith("/auto-login"):
+        _fail(400, "redirect may not loop back to /auto-login")
+    if not any(redirect.startswith(p) for p in AUTO_LOGIN_REDIRECT_PREFIXES):
+        _fail(400, "redirect not in allowlist")
+
+    # 2. Validate + consume the one-time token (this is the auth check).
+    key_label = _login_token_consume(token)
+    if key_label is None:
+        _fail(401, "Missing, expired, or already-used token")
+
+    # 3. Mint a normal gbl_session under a service identity (the key label).
+    #    The agent key identifies the machine, not a human — sessions carry the
+    #    label so the audit trail shows which agent key logged the browser in.
+    session_token = _gbl_session_create(username=key_label, is_admin=False)
+
+    # 4. Redirect + set the same cookie shape /api/auth/login issues. No
+    #    secure= here — Nginx adds `Secure` on the HTTPS hop (see /api/auth/login).
+    resp = RedirectResponse(url=redirect, status_code=302)
+    resp.set_cookie("gbl_session", session_token, httponly=True,
+                    samesite="lax", max_age=GBL_SESSION_TTL_SECONDS, path="/")
+    _record_agent("/auto-login", "GET", 302, ip, key_label,
+                  f"redirect={redirect}", int((time.time() - started) * 1000),
+                  agent_version)
+    return resp
+
+
 @app.get("/api/auth/whoami")
 async def gbl_api_whoami(request: Request):
     user = _gbl_request_user(request)
@@ -4871,9 +5110,12 @@ async def gbl_api_change_password(request: Request, payload: dict = Body(...)):
 
 async def _admin_root_impl(request: Request):
     token = request.cookies.get("admin_session")
+    # no-store so the admin console is never served stale after an update
+    # (avoids "I don't see the new tab" until a hard refresh).
+    headers = {"Cache-Control": "no-store, must-revalidate"}
     if not _admin_session_valid(token):
-        return FileResponse(STATIC_DIR / "admin_login.html")
-    return FileResponse(STATIC_DIR / "admin.html")
+        return FileResponse(STATIC_DIR / "admin_login.html", headers=headers)
+    return FileResponse(STATIC_DIR / "admin.html", headers=headers)
 
 @app.get("/admin", response_class=HTMLResponse, include_in_schema=False)
 async def admin_root_no_slash(request: Request):
@@ -5547,6 +5789,16 @@ async def admin_partner_spec(request: Request):
         media_type="text/markdown; charset=utf-8",
     )
 
+@app.get("/admin/agentapi-spec")
+async def admin_agentapi_spec(request: Request):
+    """Serve the unified AI-Agent API doc (Markdown) for admins."""
+    _require_admin_session(request)
+    spec = BASE_DIR / "AGENT_API.md"
+    if not spec.exists():
+        raise HTTPException(status_code=404, detail="Spec file not found.")
+    return PlainTextResponse(spec.read_text(encoding="utf-8"),
+                             media_type="text/markdown; charset=utf-8")
+
 @app.get("/admin/api/partner-status")
 async def admin_partner_status(request: Request):
     _require_admin_session(request)
@@ -5598,6 +5850,121 @@ async def admin_partner_revoke(request: Request, payload: dict = Body(...)):
     if not pid:
         raise HTTPException(status_code=400, detail="id required")
     return _partner_revoke(pid)
+
+
+# ---- Agent API admin (token CRUD) — `agentapi-*` to avoid colliding with the
+#      pre-existing desktop-agent `/admin/api/agent-status|agent-log` endpoints.
+@app.get("/admin/api/agentapi-status")
+async def admin_agentapi_status(request: Request):
+    _require_admin_session(request)
+    return _agent_status()
+
+@app.get("/admin/api/agentapi-log")
+async def admin_agentapi_log(request: Request, limit: int = 100):
+    _require_admin_session(request)
+    return _agent_log_tail(limit)
+
+@app.post("/admin/api/agentapi-enable")
+async def admin_agentapi_enable(request: Request, payload: dict = Body(...)):
+    _require_admin_session(request)
+    return _agent_set_enabled(bool(payload.get("enabled")))
+
+@app.post("/admin/api/agentapi-add")
+async def admin_agentapi_add(request: Request, payload: dict = Body(...)):
+    _require_admin_session(request)
+    name = (payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    ips = payload.get("ip_allowlist") or []
+    if isinstance(ips, str):
+        ips = [s for s in ips.replace(",", " ").split() if s]
+    we = payload.get("write_enabled")
+    return _agent_add(name, int(payload.get("rate_per_min") or 60), ips,
+                      True if we is None else bool(we))
+
+@app.post("/admin/api/agentapi-update")
+async def admin_agentapi_update(request: Request, payload: dict = Body(...)):
+    _require_admin_session(request)
+    aid = (payload.get("id") or "").strip()
+    if not aid:
+        raise HTTPException(status_code=400, detail="id required")
+    ips = payload.get("ip_allowlist")
+    if isinstance(ips, str):
+        ips = [s for s in ips.replace(",", " ").split() if s]
+    return _agent_update(aid, disabled=payload.get("disabled"),
+                         rate_per_min=payload.get("rate_per_min"),
+                         ip_allowlist=ips, write_enabled=payload.get("write_enabled"))
+
+@app.post("/admin/api/agentapi-revoke")
+async def admin_agentapi_revoke(request: Request, payload: dict = Body(...)):
+    _require_admin_session(request)
+    aid = (payload.get("id") or "").strip()
+    if not aid:
+        raise HTTPException(status_code=400, detail="id required")
+    return _agent_revoke(aid)
+
+@app.get("/admin/api/agentapi-connect-pw")
+async def admin_agentapi_connect_pw_get(request: Request):
+    """The dedicated MCP-connector approval password (separate from the admin
+    console password) + the connector URL to hand to ChatGPT/Claude."""
+    _require_admin_session(request)
+    return {"password": ADMIN_CONFIG.get("mcp_connect_password", ""),
+            "mcp_url": "https://link.genbafms.com/mcp"}
+
+@app.post("/admin/api/agentapi-connect-pw")
+async def admin_agentapi_connect_pw_set(request: Request, payload: dict = Body(...)):
+    _require_admin_session(request)
+    pw = str(payload.get("password") or "").strip()
+    ADMIN_CONFIG["mcp_connect_password"] = pw
+    _save_json(ADMIN_CONFIG_PATH, ADMIN_CONFIG)
+    return {"ok": True, "set": bool(pw)}
+
+
+# ---- Change-request management (Part B) -----------------------------------
+@app.get("/admin/api/change-requests")
+async def admin_change_requests(request: Request, status: str | None = None,
+                                agent: str | None = None, limit: int = 100):
+    _require_admin_session(request)
+    items = _change_requests.list_requests(agent_id=agent, status=status, limit=limit)
+    return {"count": len(items), "counts": _change_requests.status_counts(), "items": items}
+
+@app.get("/admin/api/change-requests/{req_id}")
+async def admin_change_request_detail(request: Request, req_id: int):
+    _require_admin_session(request)
+    row = _change_requests.get_request(req_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="request not found")
+    return row
+
+def _cr_admin(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except _change_requests.ChangeRequestError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message)
+
+@app.post("/admin/api/change-requests/{req_id}/evaluate")
+async def admin_change_request_evaluate(request: Request, req_id: int, payload: dict = Body(...)):
+    _require_admin_session(request)
+    return _cr_admin(_change_requests.evaluate, req_id, payload.get("feasible"),
+                     payload.get("risk_level"), payload.get("timeline_estimate", ""),
+                     payload.get("notes", ""), "admin")
+
+@app.post("/admin/api/change-requests/{req_id}/decision")
+async def admin_change_request_decision(request: Request, req_id: int, payload: dict = Body(...)):
+    _require_admin_session(request)
+    return _cr_admin(_change_requests.decide, req_id, payload.get("decision", ""),
+                     payload.get("notes", ""), "admin")
+
+@app.post("/admin/api/change-requests/{req_id}/status")
+async def admin_change_request_status(request: Request, req_id: int, payload: dict = Body(...)):
+    _require_admin_session(request)
+    return _cr_admin(_change_requests.set_status, req_id, payload.get("status", ""), "admin")
+
+@app.post("/admin/api/change-requests/{req_id}/messages")
+async def admin_change_request_message(request: Request, req_id: int, payload: dict = Body(...)):
+    _require_admin_session(request)
+    _cr_admin(_change_requests.add_message, req_id, "admin", payload.get("message", ""), "message", None, None)
+    return _change_requests.get_request(req_id)
 
 @app.get("/admin/api/api-status")
 async def admin_api_status(request: Request, limit: int = 200):
@@ -7732,8 +8099,17 @@ async def extract_daily_pack_excel(file: UploadFile = File(...)):
 
 
 @app.post("/api/daily-packs/save-excel-batch")
-async def save_daily_pack_excel(payload: dict = Body(...)):
+async def save_daily_pack_excel(request: Request, payload: dict = Body(...)):
     """Save a parsed batch into daily_pack_items. Overwrites same-date batch."""
+    # On GenbaLink hosts, require either a logged-in session (browser console)
+    # or a valid X-API-Key (desktop agent, doctor loopback). The host-auth
+    # middleware now lets this path through via GBL_PUBLIC_PREFIXES, so the
+    # handler is the only auth gate on link.genbafms.com. Other hosts
+    # (rnd.asiakawaii.com legacy vhost, 127.0.0.1 loopback) keep their
+    # existing wide-open behavior — same model as auto-extract-excel.
+    if _gbl_host_requires_auth(request):
+        if _gbl_request_user(request) is None and _resolve_key_label(request.headers.get("x-api-key")) is None:
+            raise HTTPException(status_code=401, detail="authentication required")
     pdate_str = (payload.get("production_date") or "").strip()
     products  = payload.get("products") or []
     start     = (payload.get("start_time") or "17:00").strip()
@@ -8043,8 +8419,8 @@ async def done_files_delete(payload: dict = Body(...)):
 
 # ---------------------------------------------------------------------------
 # Data Cleanup — operator-controlled deletion of a small set of dates from
-# every date-keyed table. Hard-capped at 5 dates per request to make sure
-# this is never accidentally turned into a "wipe everything" tool. There is
+# every date-keyed table. Hard-capped at _CLEANUP_MAX_DATES per request to make
+# sure this is never accidentally turned into a "wipe everything" tool. There is
 # no "all" mode — the operator must pick the specific dates.
 # ---------------------------------------------------------------------------
 _CLEANUP_TABLES: list[tuple[str, str]] = [
@@ -8353,8 +8729,8 @@ async def cleanup_preview(dates: str):
 @app.post("/api/cleanup/delete")
 async def cleanup_delete(payload: dict = Body(...)):
     """Delete every row whose date_column is in the requested list, across all
-    tables in `_CLEANUP_TABLES`. Hard-capped at 5 dates. Requires `confirm:
-    true` in the body so a stray POST can't wipe data."""
+    tables in `_CLEANUP_TABLES`. Hard-capped at `_CLEANUP_MAX_DATES`. Requires
+    `confirm: true` in the body so a stray POST can't wipe data."""
     if not payload.get("confirm"):
         raise HTTPException(status_code=400, detail="confirm: true is required to delete")
     target_dates = _parse_cleanup_dates(payload.get("dates"))

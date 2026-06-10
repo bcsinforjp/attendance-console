@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GENBA FMS — セットアップ / Onboarding</title>
+<style>
+  :root{--bg:#f6f8fa;--card:#fff;--ink:#1f2933;--muted:#5a6b73;--line:#e3e8ee;--teal:#0d9488;--teal-d:#0b6f58;--indigo:#6366f1}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter','Noto Sans JP','Hiragino Sans',system-ui,sans-serif;line-height:1.55}
+  body.lang-jp e{display:none} body.lang-en j{display:none}
+  .wrap{max-width:780px;margin:0 auto;padding:22px 18px 90px}
+  .head{display:flex;align-items:center;gap:.6rem;margin-bottom:6px}
+  .head .dot{width:13px;height:13px;border-radius:3px;background:var(--teal);box-shadow:0 0 10px rgba(13,148,136,.6)}
+  .head b{color:var(--teal-d);font-size:1.15rem}
+  .langsw{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:auto;background:#fff}
+  .langsw button{background:transparent;color:var(--muted);border:0;padding:.34rem .7rem;font-size:.78rem;font-weight:800;cursor:pointer}
+  .langsw button.on{background:var(--teal);color:#fff}
+  h1{font-size:1.5rem;margin:.3rem 0}
+  .hi{color:var(--muted);margin:0 0 14px}
+  .warn{background:#fff2f1;border:1px solid #f0c8c4;color:#8a2a22;border-radius:10px;padding:.7rem .9rem;font-size:.85rem;margin-bottom:20px}
+  .sec{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:16px;box-shadow:0 4px 16px rgba(20,40,60,.05)}
+  .sec h2{display:flex;align-items:center;gap:.5rem;margin:.1rem 0 .3rem;font-size:1.15rem;color:var(--indigo)}
+  .sec.gpt h2{color:var(--teal-d)}
+  .sec p{color:var(--muted);font-size:.88rem;margin:.2rem 0 .8rem}
+  .cred{display:flex;align-items:center;gap:.6rem;margin:.45rem 0;flex-wrap:wrap}
+  .cred label{width:170px;font-size:.78rem;color:var(--muted);font-weight:700}
+  .cred input{flex:1;min-width:170px;padding:.5rem .6rem;border:1px solid var(--line);border-radius:8px;background:#f8fafb;font-family:'JetBrains Mono','IBM Plex Mono',monospace;font-size:.9rem;color:var(--ink)}
+  .btn{background:var(--teal);color:#fff;border:0;border-radius:8px;padding:.5rem .8rem;font-weight:700;cursor:pointer;font-size:.85rem;white-space:nowrap}
+  .btn:hover{filter:brightness(.95)} .btn.copied{background:var(--teal-d)}
+  .btn.ghost{background:#eef2f5;color:var(--ink);border:1px solid var(--line)}
+  .dl{display:inline-block;background:var(--indigo);color:#fff;text-decoration:none;border-radius:9px;padding:.55rem .9rem;font-weight:700;margin:.2rem 0 .7rem}
+  ol{padding-left:1.2rem} ol li{margin:.2rem 0;font-size:.9rem}
+  .crumb{background:#eef2f5;border:1px solid var(--line);border-radius:6px;padding:.1rem .4rem;font-family:monospace;font-size:.82rem}
+  .miss{color:#b42318}
+</style>
+</head>
+<body class="lang-jp">
+<div class="wrap">
+  <div class="head"><span class="dot"></span><b>GENBA FMS</b>
+    <div class="langsw" id="langsw"><button data-l="jp">日本語</button><button data-l="en">EN</button></div>
+    <button class="btn" id="saveFile" style="margin-left:.5rem"><j>💾 ファイル保存</j><e>💾 Save as file</e></button>
+  </div>
+  <h1><j>セットアップ</j><e>Onboarding</e></h1>
+  <p class="hi" id="hi"></p>
+  <div class="warn">🔒 <j>このリンクには認証情報が含まれます。<b>他人に共有しないでください。</b></j><e>This link contains credentials — <b>keep it private.</b></e></div>
+
+  <!-- Desktop app -->
+  <div class="sec desk">
+    <h2>💻 <j>デスクトップアプリ</j><e>Desktop App</e></h2>
+    <p><j>工場PC用。インストールして、下の情報を設定画面に入力。</j><e>Install on the office PC, then enter these in Settings.</e></p>
+    <a class="dl" href="/download/desktop">⬇ <j>ダウンロード</j><e>Download (Windows)</e></a>
+    <div class="cred"><label><j>① API キー</j><e>① API Key</e></label><input id="f_appkey" readonly><button class="btn" data-c="f_appkey">Copy</button></div>
+    <div class="cred"><label><j>② GenbaLink ユーザー名</j><e>② GenbaLink username</e></label><input id="f_user" readonly><button class="btn" data-c="f_user">Copy</button></div>
+    <div class="cred"><label><j>③ GenbaLink パスワード</j><e>③ GenbaLink password</e></label><input id="f_pass" readonly type="password"><button class="btn ghost rv" data-for="f_pass">👁</button><button class="btn" data-c="f_pass">Copy</button></div>
+    <div class="cred"><label><j>アプリ ロック ユーザー名</j><e>App-lock username</e></label><input id="f_appuser" readonly><button class="btn" data-c="f_appuser">Copy</button></div>
+    <div class="cred"><label><j>アプリ ロック パスワード</j><e>App-lock password</e></label><input id="f_app" readonly type="password"><button class="btn ghost rv" data-for="f_app">👁</button><button class="btn" data-c="f_app">Copy</button></div>
+    <ol>
+      <li><j>ダウンロード→インストール（「詳細情報→実行」）。</j><e>Download → install (More info → Run anyway).</e></li>
+      <li><j>アプリを開き、<b>アプリ ユーザー名・パスワード</b>でロック解除。</j><e>Open it; unlock with the App username + password.</e></li>
+      <li><j>設定で <b>API キー</b>・<b>GenbaLink ログイン</b> を入力。</j><e>In Settings, enter the API key + GenbaLink login.</e></li>
+    </ol>
+    <p>📖 <a href="/desktop-guide"><j>詳しい使い方</j><e>Full guide</e></a></p>
+  </div>
+
+  <!-- ChatGPT -->
+  <div class="sec gpt">
+    <h2>🤖 ChatGPT</h2>
+    <p><j>ChatGPT Plus が必要。約3分。（キーは「アプリ用」とは別の <code>at_…</code> です）</j><e>Needs ChatGPT Plus. ~3 min. (This key is a separate <code>at_…</code>, not the desktop key.)</e></p>
+    <div class="cred"><label><j>ChatGPT キー</j><e>ChatGPT key</e></label><input id="f_key" readonly><button class="btn" data-c="f_key">Copy</button></div>
+    <div class="cred"><label><j>スキーマ URL</j><e>Schema URL</e></label><input id="f_schema" readonly value="https://link.genbafms.com/api/agent/v1/openapi.json"><button class="btn" data-c="f_schema">Copy</button></div>
+    <p style="font-size:.82rem;background:#fff8ea;border:1px solid #f0dbb8;border-radius:8px;padding:.5rem .7rem;color:#8a5a12"><j>⚠️ 普通のチャットに貼っても動きません。下の手順で <b>Custom GPT（ChatGPT Plus 必要）</b> を作って初めて使えます。Plus が無い場合は ChatGPT では利用不可です。</j><e>⚠️ Pasting into a normal chat does NOT work. It only works after you build a <b>Custom GPT (needs ChatGPT Plus)</b> below. Without Plus, ChatGPT can't be used.</e></p>
+    <ol>
+      <li><span class="crumb">Explore GPTs → + Create → Configure</span></li>
+      <li><span class="crumb">Actions → Create new action</span></li>
+      <li><span class="crumb">Schema → Import from URL</span> <j>に Schema を貼る</j><e>— paste the Schema</e></li>
+      <li><span class="crumb">Authentication → API Key → Bearer</span> <j>に ChatGPT キーを貼る</j><e>— paste the ChatGPT key</e></li>
+      <li><span class="crumb">Save</span> → <j>「今日の生産数は？」</j><e>"today's production?"</e></li>
+    </ol>
+    <p>📖 <a href="/guides#ai"><j>詳しい使い方</j><e>Full guide</e></a></p>
+  </div>
+</div>
+
+<script>
+  // Credentials come from the URL #hash (NOT ?query) — the hash is never sent to
+  // the server, so these values are not written to any server log.
+  // Read from baked-in creds (saved-file mode) first, else the URL #hash.
+  const __H = new URLSearchParams(location.hash.slice(1));
+  const __B = window.__BAKED || {};
+  function val(k){ const b=__B[k]; return (b!=null && b!=="") ? b : (__H.get(k)||""); }
+  function set(id, v){ const el=document.getElementById(id); if(!el) return;
+    if(v){ el.value=v; } else { el.value=""; el.placeholder="（管理者から / ask admin）"; el.classList.add("miss"); } }
+  set("f_appuser", val("appuser"));
+  set("f_app",     val("app"));
+  set("f_appkey",  val("appkey") || val("apikey"));
+  set("f_user",    val("user"));
+  set("f_pass",    val("pass"));
+  set("f_key",     val("key"));
+  const name = val("name");
+  document.getElementById("hi").textContent = name ? ("ようこそ、" + name + " さん / Welcome, " + name) : "ようこそ / Welcome";
+  // language toggle (default JP)
+  function setLang(l){ document.body.classList.remove("lang-jp","lang-en"); document.body.classList.add("lang-"+l);
+    document.querySelectorAll("#langsw button").forEach(b=>b.classList.toggle("on", b.dataset.l===l)); try{localStorage.setItem("guideLang",l)}catch(e){} }
+  document.querySelectorAll("#langsw button").forEach(b=>b.addEventListener("click",()=>setLang(b.dataset.l)));
+  let lng="jp"; try{ lng=localStorage.getItem("guideLang")||"jp"; }catch(e){} setLang(lng);
+  // reveal password fields
+  document.querySelectorAll(".rv").forEach(b=>b.addEventListener("click",()=>{ const i=document.getElementById(b.dataset.for);
+    i.type = i.type==="password" ? "text" : "password"; b.textContent = i.type==="password" ? "👁" : "🙈"; }));
+  // copy (works on https AND on file:// via execCommand fallback)
+  function copyText(v){ if(navigator.clipboard&&navigator.clipboard.writeText){return navigator.clipboard.writeText(v);}
+    const t=document.createElement("textarea");t.value=v;t.style.position="fixed";t.style.opacity="0";document.body.appendChild(t);t.select();
+    try{document.execCommand("copy");}catch(e){} t.remove(); return Promise.resolve(); }
+  document.querySelectorAll("[data-c]").forEach(b=>b.addEventListener("click",()=>{ const v=document.getElementById(b.dataset.c).value;
+    copyText(v).then(()=>{ const o=b.textContent; b.textContent="Copied ✓"; b.classList.add("copied"); setTimeout(()=>{b.textContent=o;b.classList.remove("copied");},1300); }); }));
+  // Save this page as a standalone .html file with the credentials baked in,
+  // so a client can just double-click the file (works offline, no URL/hash).
+  function downloadFile(){
+    const creds={}; ["name","appuser","app","appkey","user","pass","key"].forEach(k=>creds[k]=val(k));
+    if(!creds.appkey && !creds.key && !creds.user && !creds.app){
+      alert("認証情報がありません。先に個人リンク（…/onboard#key=…&user=… ）を開いてから保存してください。\nNo credentials found — open the personalized link (…/onboard#…) first, then Save as file.");
+      return;
+    }
+    const baked="<scr"+"ipt>window.__BAKED="+JSON.stringify(creds)+";<\/scr"+"ipt>";
+    const html="<!doctype html>\n"+document.documentElement.outerHTML.replace("</head>", baked+"</head>");
+    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download="GENBA-setup-"+((creds.name||"user").replace(/[^\w-]/g,"")||"user")+".html"; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  }
+  document.getElementById("saveFile").addEventListener("click",downloadFile);
+</script>
+</body>
+</html>
